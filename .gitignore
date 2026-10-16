@@ -13,6 +13,7 @@
 .swarm/
 .mcp.json
 ruvector.db
+agentdb.rvf*
 CLAUDE.md
 
 # Сборка и зависимости

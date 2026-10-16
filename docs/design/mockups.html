@@ -10,6 +10,8 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <link rel="stylesheet" href="../../web/src/styles/tokens.css">
 <link rel="stylesheet" href="../../web/src/styles/components.css">
+<link rel="stylesheet" href="../../web/src/styles/states.css">
+<link rel="stylesheet" href="../../web/src/styles/motion.css">
 <style>
   /* Оформление страницы с макетами, в систему не входит */
   .mk-top { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 24px; background: var(--surface); border-bottom: var(--bw) solid var(--line); }
@@ -30,8 +32,9 @@
   .hstack { display: flex; gap: 8px; align-items: center; }
   .between { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-  .fchip { display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border: var(--bw) solid var(--line); border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--surface); }
-  .fchip[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+  /* Статичные макеты — без анимаций появления; анимации живут в прототипе (раздел 8) */
+  .mk-row:not(#prototype) .g-sheet, .mk-row:not(#prototype) .g-toast { transition: none; animation: none; }
+  .mk-row:not(#prototype) .g-toast::after { animation: none; }
   .logo { font: 800 20px var(--font-display); }
   .logo b { color: var(--danger-text); }
   .stack { display: grid; gap: 14px; }
@@ -44,7 +47,7 @@
 </head>
 <body>
 <header class="mk-top">
-  <div class="hstack"><span class="logo">garage<b>.</b></span><span class="g-muted">макеты · дизайн-система «Сумерки» 1.1</span></div>
+  <div class="hstack"><span class="logo">garage<b>.</b></span><span class="g-muted">макеты · дизайн-система «Сумерки» 1.2</span></div>
   <div class="g-seg" role="group" aria-label="Тема" style="width:280px">
     <button type="button" data-theme-set="light" aria-pressed="false">Светлая</button>
     <button type="button" data-theme-set="dark" aria-pressed="true">Тёмная</button>
@@ -67,6 +70,22 @@
   <h2 class="mk-h">4. Компьютер</h2>
   <p class="mk-p">Боковое меню, карточки в две колонки, выбранная карточка выделена. Справа — панель позиции с расходом. Горчичная кнопка на экране одна — «Списать».</p>
   <div class="stack" id="desktop"></div>
+
+  <h2 class="mk-h">5. Состояния: нет связи, пусто, загрузка</h2>
+  <p class="mk-p">Сайт работает только через VPN, поэтому «нет связи» — самая частая ошибка. Пустые состояния приглашают к действию, а не извиняются.</p>
+  <div class="mk-row" id="phones-states"></div>
+
+  <h2 class="mk-h">6. Позиция, справочники, профиль</h2>
+  <p class="mk-p">Форма позиции, категории с выбором цвета из восьми, профиль с приглашениями.</p>
+  <div class="mk-row" id="phones-forms"></div>
+
+  <h2 class="mk-h">7. Иконка и заставка</h2>
+  <p class="mk-p">Иконка на главном экране iPhone и заставка при запуске сайта как приложения (PWA).</p>
+  <div class="mk-row" id="pwa"></div>
+
+  <h2 class="mk-h">8. Анимации — живой прототип</h2>
+  <p class="mk-p">Здесь всё работает по-настоящему: переключение разделов, поиск и фильтры, появление карточек, свайп, шторка, списание с отменой.</p>
+  <div class="mk-row" id="prototype"></div>
 </main>
 
 <script>
@@ -91,7 +110,7 @@ const card = (i, opts = {}) => `
   <div class="g-card__body">
     <div class="g-card__top"><span class="g-card__name">${i.n}</span><span class="g-chip">${i.p}</span></div>
     <div class="g-card__qty"><span class="g-num">${fmt(total(i))}</span><b>${i.u}</b></div>
-    <div class="g-meter${i.low ? " g-meter--low" : ""}" role="meter" aria-label="Во вскрытой" aria-valuenow="${i.o}" aria-valuemax="${i.cap}"><div class="g-meter__fill" style="width:${(i.o / i.cap) * 100}%"></div></div>
+    <div class="g-meter${i.low ? " g-meter--low" : ""}" role="meter" aria-label="Во вскрытой" aria-valuenow="${i.o}" aria-valuemax="${i.cap}"><div class="g-meter__fill" style="--lv:${(i.o / i.cap).toFixed(3)}"></div></div>
     <div class="g-card__open">${openLine(i)}</div>
   </div>
   ${i.low ? `<span class="g-sticker">мало!</span>` : ""}
@@ -133,7 +152,7 @@ const phone = (cap, body, opts = {}) => `
 
 const back = (t) => `<a href="#" class="g-btn g-btn--ghost g-btn--sm" style="padding:0 8px 0 0">${ico("chevron-left")}${t}</a>`;
 const search = `<div class="g-search" role="search"><span class="g-search__icon">${ico("search")}</span><input class="g-input" type="search" placeholder="Шампунь, Koch, штрихкод"></div>`;
-const filters = `<div class="chips"><span class="fchip" aria-pressed="true">Все 24</span><span class="fchip">Мало 2</span><span class="fchip">Коробка 3</span><span class="fchip">Полка 1</span></div>`;
+const filters = `<div class="g-filters"><span class="g-filter" aria-pressed="true">Все 24</span><span class="g-filter">Мало 2</span><span class="g-filter">Коробка 3</span><span class="g-filter">Полка 1</span></div>`;
 
 /* ---------- Экраны: группа 1 ---------- */
 const scrLogin = `
@@ -151,7 +170,7 @@ const homeHead = `<div class="between"><h1 class="g-title">Остатки</h1><s
 const exemplar = (st, q, cap, pl, lv) => `
 <div class="g-row"><div class="g-row__main"><div class="between"><span class="g-row__title">${st}</span><span class="g-num" style="font-size:14px">${fmt(q)} <small>мл</small></span></div>
 <div class="between g-row__sub" style="margin:2px 0 6px"><span>${pl}</span><span>из ${fmt(cap)}</span></div>
-<div class="g-meter" style="--cat:var(--cat-blue);height:10px"><div class="g-meter__fill" style="width:${lv}%"></div></div></div></div>`;
+<div class="g-meter" style="--cat:var(--cat-blue);height:10px"><div class="g-meter__fill" style="--lv:${lv / 100}"></div></div></div></div>`;
 
 const scrItem = `
 <div class="between">${back("Остатки")}<button class="g-btn g-btn--icon g-btn--ghost" aria-label="Меню позиции: штрихкод, изменить, архив">${ico("dots-vertical")}</button></div>
@@ -350,5 +369,8 @@ document.addEventListener("click", (e) => {
   if (seg) seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === t)));
 });
 </script>
+<script src="mockups-extra.js"></script>
+<script src="pwa.js"></script>
+<script src="prototype.js"></script>
 </body>
 </html>

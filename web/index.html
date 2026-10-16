@@ -8,6 +8,17 @@
     <meta name="theme-color" content="#1E1D22" media="(prefers-color-scheme: dark)" />
     <meta name="referrer" content="same-origin" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- Установка на главный экран (PWA). iOS не берёт SVG для apple-touch-icon,
+         поэтому PNG 180×180 без прозрачности; скругление iOS делает сам. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="garage" />
+    <!-- default, а не black-translucent: при black-translucent страница уходит под
+         строку состояния и вырез, текст в ней белый — на светлом фоне не читается,
+         а отступов safe-area в интерфейсе пока нет. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>garage</title>
   </head>
   <body>

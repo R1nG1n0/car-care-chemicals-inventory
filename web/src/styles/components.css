@@ -1,7 +1,8 @@
 /*
  * garage — компоненты дизайн-системы «Сумерки».
  * Все значения берутся из tokens.css. Префикс классов — g-.
- * Версия 1.1 — правки по разбору design-critique.
+ * Версия 1.1 — правки по разбору design-critique. Движение — в motion.css,
+ * состояния экранов (загрузка, пусто, нет связи) — в states.css.
  */
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -98,7 +99,7 @@ body {
   border: var(--bw) solid var(--line-key); border-radius: var(--r-card);
   font: var(--fw-heavy) var(--fs-13) var(--font-display);
 }
-.g-swipe > .g-card { transform: translateX(var(--swipe, 0)); transition: transform var(--dur-sheet) var(--ease-drawer); }
+.g-swipe > .g-card { transform: translateX(var(--swipe, 0)); touch-action: pan-y; }
 
 /* Место хранения */
 .g-chip {
@@ -112,13 +113,14 @@ body {
   height: 12px; overflow: hidden; background: var(--surface-raised);
   border: var(--bw) solid var(--line); border-radius: 6px;
 }
-/* В тёмной теме заливка осветляется (--meter-lift), чтобы шкала читалась (≥ 3:1) */
+/* В тёмной теме заливка осветляется (--meter-lift), чтобы шкала читалась (≥ 3:1).
+   Доля задаётся --lv (0…1) и рисуется через scaleX: изменение анимируется
+   только трансформацией (motion.css). */
 .g-meter__fill {
-  height: 100%; background: color-mix(in srgb, var(--cat, var(--accent)), #fff var(--meter-lift)); border-right: var(--bw) solid var(--line);
-  transform-origin: left; animation: g-fill var(--dur-fill) var(--ease-out) both;
+  width: 100%; height: 100%; transform-origin: left; transform: scaleX(var(--lv, 1));
+  background: color-mix(in srgb, var(--cat, var(--accent)), #fff var(--meter-lift));
 }
 .g-meter--low .g-meter__fill { background: color-mix(in srgb, var(--danger), #fff var(--meter-lift)); }
-@keyframes g-fill { from { transform: scaleX(0); } }
 
 /* Наклейка «мало!» */
 .g-sticker {
@@ -151,6 +153,21 @@ body {
   border: var(--bw) solid var(--field-line); border-radius: var(--r-control); background: var(--bg); color: var(--text);
   font: var(--fw-heavy) 15px var(--font-display); font-variant-numeric: tabular-nums;
 }
+
+/* ---------- Фильтр-чип ---------- */
+.g-filter {
+  display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 14px;
+  border: var(--bw) solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text);
+  font: var(--fw-bold) var(--fs-12) var(--font-body); cursor: pointer;
+}
+.g-filter[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+/* Ряд фильтров: на узком экране прокручивается вбок, а не переносится */
+.g-filters {
+  display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+  margin: 0 calc(-1 * var(--sp-4)); padding: 0 var(--sp-4) 6px; /* место под тень */
+}
+.g-filters::-webkit-scrollbar { display: none; }
+.g-filters .g-filter { flex: none; }
 
 /* ---------- Переключатель ---------- */
 .g-seg {
@@ -208,13 +225,12 @@ body {
 .g-sheet {
   background: var(--surface); border: var(--bw) solid var(--line); border-bottom: 0;
   border-radius: var(--r-sheet) var(--r-sheet) 0 0; padding: var(--sp-2) var(--sp-4) var(--sp-4);
-  animation: g-sheet-in var(--dur-sheet) var(--ease-drawer) both;
+  touch-action: none;
 }
-.g-sheet__grab { width: 40px; height: 4px; border-radius: 2px; background: var(--text-muted); margin: 0 auto var(--sp-3); }
-@keyframes g-sheet-in { from { transform: translateY(100%); } }
+.g-sheet__grab { width: 40px; height: 4px; border-radius: 2px; background: var(--text-muted); margin: 0 auto var(--sp-3); cursor: grab; }
 
 .g-toast {
-  display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
+  position: relative; overflow: hidden; display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
   background: var(--text); color: var(--bg); border: var(--bw) solid var(--line); border-radius: var(--r-control);
   box-shadow: var(--sh-md); font-weight: var(--fw-bold); font-size: var(--fs-13);
 }
@@ -233,7 +249,5 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .g-meter__fill, .g-sheet { animation: none; }
-  .g-swipe > .g-card { transition: none; }
   .g-press:active, .g-press:hover { transform: none; }
 }

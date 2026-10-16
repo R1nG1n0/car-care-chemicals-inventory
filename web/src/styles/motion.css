@@ -1,0 +1,240 @@
+/*
+ * garage — движение дизайн-системы «Сумерки».
+ * Правила (навык emil-design-eng):
+ * - анимируются только transform и opacity (исключения — смена цвета чипов,
+ *   тень поднятой строки и лёгкое размытие уходящего экрана);
+ * - переходы прерываемые: transition или WAAPI; ключевые кадры — только там,
+ *   где анимация играет один раз при вставке элемента;
+ * - интерфейс ≤ 300 мс (кроме жестов и таймера отмены); появление — --ease-out,
+ *   перемещение по экрану — --ease-in-out; никогда не из scale(0);
+ * - уход быстрее появления; ничего не блокирует ввод;
+ * - наведение — только для мыши; задержки очереди — через :nth-child,
+ *   без инлайновых стилей (политика безопасности приложения).
+ */
+
+/* ---------- Шкала остатка ---------- */
+/* Меняется только при изменении остатка; при открытии экрана не заполняется */
+.g-meter__fill {
+  transition: transform 250ms var(--ease-out), background-color var(--dur-fast) ease;
+}
+
+/* ---------- Очередь карточек на главной ---------- */
+/* Играет один раз при вставке. backwards — до старта карточка скрыта, после
+   окончания стили не держатся, поэтому нажатие и свайп работают сразу */
+.g-stagger > * {
+  animation: g-rise var(--dur-enter) var(--ease-out) backwards;
+}
+.g-stagger > :nth-child(2) { animation-delay: var(--stagger); }
+.g-stagger > :nth-child(3) { animation-delay: calc(var(--stagger) * 2); }
+.g-stagger > :nth-child(4) { animation-delay: calc(var(--stagger) * 3); }
+.g-stagger > :nth-child(5) { animation-delay: calc(var(--stagger) * 4); }
+.g-stagger > :nth-child(6) { animation-delay: calc(var(--stagger) * 5); }
+.g-stagger > :nth-child(7) { animation-delay: calc(var(--stagger) * 6); }
+.g-stagger > :nth-child(8) { animation-delay: calc(var(--stagger) * 7); }
+/* После восьмой карточки — без задержки: длинная очередь только мешает */
+
+@keyframes g-rise {
+  from { opacity: 0; transform: translateY(8px); }
+}
+@keyframes g-fade {
+  from { opacity: 0; }
+}
+
+/* ---------- Смена раздела ---------- */
+/* Входящий экран вставляется с data-dir; уходящий получает .is-leaving и
+   кладётся поверх (position: absolute задаёт раскладка). Размытие маскирует
+   перекрёстную смену двух экранов */
+.g-view {
+  transition: opacity var(--dur-route) var(--ease-out), transform var(--dur-route) var(--ease-out);
+}
+@starting-style {
+  .g-view[data-dir="forward"] { opacity: 0; transform: translateX(16px); }
+  .g-view[data-dir="back"] { opacity: 0; transform: translateX(-16px); }
+}
+.g-view.is-leaving {
+  opacity: 0;
+  filter: blur(2px);
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out),
+    filter var(--dur-fast) var(--ease-out);
+}
+
+/* ---------- Поиск и фильтры: FLIP-список ---------- */
+/* Появление и уход — здесь; сдвиг оставшихся — WAAPI, 200 мс, --ease-in-out */
+.g-flip > * {
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+.g-flip > .is-entering { opacity: 0; transform: scale(0.97); transition: none; }
+.g-flip > .is-exiting {
+  opacity: 0;
+  transform: scale(0.97);
+  pointer-events: none;
+  transition-duration: 150ms;
+}
+
+/* Фильтр-чип и переключатель: смена фона, отклик на нажатие */
+.g-filter,
+.g-seg button {
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease,
+    transform var(--dur-press) var(--ease-out);
+}
+.g-filter:active,
+.g-seg button:active { transform: scale(0.97); }
+
+/* Строка-ссылка: подсветка при нажатии, без сдвига — строки стоят в рамке списка */
+.g-row--link { transition: background-color var(--dur-fast) ease; }
+.g-row--link:active { background-color: var(--surface-raised); }
+
+/* Нижнее меню: значок раздела плавно меняет фон и чуть сжимается при нажатии */
+.g-tabbar__ico,
+.g-tabbar__plus {
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease,
+    transform var(--dur-press) var(--ease-out);
+}
+.g-tabbar a:active .g-tabbar__ico,
+.g-tabbar a:active .g-tabbar__plus { transform: scale(0.95); }
+
+/* ---------- Шторка и затемнение ---------- */
+/* Цвет затемнения задаёт раскладка, здесь только прозрачность в такт шторке */
+.g-sheet { transition: transform var(--dur-sheet) var(--ease-drawer); }
+.g-scrim { transition: opacity var(--dur-sheet) var(--ease-drawer); }
+@starting-style {
+  .g-sheet { transform: translateY(100%); }
+  .g-scrim { opacity: 0; }
+}
+.g-sheet.is-leaving {
+  transform: translateY(100%);
+  pointer-events: none;
+  transition: transform 200ms var(--ease-out);
+}
+.g-scrim.is-leaving {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms var(--ease-out);
+}
+/* Во время жеста шторка и затемнение следуют за пальцем без задержки */
+.g-sheet.is-dragging,
+.g-scrim.is-dragging { transition: none; }
+
+/* ---------- Уведомление ---------- */
+.g-toast {
+  transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out);
+}
+@starting-style {
+  .g-toast { opacity: 0; transform: translateY(100%); }
+}
+.g-toast.is-leaving {
+  opacity: 0;
+  transform: translateY(100%);
+  pointer-events: none;
+  transition-duration: var(--dur-fast);
+}
+/* Полоска-таймер «Отменить»: линейно, потому что это время, а не движение */
+.g-toast::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  /* Цвет фона страницы: уведомление окрашено цветом текста, поэтому полоска
+     контрастна в обеих темах (горчичная на кремовом в тёмной не читалась) */
+  background: var(--bg);
+  transform-origin: left;
+  animation: g-drain var(--dur-undo) linear forwards;
+}
+.g-toast[data-paused]::after { animation-play-state: paused; }
+
+@keyframes g-drain {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+/* ---------- Наклейка «мало!» ---------- */
+/* .g-sticker--new ставится только при пересечении порога, не при загрузке */
+.g-sticker {
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+@starting-style {
+  .g-sticker--new { opacity: 0; transform: scale(0.9) rotate(8deg); }
+}
+.g-sticker.is-leaving {
+  opacity: 0;
+  transform: scale(0.9) rotate(8deg);
+  transition-duration: var(--dur-fast);
+}
+
+/* ---------- Свайп карточки ---------- */
+/* Отпущенная карточка доводится как шторка; нажатие остаётся быстрым */
+.g-swipe > .g-card {
+  transition: transform var(--dur-sheet) var(--ease-drawer), box-shadow var(--dur-press) var(--ease-out);
+}
+.g-swipe > .g-card:active {
+  transition-duration: var(--dur-press);
+  transition-timing-function: var(--ease-out);
+}
+/* Во время жеста — без перехода; тень не «вдавливается», карточка в руке */
+.g-swipe > .g-card.is-dragging {
+  transition: none;
+  box-shadow: var(--sh-lg) !important;
+  cursor: grabbing;
+}
+
+/* ---------- Перетаскивание строк ---------- */
+/* Поднятая строка: при жесте JS дописывает translateY(...) к scale(1.02)
+   и ставит .is-dragging; соседи сдвигаются трансформацией */
+.g-row.is-lifted {
+  position: relative;
+  z-index: 1;
+  background: var(--surface);
+  transform: scale(1.02);
+  box-shadow: 6px 6px 0 var(--shadow);
+  transition: transform 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
+}
+.g-row.is-lifted.is-dragging { transition: box-shadow 150ms var(--ease-out); }
+.g-list:has(.is-lifted) > .g-row:not(.is-lifted) {
+  transition: transform 200ms var(--ease-in-out);
+}
+
+/* ---------- Наведение — только мышь ---------- */
+@media (hover: hover) and (pointer: fine) {
+  .g-row--link:hover { background-color: var(--surface-raised); }
+  .g-filter:not([aria-pressed="true"]):hover { background-color: var(--surface-raised); }
+  .g-swipe > .g-card { cursor: grab; }
+}
+
+/* ---------- Уменьшение движения ---------- */
+/* Остаётся только смена прозрачности. Жесты по-прежнему следуют за пальцем,
+   доводка после жеста — мгновенная. Полоска-таймер остаётся: она показывает
+   время на отмену и ничего не перемещает по экрану */
+@media (prefers-reduced-motion: reduce) {
+  .g-meter__fill { transition: background-color var(--dur-fast) ease; }
+  .g-stagger > * { animation-name: g-fade; }
+
+  .g-view { transition: opacity var(--dur-route) var(--ease-out); }
+  .g-view.is-leaving { filter: none; transition: opacity var(--dur-fast) var(--ease-out); }
+
+  .g-flip > .is-entering,
+  .g-flip > .is-exiting { transform: none; }
+  .g-filter:active,
+  .g-seg button:active,
+  .g-tabbar a:active .g-tabbar__ico,
+  .g-tabbar a:active .g-tabbar__plus { transform: none; }
+
+  .g-sheet { transition: opacity var(--dur-fast) var(--ease-out); }
+  .g-sheet.is-leaving { transform: none; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+  .g-toast.is-leaving { transform: none; }
+  .g-sticker.is-leaving { transform: rotate(8deg); }
+
+  .g-swipe > .g-card,
+  .g-swipe > .g-card:active { transition: none; }
+  .g-row.is-lifted { transform: none; }
+  .g-list:has(.is-lifted) > .g-row:not(.is-lifted) { transition: none; }
+
+  @starting-style {
+    .g-view[data-dir] { transform: none; }
+    .g-sheet { transform: none; opacity: 0; }
+    .g-toast { transform: none; }
+    .g-sticker--new { transform: rotate(8deg); }
+  }
+}

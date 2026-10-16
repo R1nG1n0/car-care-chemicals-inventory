@@ -27,9 +27,10 @@ func get(t *testing.T, h http.Handler, method, target string) *httptest.Response
 }
 
 var testUI = fstest.MapFS{
-	"index.html":         {Data: []byte("<!doctype html><title>garage</title>")},
-	"assets/app-1a2b.js": {Data: []byte("console.log(1)")},
-	"favicon.svg":        {Data: []byte("<svg/>")},
+	"index.html":           {Data: []byte("<!doctype html><title>garage</title>")},
+	"assets/app-1a2b.js":   {Data: []byte("console.log(1)")},
+	"favicon.svg":          {Data: []byte("<svg/>")},
+	"manifest.webmanifest": {Data: []byte(`{"name":"garage"}`)},
 }
 
 func TestHealth(t *testing.T) {
@@ -109,5 +110,12 @@ func TestUIMissing(t *testing.T) {
 	rec := get(t, newTestServer(nil), http.MethodGet, "/")
 	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "make web") {
 		t.Fatalf("без интерфейса ожидалась подсказка, код %d", rec.Code)
+	}
+}
+
+func TestManifestType(t *testing.T) {
+	rec := get(t, newTestServer(testUI), http.MethodGet, "/manifest.webmanifest")
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/manifest+json" {
+		t.Fatalf("манифест: код %d, Content-Type %q", rec.Code, rec.Header().Get("Content-Type"))
 	}
 }

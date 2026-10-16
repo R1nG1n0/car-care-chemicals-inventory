@@ -16,6 +16,8 @@ import '@fontsource/unbounded/cyrillic-800.css';
 
 import './styles/tokens.css';
 import './styles/components.css';
+import './styles/states.css';
+import './styles/motion.css';
 import './styles/app.css';
 import { App } from './App';
 
