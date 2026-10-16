@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // RecipeInput — тело POST и PUT /api/recipes.
@@ -72,6 +73,29 @@ func validRecipeName(name string) (string, error) {
 
 var errRecipeNameTaken = &ConflictError{Field: "name", Message: "Шаблон с таким названием уже есть"}
 
+// recipeNameFree проверяет, что у пользователя нет другого шаблона (кроме
+// exceptID) с тем же именем без учёта регистра: «Мойка Кузова» и «мойка
+// кузова» — дубль. LOWER и COLLATE NOCASE в SQLite знают только латиницу,
+// поэтому сравнение — в Go, в той же транзакции, что и запись.
+func recipeNameFree(ctx context.Context, q querier, userID, exceptID int64, name string) error {
+	rows, err := q.QueryContext(ctx, `SELECT name FROM recipes WHERE user_id = ? AND id <> ?`, userID, exceptID)
+	if err != nil {
+		return fmt.Errorf("проверка названия шаблона: %w", err)
+	}
+	defer rows.Close()
+	key := strings.ToLower(name)
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return fmt.Errorf("проверка названия шаблона: %w", err)
+		}
+		if strings.ToLower(n) == key {
+			return errRecipeNameTaken
+		}
+	}
+	return rows.Err()
+}
+
 // CreateRecipe создаёт шаблон в конце списка.
 func (s *Service) CreateRecipe(ctx context.Context, userID int64, in RecipeInput) (int64, error) {
 	name, err := validRecipeName(in.Name)
@@ -82,6 +106,9 @@ func (s *Service) CreateRecipe(ctx context.Context, userID int64, in RecipeInput
 	var id int64
 	err = s.inTx(ctx, func(tx *sql.Tx) error {
 		if _, err := validateItems(ctx, tx, userID, in.Items, false); err != nil {
+			return err
+		}
+		if err := recipeNameFree(ctx, tx, userID, 0, name); err != nil {
 			return err
 		}
 		res, err := tx.ExecContext(ctx, `
@@ -136,6 +163,9 @@ func (s *Service) UpdateRecipe(ctx context.Context, userID, id int64, in RecipeI
 			return err
 		}
 		if _, err := validateItems(ctx, tx, userID, in.Items, false); err != nil {
+			return err
+		}
+		if err := recipeNameFree(ctx, tx, userID, id, name); err != nil {
 			return err
 		}
 		_, err := tx.ExecContext(ctx, `UPDATE recipes SET name = ? WHERE user_id = ? AND id = ?`, name, userID, id)
@@ -305,11 +335,12 @@ func (s *Service) ApplyRecipe(ctx context.Context, userID, recipeID int64, items
 			return err
 		}
 		run := sql.NullInt64{Int64: res.RunID, Valid: true}
+		var batch int64 // все движения применения — одна группа
 		for i, it := range items {
 			if it.Qty == 0 {
 				continue
 			}
-			c, err := consumeTx(ctx, tx, userID, infos[i], it.Qty, nil, run, now, true)
+			c, err := consumeTx(ctx, tx, userID, infos[i], it.Qty, nil, run, &batch, now, true)
 			if err != nil {
 				return err
 			}

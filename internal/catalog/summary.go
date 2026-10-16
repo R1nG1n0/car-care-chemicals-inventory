@@ -193,23 +193,27 @@ func (s *Service) fillStock(ctx context.Context, userID int64, in string, args [
 	return nil
 }
 
-// fillLastConsume — последний ручной расход (ФТ-5.8): движения consume без
-// recipe_run_id с наибольшим created_at по позиции. Одно нажатие «Списать»
-// пишет по движению на каждый затронутый экземпляр с одним created_at —
-// они суммируются.
+// fillLastConsume — последний ручной расход (ФТ-5.8): по позиции берётся
+// самое позднее по id движение consume без recipe_run_id, и суммируются все
+// движения его группы (batch_id — одно нажатие «Списать», которое пишет по
+// движению на каждый затронутый экземпляр). Время не годится: два нажатия
+// в одну секунду склеились бы.
 func (s *Service) fillLastConsume(ctx context.Context, userID int64, in string, args []any, byID map[int64]*ProductSummary) error {
 	full := append(append([]any{}, args...), args...)
+	// В подзапросе MAX(m2.id) — «голый» batch_id SQLite берёт из той же
+	// строки, что и максимум.
 	rows, err := s.q.QueryContext(ctx, `
 		SELECT u.product_id, SUM(-m.qty_delta)
 		FROM movements m JOIN units u ON u.user_id = m.user_id AND u.id = m.unit_id
 		WHERE m.user_id = ? AND u.product_id IN (`+in+`)
 		  AND m.type = 'consume' AND m.recipe_run_id IS NULL
-		  AND (u.product_id, m.created_at) IN (
-			SELECT u2.product_id, MAX(m2.created_at)
-			FROM movements m2 JOIN units u2 ON u2.user_id = m2.user_id AND u2.id = m2.unit_id
-			WHERE m2.user_id = ? AND u2.product_id IN (`+in+`)
-			  AND m2.type = 'consume' AND m2.recipe_run_id IS NULL
-			GROUP BY u2.product_id)
+		  AND (u.product_id, COALESCE(m.batch_id, m.id)) IN (
+			SELECT product_id, batch FROM (
+				SELECT u2.product_id, COALESCE(m2.batch_id, m2.id) AS batch, MAX(m2.id)
+				FROM movements m2 JOIN units u2 ON u2.user_id = m2.user_id AND u2.id = m2.unit_id
+				WHERE m2.user_id = ? AND u2.product_id IN (`+in+`)
+				  AND m2.type = 'consume' AND m2.recipe_run_id IS NULL
+				GROUP BY u2.product_id))
 		GROUP BY u.product_id`, full...)
 	if err != nil {
 		return fmt.Errorf("последний расход: %w", err)

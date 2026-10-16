@@ -90,11 +90,37 @@ func validStoreURL(raw string) (string, error) {
 	return raw, nil
 }
 
+var errNameTaken = conflict("name", "Такое название уже есть")
+
 func nameTaken(err error) error {
 	if isUniqueViolation(err) {
-		return conflict("name", "Такое название уже есть")
+		return errNameTaken
 	}
 	return err
+}
+
+// nameFree проверяет, что имени нет среди записей пользователя в table
+// (вместе с архивными), кроме exceptID, без учёта регистра: «Коробка Новая»
+// и «коробка новая» — дубль (409, поле name). LOWER и COLLATE NOCASE в
+// SQLite знают только латиницу, поэтому сравнение — в Go. Вызывать в той же
+// транзакции, что и запись, иначе параллельный запрос успеет между ними.
+func nameFree(ctx context.Context, q querier, table string, userID, exceptID int64, name string) error {
+	rows, err := q.QueryContext(ctx, `SELECT name FROM `+table+` WHERE user_id = ? AND id <> ?`, userID, exceptID)
+	if err != nil {
+		return fmt.Errorf("проверка названия: %w", err)
+	}
+	defer rows.Close()
+	key := strings.ToLower(name)
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return fmt.Errorf("проверка названия: %w", err)
+		}
+		if strings.ToLower(n) == key {
+			return errNameTaken
+		}
+	}
+	return rows.Err()
 }
 
 // ---------- Категории ----------
@@ -145,25 +171,45 @@ func (s *Service) CreateCategory(ctx context.Context, userID int64, name, color 
 	if err := validColor(color); err != nil {
 		return Category{}, err
 	}
-	res, err := s.q.ExecContext(ctx, `INSERT INTO categories (user_id, name, color, sort)
-		VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), -1) + 1 FROM categories WHERE user_id = ?))`,
-		userID, name, color, userID)
-	if err != nil {
-		return Category{}, nameTaken(err)
-	}
-	id, _ := res.LastInsertId()
-	return s.category(ctx, userID, id)
+	var out Category
+	err = s.inTxSvc(ctx, func(t *Service) error {
+		if err := nameFree(ctx, t.q, "categories", userID, 0, name); err != nil {
+			return err
+		}
+		res, err := t.q.ExecContext(ctx, `INSERT INTO categories (user_id, name, color, sort)
+			VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), -1) + 1 FROM categories WHERE user_id = ?))`,
+			userID, name, color, userID)
+		if err != nil {
+			return nameTaken(err)
+		}
+		id, _ := res.LastInsertId()
+		out, err = t.category(ctx, userID, id)
+		return err
+	})
+	return out, err
 }
 
 // UpdateCategory меняет имя, цвет и архив. Возвращённая из архива
 // категория встаёт в конец списка.
 func (s *Service) UpdateCategory(ctx context.Context, userID, id int64, p RefPatch) (Category, error) {
+	var out Category
+	err := s.inTxSvc(ctx, func(t *Service) (err error) {
+		out, err = t.updateCategory(ctx, userID, id, p)
+		return err
+	})
+	return out, err
+}
+
+func (s *Service) updateCategory(ctx context.Context, userID, id int64, p RefPatch) (Category, error) {
 	cur, err := s.category(ctx, userID, id)
 	if err != nil {
 		return Category{}, err
 	}
 	if p.Name != nil {
 		if cur.Name, err = cleanName("name", *p.Name, refNameMax, "Название"); err != nil {
+			return Category{}, err
+		}
+		if err := nameFree(ctx, s.q, "categories", userID, id, cur.Name); err != nil {
 			return Category{}, err
 		}
 	}
@@ -283,25 +329,46 @@ func (s *Service) CreateLocation(ctx context.Context, userID int64, name string)
 	if err != nil {
 		return Location{}, err
 	}
-	res, err := s.q.ExecContext(ctx, `INSERT INTO locations (user_id, name, sort)
-		VALUES (?, ?, (SELECT COALESCE(MAX(sort), -1) + 1 FROM locations WHERE user_id = ?))`,
-		userID, name, userID)
-	if err != nil {
-		return Location{}, nameTaken(err)
-	}
-	id, _ := res.LastInsertId()
-	return s.location(ctx, userID, id)
+	var out Location
+	err = s.inTxSvc(ctx, func(t *Service) error {
+		if err := nameFree(ctx, t.q, "locations", userID, 0, name); err != nil {
+			return err
+		}
+		res, err := t.q.ExecContext(ctx, `INSERT INTO locations (user_id, name, sort)
+			VALUES (?, ?, (SELECT COALESCE(MAX(sort), -1) + 1 FROM locations WHERE user_id = ?))`,
+			userID, name, userID)
+		if err != nil {
+			return nameTaken(err)
+		}
+		id, _ := res.LastInsertId()
+		out, err = t.location(ctx, userID, id)
+		return err
+	})
+	return out, err
 }
 
 // UpdateLocation меняет имя и архив. Место с экземплярами sealed/open
-// архивировать нельзя (ФТ-2.2).
+// архивировать нельзя (ФТ-2.2). Проверка и запись — одна транзакция:
+// покупка в это место не вклинится между ними.
 func (s *Service) UpdateLocation(ctx context.Context, userID, id int64, p RefPatch) (Location, error) {
+	var out Location
+	err := s.inTxSvc(ctx, func(t *Service) (err error) {
+		out, err = t.updateLocation(ctx, userID, id, p)
+		return err
+	})
+	return out, err
+}
+
+func (s *Service) updateLocation(ctx context.Context, userID, id int64, p RefPatch) (Location, error) {
 	cur, err := s.location(ctx, userID, id)
 	if err != nil {
 		return Location{}, err
 	}
 	if p.Name != nil {
 		if cur.Name, err = cleanName("name", *p.Name, refNameMax, "Название"); err != nil {
+			return Location{}, err
+		}
+		if err := nameFree(ctx, s.q, "locations", userID, id, cur.Name); err != nil {
 			return Location{}, err
 		}
 	}
@@ -330,85 +397,4 @@ func (s *Service) UpdateLocation(ctx context.Context, userID, id int64, p RefPat
 // ReorderLocations — новый порядок действующих мест.
 func (s *Service) ReorderLocations(ctx context.Context, userID int64, ids []int64) error {
 	return s.reorder(ctx, "locations", userID, ids)
-}
-
-// ---------- Магазины ----------
-
-const storeSelect = `SELECT id, name, url, archived FROM stores `
-
-func scanStore(sc interface{ Scan(...any) error }) (Store, error) {
-	var st Store
-	err := sc.Scan(&st.ID, &st.Name, &st.URL, &st.Archived)
-	return st, err
-}
-
-// Stores — магазины по имени; withArchived — вместе с архивными.
-func (s *Service) Stores(ctx context.Context, userID int64, withArchived bool) ([]Store, error) {
-	rows, err := s.q.QueryContext(ctx, storeSelect+
-		`WHERE user_id = ? AND (? OR archived = 0) ORDER BY name, id`, userID, withArchived)
-	if err != nil {
-		return nil, fmt.Errorf("магазины: %w", err)
-	}
-	defer rows.Close()
-	out := []Store{}
-	for rows.Next() {
-		st, err := scanStore(rows)
-		if err != nil {
-			return nil, fmt.Errorf("магазины: %w", err)
-		}
-		out = append(out, st)
-	}
-	return out, rows.Err()
-}
-
-func (s *Service) store(ctx context.Context, userID, id int64) (Store, error) {
-	st, err := scanStore(s.q.QueryRowContext(ctx, storeSelect+`WHERE user_id = ? AND id = ?`, userID, id))
-	if errors.Is(err, sql.ErrNoRows) {
-		return Store{}, notFound(msgStoreNotFound)
-	}
-	return st, err
-}
-
-// CreateStore добавляет магазин.
-func (s *Service) CreateStore(ctx context.Context, userID int64, name, rawURL string) (Store, error) {
-	name, err := cleanName("name", name, refNameMax, "Название")
-	if err != nil {
-		return Store{}, err
-	}
-	u, err := validStoreURL(rawURL)
-	if err != nil {
-		return Store{}, err
-	}
-	res, err := s.q.ExecContext(ctx, `INSERT INTO stores (user_id, name, url) VALUES (?, ?, ?)`, userID, name, u)
-	if err != nil {
-		return Store{}, nameTaken(err)
-	}
-	id, _ := res.LastInsertId()
-	return s.store(ctx, userID, id)
-}
-
-// UpdateStore меняет имя, ссылку и архив.
-func (s *Service) UpdateStore(ctx context.Context, userID, id int64, p RefPatch) (Store, error) {
-	cur, err := s.store(ctx, userID, id)
-	if err != nil {
-		return Store{}, err
-	}
-	if p.Name != nil {
-		if cur.Name, err = cleanName("name", *p.Name, refNameMax, "Название"); err != nil {
-			return Store{}, err
-		}
-	}
-	if p.URL != nil {
-		if cur.URL, err = validStoreURL(*p.URL); err != nil {
-			return Store{}, err
-		}
-	}
-	if p.Archived != nil {
-		cur.Archived = *p.Archived
-	}
-	if _, err := s.q.ExecContext(ctx, `UPDATE stores SET name = ?, url = ?, archived = ? WHERE user_id = ? AND id = ?`,
-		cur.Name, cur.URL, cur.Archived, userID, id); err != nil {
-		return Store{}, nameTaken(err)
-	}
-	return cur, nil
 }

@@ -41,6 +41,25 @@ func TestRecipeCRUDAndApply(t *testing.T) {
 	if ce := stkIs[*ConflictError](t, err, "повтор имени"); ce.Field != "name" {
 		t.Fatalf("поле %q", ce.Field)
 	}
+	// Имя без учёта регистра, в том числе кириллицы.
+	_, err = e.svc.CreateRecipe(e.ctx, uid, RecipeInput{Name: "МОЙКА", Items: []ItemInput{{ProductID: shampoo, Qty: 1}}})
+	if ce := stkIs[*ConflictError](t, err, "повтор имени другим регистром"); ce.Field != "name" {
+		t.Fatalf("поле %q", ce.Field)
+	}
+	other, err := e.svc.CreateRecipe(e.ctx, uid, RecipeInput{Name: "Полировка", Items: []ItemInput{{ProductID: shampoo, Qty: 1}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = e.svc.UpdateRecipe(e.ctx, uid, other, RecipeInput{Name: "мойка", Items: []ItemInput{{ProductID: shampoo, Qty: 1}}})
+	if ce := stkIs[*ConflictError](t, err, "переименование в чужое имя"); ce.Field != "name" {
+		t.Fatalf("поле %q", ce.Field)
+	}
+	if err := e.svc.UpdateRecipe(e.ctx, uid, other, RecipeInput{Name: "ПОЛИРОВКА", Items: []ItemInput{{ProductID: shampoo, Qty: 1}}}); err != nil {
+		t.Fatalf("смена регистра своего имени: %v", err)
+	}
+	if err := e.svc.DeleteRecipe(e.ctx, uid, other); err != nil {
+		t.Fatal(err)
+	}
 	_, err = e.svc.CreateRecipe(e.ctx, uid, RecipeInput{Name: "Дубль", Items: []ItemInput{
 		{ProductID: shampoo, Qty: 1}, {ProductID: shampoo, Qty: 2}}})
 	stkIs[*ValidationError](t, err, "повтор позиции")

@@ -246,17 +246,34 @@ func resolveLocation(ctx context.Context, q querier, userID, productID int64, re
 	return defaultLocation(ctx, q, userID, productID)
 }
 
-// insertMovement пишет движение и возвращает его id.
+// insertMovement пишет движение и возвращает его id. Все движения одного
+// запроса — одна группа (batch_id): id первого из них. m.batch — общая для
+// запроса переменная: 0 — группа ещё не начата, её начинает это движение;
+// nil — движение само по себе группа.
 func insertMovement(ctx context.Context, q querier, m movementRow) (int64, error) {
+	if m.batch == nil {
+		m.batch = new(int64)
+	}
 	res, err := q.ExecContext(ctx, `
 		INSERT INTO movements (user_id, unit_id, type, qty_delta, from_location_id, to_location_id,
-		                       reason, recipe_run_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		m.userID, m.unitID, m.typ, m.delta, m.from, m.to, m.reason, m.runID, m.at)
+		                       reason, recipe_run_id, batch_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, 0), ?)`,
+		m.userID, m.unitID, m.typ, m.delta, m.from, m.to, m.reason, m.runID, *m.batch, m.at)
 	if err != nil {
 		return 0, fmt.Errorf("запись движения: %w", err)
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if *m.batch == 0 {
+		if _, err := q.ExecContext(ctx, `UPDATE movements SET batch_id = ? WHERE user_id = ? AND id = ?`,
+			id, m.userID, id); err != nil {
+			return 0, fmt.Errorf("группа движений: %w", err)
+		}
+		*m.batch = id
+	}
+	return id, nil
 }
 
 type movementRow struct {
@@ -266,6 +283,7 @@ type movementRow struct {
 	from, to       sql.NullInt64
 	reason         string
 	runID          sql.NullInt64
+	batch          *int64 // группа запроса, см. insertMovement
 	at             int64
 }
 

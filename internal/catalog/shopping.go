@@ -34,31 +34,9 @@ type ShoppingList struct {
 // shoppingDoneWindow — сколько показываются выполненные пункты (7 дней).
 const shoppingDoneWindow = 7 * 24 * 60 * 60
 
-// boughtAfter — первая покупка позиции пункта позже его создания. Строго
-// позже: снятая вручную отметка (created_at = момент снятия) не вернётся
-// из-за покупки той же секунды.
-const boughtAfter = `(SELECT MIN(pu.created_at) FROM purchases pu
-	JOIN purchase_lines pl ON pl.user_id = pu.user_id AND pl.purchase_id = pu.id
-	WHERE pu.user_id = shopping_items.user_id AND pl.product_id = shopping_items.product_id
-	  AND pu.created_at > shopping_items.created_at)`
-
-// markBought — автоотметка (ФТ-7): невыполненный пункт с позицией, которую
-// купили после его добавления, становится выполненным в момент покупки.
-// Делается при чтении списка, поэтому не зависит от того, как создана покупка.
-func markBought(ctx context.Context, q querier, userID int64) error {
-	_, err := q.ExecContext(ctx, `UPDATE shopping_items SET done_at = `+boughtAfter+`
-		WHERE user_id = ? AND done_at IS NULL AND product_id IS NOT NULL AND `+boughtAfter+` IS NOT NULL`, userID)
-	if err != nil {
-		return fmt.Errorf("автоотметка списка покупок: %w", err)
-	}
-	return nil
-}
-
-// Shopping — список покупок на момент now (секунды Unix).
+// Shopping — список покупок на момент now (секунды Unix). Только чтение:
+// купленные пункты отмечает транзакция покупки (stock.CreatePurchase, ФТ-7).
 func (s *Service) Shopping(ctx context.Context, userID, now int64) (ShoppingList, error) {
-	if err := markBought(ctx, s.q, userID); err != nil {
-		return ShoppingList{}, err
-	}
 	list := ShoppingList{Low: []LowItem{}, Manual: []ShoppingItem{}}
 
 	low, err := s.Products(ctx, userID, ProductFilter{Filter: FilterLow})
@@ -181,9 +159,8 @@ func (s *Service) AddShopping(ctx context.Context, userID int64, productID *int6
 	return s.shoppingItem(ctx, userID, id)
 }
 
-// SetShoppingDone отмечает пункт выполненным или снимает отметку. Снятие
-// отметки с уже купленной позиции переносит created_at на at, иначе
-// автоотметка тут же вернула бы её.
+// SetShoppingDone отмечает пункт выполненным или снимает отметку. Снятый
+// пункт поднимается наверх списка: created_at = at.
 func (s *Service) SetShoppingDone(ctx context.Context, userID, id int64, done bool, at int64) (ShoppingItem, error) {
 	if _, err := s.shoppingItem(ctx, userID, id); err != nil {
 		return ShoppingItem{}, err
@@ -192,8 +169,7 @@ func (s *Service) SetShoppingDone(ctx context.Context, userID, id int64, done bo
 	if done {
 		_, err = s.q.ExecContext(ctx, `UPDATE shopping_items SET done_at = ? WHERE user_id = ? AND id = ?`, at, userID, id)
 	} else {
-		_, err = s.q.ExecContext(ctx, `UPDATE shopping_items SET done_at = NULL,
-			created_at = CASE WHEN `+boughtAfter+` IS NOT NULL THEN ? ELSE created_at END
+		_, err = s.q.ExecContext(ctx, `UPDATE shopping_items SET done_at = NULL, created_at = ?
 			WHERE user_id = ? AND id = ?`, at, userID, id)
 	}
 	if err != nil {

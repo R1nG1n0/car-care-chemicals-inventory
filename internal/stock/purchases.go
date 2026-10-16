@@ -113,8 +113,9 @@ func (s *Service) CreatePurchase(ctx context.Context, userID int64, in PurchaseI
 		if purchaseID, err = res.LastInsertId(); err != nil {
 			return err
 		}
+		var batch int64 // все движения покупки — одна группа
 		for _, l := range in.Lines {
-			if err := insertLine(ctx, tx, userID, purchaseID, l, now); err != nil {
+			if err := insertLine(ctx, tx, userID, purchaseID, l, &batch, now); err != nil {
 				return err
 			}
 		}
@@ -131,7 +132,7 @@ func (s *Service) CreatePurchase(ctx context.Context, userID int64, in PurchaseI
 	return purchaseID, err
 }
 
-func insertLine(ctx context.Context, tx *sql.Tx, userID, purchaseID int64, l PurchaseLineInput, now int64) error {
+func insertLine(ctx context.Context, tx *sql.Tx, userID, purchaseID int64, l PurchaseLineInput, batch *int64, now int64) error {
 	p, err := product(ctx, tx, userID, l.ProductID)
 	if err != nil {
 		return err
@@ -165,7 +166,7 @@ func insertLine(ctx context.Context, tx *sql.Tx, userID, purchaseID int64, l Pur
 		}
 		if _, err := insertMovement(ctx, tx, movementRow{
 			userID: userID, unitID: unitID, typ: "purchase", delta: p.PackageSize,
-			to: loc, at: now,
+			to: loc, batch: batch, at: now,
 		}); err != nil {
 			return err
 		}

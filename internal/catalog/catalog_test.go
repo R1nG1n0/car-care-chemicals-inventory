@@ -94,6 +94,14 @@ func (f *catFixture) move(user, unit int64, typ string, delta, at int64, run *in
 		VALUES (?, ?, ?, ?, ?, ?)`, user, unit, typ, delta, run, at)
 }
 
+// batch объединяет движения в одну группу (одно нажатие): batch_id = первый id.
+func (f *catFixture) batch(ids ...int64) {
+	f.t.Helper()
+	for _, id := range ids {
+		f.exec(`UPDATE movements SET batch_id = ? WHERE id = ?`, ids[0], id)
+	}
+}
+
 func ptr[T any](v T) *T { return &v }
 
 func TestSummaryStock(t *testing.T) {
@@ -112,11 +120,11 @@ func TestSummaryStock(t *testing.T) {
 	f.unit(f.u1, p, nil, nil, 500, 0, "finished", nil)
 	f.unit(f.u1, p, nil, &loc1.ID, 500, 100, "written_off", nil)
 
-	// Последний ручной расход — два движения с одним created_at; позже —
-	// расход по шаблону, он не считается.
+	// Последний ручной расход — одно нажатие с добором: два движения одной
+	// группы; позже — расход по шаблону, он не считается.
 	f.move(f.u1, early, "consume", -15, 1_792_100_000, nil)
-	f.move(f.u1, early, "consume", -30, 1_792_200_000, nil)
-	f.move(f.u1, late, "consume", -10, 1_792_200_000, nil)
+	f.batch(f.move(f.u1, early, "consume", -30, 1_792_200_000, nil),
+		f.move(f.u1, late, "consume", -10, 1_792_200_000, nil))
 	run := f.exec(`INSERT INTO recipe_runs (user_id, created_at) VALUES (?, 1792300000)`, f.u1)
 	f.move(f.u1, late, "consume", -70, 1_792_300_000, &run)
 

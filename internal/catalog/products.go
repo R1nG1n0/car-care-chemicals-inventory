@@ -130,7 +130,17 @@ func (s *Service) CreateProduct(ctx context.Context, userID int64, in ProductInp
 
 // UpdateProduct меняет поля позиции. Единицу нельзя менять, когда у позиции
 // есть экземпляры (409); новый размер упаковки экземпляры не трогает.
+// Проверка и запись — одна транзакция: покупка позиции не вклинится между ними.
 func (s *Service) UpdateProduct(ctx context.Context, userID, id int64, p ProductPatch) (ProductSummary, error) {
+	var out ProductSummary
+	err := s.inTxSvc(ctx, func(t *Service) (err error) {
+		out, err = t.updateProduct(ctx, userID, id, p)
+		return err
+	})
+	return out, err
+}
+
+func (s *Service) updateProduct(ctx context.Context, userID, id int64, p ProductPatch) (ProductSummary, error) {
 	cur, err := s.Summary(ctx, userID, id)
 	if err != nil {
 		return ProductSummary{}, err

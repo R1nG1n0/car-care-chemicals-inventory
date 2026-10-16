@@ -152,10 +152,11 @@ func TestCatProductDetailHTTP(t *testing.T) {
 	}
 	rows.Close()
 	e.catExec(`UPDATE units SET status = 'open', remaining_qty = 320, opened_at = 1792100000, location_id = ? WHERE id = ?`, loc.ID, units[1])
-	e.catExec(`INSERT INTO movements (user_id, unit_id, type, qty_delta, created_at)
+	first := e.catExec(`INSERT INTO movements (user_id, unit_id, type, qty_delta, created_at)
 		SELECT user_id, id, 'consume', -40, 1792200000 FROM units WHERE id = ?`, units[0])
-	e.catExec(`INSERT INTO movements (user_id, unit_id, type, qty_delta, created_at)
-		SELECT user_id, id, 'consume', -640, 1792200000 FROM units WHERE id = ?`, units[1])
+	e.catExec(`UPDATE movements SET batch_id = id WHERE id = ?`, first)
+	e.catExec(`INSERT INTO movements (user_id, unit_id, type, qty_delta, batch_id, created_at)
+		SELECT user_id, id, 'consume', -640, ?, 1792200000 FROM units WHERE id = ?`, first, units[1])
 
 	rec := c.do(http.MethodGet, fmt.Sprintf("/api/products/%d", p.ID), nil)
 	expect(t, rec, http.StatusOK, "карточка")

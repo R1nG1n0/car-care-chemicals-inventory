@@ -56,12 +56,24 @@ func TestCatShoppingHTTP(t *testing.T) {
 		t.Fatalf("manual — новые сверху: %+v", list.Manual)
 	}
 
-	// Покупка позиции отмечает её пункт; текстовый не трогается.
+	// Покупка мимо POST /api/purchases (прямой SQL) пункт не отмечает:
+	// GET только читает.
 	e.clock.Add(time.Minute)
-	e.catPurchase(p.ID, nil, "2026-10-16", 120000, e.clock.Now().Unix())
+	e.catPurchase(p.ID, nil, "2026-10-15", 120000, e.clock.Now().Unix())
+	list = decode[catalog.ShoppingList](t, c.do(http.MethodGet, "/api/shopping", nil))
+	if list.Manual[1].DoneAt != nil {
+		t.Fatalf("GET отметил пункт: %+v", list.Manual[1])
+	}
+
+	// Покупка через API отмечает пункт её позиции в той же транзакции;
+	// текстовый не трогается.
+	e.clock.Add(time.Minute)
+	expect(t, c.do(http.MethodPost, "/api/purchases", map[string]any{"date": "2026-10-16",
+		"lines": []map[string]any{{"product_id": p.ID, "packages": 1, "price_per_package": 120000}}}),
+		http.StatusCreated, "покупка")
 	list = decode[catalog.ShoppingList](t, c.do(http.MethodGet, "/api/shopping", nil))
 	if d := list.Manual[1].DoneAt; d == nil || *d != e.clock.Now().Unix() || list.Manual[0].DoneAt != nil {
-		t.Fatalf("автоотметка: %+v", list.Manual)
+		t.Fatalf("отметка покупкой: %+v", list.Manual)
 	}
 
 	// Ручные отметки.
@@ -72,12 +84,29 @@ func TestCatShoppingHTTP(t *testing.T) {
 	if got := decode[catalog.ShoppingItem](t, rec); got.DoneAt == nil {
 		t.Fatalf("вычеркнуть: %+v", got)
 	}
+	e.clock.Add(time.Second)
 	rec = c.do(http.MethodPatch, fmt.Sprintf("/api/shopping/%d", item.ID), map[string]any{"done": false})
 	expect(t, rec, http.StatusOK, "вернуть купленный")
+	if got := decode[catalog.ShoppingItem](t, rec); got.DoneAt != nil || got.CreatedAt != e.clock.Now().Unix() {
+		t.Fatalf("вернуть купленный: %+v", got)
+	}
 	list = decode[catalog.ShoppingList](t, c.do(http.MethodGet, "/api/shopping", nil))
 	if list.Manual[0].ID != item.ID || list.Manual[0].DoneAt != nil {
 		t.Fatalf("снятая отметка вернулась: %+v", list.Manual)
 	}
+	// Снятая отметка с некупленного пункта тоже поднимает его наверх.
+	e.clock.Add(time.Second)
+	rec = c.do(http.MethodPatch, target, map[string]any{"done": false})
+	expect(t, rec, http.StatusOK, "вернуть текстовый")
+	if got := decode[catalog.ShoppingItem](t, rec); got.DoneAt != nil || got.CreatedAt != e.clock.Now().Unix() {
+		t.Fatalf("вернуть текстовый: %+v", got)
+	}
+	list = decode[catalog.ShoppingList](t, c.do(http.MethodGet, "/api/shopping", nil))
+	if list.Manual[0].ID != text.ID || list.Manual[1].ID != item.ID {
+		t.Fatalf("снятый пункт не наверху: %+v", list.Manual)
+	}
+	// И снова вычеркнуть — для проверки скрытия старых выполненных.
+	expect(t, c.do(http.MethodPatch, target, map[string]any{"done": true}), http.StatusOK, "вычеркнуть снова")
 
 	// Выполненные старше 7 дней скрываются.
 	e.clock.Add(8 * 24 * time.Hour)

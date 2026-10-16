@@ -141,7 +141,7 @@ func TestRefs(t *testing.T) {
 	}
 }
 
-func TestShoppingAutoMark(t *testing.T) {
+func TestShopping(t *testing.T) {
 	f := newFixture(t)
 	s1, _ := f.svc.CreateStore(f.ctx, f.u1, "Дорогой", "")
 	s2, _ := f.svc.CreateStore(f.ctx, f.u1, "Дешёвый", "")
@@ -172,19 +172,25 @@ func TestShoppingAutoMark(t *testing.T) {
 		t.Fatal("старые покупки не должны отмечать новый пункт")
 	}
 
-	// Покупка после добавления пункта отмечает его.
+	// Чтение списка ничего не меняет: покупку, записанную мимо склада
+	// (прямым SQL), GET не отмечает — отметку ставит транзакция покупки
+	// (stock.CreatePurchase, её проверяет stock и web).
 	f.purchase(f.u1, p, nil, "2026-10-16", 1, 1, 1_792_000_500)
 	list, _ = f.svc.Shopping(f.ctx, f.u1, 1_792_000_600)
-	if d := list.Manual[1].DoneAt; d == nil || *d != 1_792_000_500 {
-		t.Fatalf("автоотметка: %+v", list.Manual[1])
+	if list.Manual[1].DoneAt != nil {
+		t.Fatalf("GET отметил пункт: %+v", list.Manual[1])
 	}
-	// Снятая отметка не возвращается при следующем чтении.
-	if _, err := f.svc.SetShoppingDone(f.ctx, f.u1, it.ID, false, 1_792_000_700); err != nil {
+	// Снятие отметки поднимает пункт наверх, даже если он не был куплен.
+	if _, err := f.svc.SetShoppingDone(f.ctx, f.u1, it.ID, true, 1_792_000_650); err != nil {
 		t.Fatal(err)
+	}
+	got, err := f.svc.SetShoppingDone(f.ctx, f.u1, it.ID, false, 1_792_000_700)
+	if err != nil || got.DoneAt != nil || got.CreatedAt != 1_792_000_700 {
+		t.Fatalf("снятие отметки: %v %+v", err, got)
 	}
 	list, _ = f.svc.Shopping(f.ctx, f.u1, 1_792_000_800)
 	if list.Manual[0].ID != it.ID || list.Manual[0].DoneAt != nil {
-		t.Fatalf("снятие отметки: %+v", list.Manual)
+		t.Fatalf("снятый пункт не наверху: %+v", list.Manual)
 	}
 	// Выполненные старше 7 дней пропадают.
 	if _, err := f.svc.SetShoppingDone(f.ctx, f.u1, text.ID, true, 1_792_000_000); err != nil {

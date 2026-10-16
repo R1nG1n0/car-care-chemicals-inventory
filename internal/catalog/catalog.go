@@ -110,6 +110,12 @@ func (s *Service) inTx(ctx context.Context, fn func(q querier) error) error {
 	return tx.Commit()
 }
 
+// inTxSvc — inTx, где fn получает сервис над той же транзакцией: его
+// чтения (сводки, записи справочников) видят то же, что и запись.
+func (s *Service) inTxSvc(ctx context.Context, fn func(t *Service) error) error {
+	return s.inTx(ctx, func(q querier) error { return fn(&Service{db: s.db, q: q}) })
+}
+
 func isUniqueViolation(err error) bool {
 	var e *sqlite.Error
 	return errors.As(err, &e) && e.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE

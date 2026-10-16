@@ -107,8 +107,9 @@ type ConsumeResult struct {
 
 // consumeTx списывает qty позиции внутри транзакции по правилам ФТ-5.1.
 // partial — нехватка не ошибка (шаблоны, ФТ-8.6): списывается сколько есть.
+// batch — группа движений запроса (см. insertMovement).
 func consumeTx(ctx context.Context, tx *sql.Tx, userID int64, p productInfo, qty int64, startUnit *int64,
-	runID sql.NullInt64, now int64, partial bool) (ConsumeResult, error) {
+	runID sql.NullInt64, batch *int64, now int64, partial bool) (ConsumeResult, error) {
 	res := ConsumeResult{ProductID: p.ID, Requested: qty, MovementIDs: []int64{},
 		OpenedUnitIDs: []int64{}, FinishedUnitIDs: []int64{}}
 	pl, err := planConsume(ctx, tx, userID, p, qty, startUnit)
@@ -140,7 +141,7 @@ func consumeTx(ctx context.Context, tx *sql.Tx, userID int64, p productInfo, qty
 			return res, &ConflictError{Message: "Остаток изменился, повторите"}
 		}
 		id, err := insertMovement(ctx, tx, movementRow{
-			userID: userID, unitID: u.ID, typ: "consume", delta: -t.n, runID: runID, at: now,
+			userID: userID, unitID: u.ID, typ: "consume", delta: -t.n, runID: runID, batch: batch, at: now,
 		})
 		if err != nil {
 			return res, err
@@ -178,7 +179,8 @@ func (s *Service) Consume(ctx context.Context, userID int64, in ConsumeInput) (C
 		if err != nil {
 			return err
 		}
-		res, err = consumeTx(ctx, tx, userID, p, in.Qty, in.UnitID, sql.NullInt64{}, now, false)
+		var batch int64
+		res, err = consumeTx(ctx, tx, userID, p, in.Qty, in.UnitID, sql.NullInt64{}, &batch, now, false)
 		return err
 	})
 	return res, err
