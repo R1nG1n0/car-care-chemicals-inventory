@@ -1,0 +1,37 @@
+// Ключи кэша React Query для данных этапа 2 и общая инвалидация.
+// Любое изменение склада (покупка, расход, отмена, корректировка…) меняет
+// сводки позиций, список покупок и шаблоны — поэтому инвалидация одна на всех.
+import type { QueryClient } from '@tanstack/react-query';
+import type { ProductQuery } from '../api';
+
+export const keys = {
+  categories: (archived = false) => ['categories', archived] as const,
+  locations: (archived = false) => ['locations', archived] as const,
+  stores: (archived = false) => ['stores', archived] as const,
+  products: (q: ProductQuery = {}) => ['products', q] as const,
+  product: (id: number) => ['product', id] as const,
+  brands: ['brands'] as const,
+  shopping: ['shopping'] as const,
+  purchases: ['purchases'] as const,
+  purchase: (id: number) => ['purchase', id] as const,
+  movements: (productId?: number) => ['movements', productId ?? null] as const,
+  recipes: ['recipes'] as const,
+  recipe: (id: number) => ['recipe', id] as const,
+};
+
+/** После любого изменения остатков. */
+export function invalidateStock(qc: QueryClient): Promise<void> {
+  return qc.invalidateQueries({
+    predicate: (q) =>
+      ['products', 'product', 'shopping', 'purchases', 'purchase', 'movements', 'recipes', 'recipe', 'locations'].includes(
+        q.queryKey[0] as string,
+      ),
+  });
+}
+
+/** После изменения справочников (имя, цвет, архив, порядок). */
+export function invalidateRefs(qc: QueryClient): Promise<void> {
+  return qc.invalidateQueries({
+    predicate: (q) => ['categories', 'locations', 'stores', 'products', 'product'].includes(q.queryKey[0] as string),
+  });
+}

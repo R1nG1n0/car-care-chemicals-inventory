@@ -40,7 +40,7 @@ export function isNetworkError(err: unknown): err is NetworkError {
   return err instanceof NetworkError;
 }
 
-type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export type RequestOptions = {
   method?: Method;

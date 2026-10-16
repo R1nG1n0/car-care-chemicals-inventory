@@ -50,16 +50,10 @@ function Root() {
           }
         />
         <Route path="/invite/:token" element={<InviteScreen />} />
-        <Route path="/more" element={<Navigate to="/profile" replace />} />
-        {/* Общий макет: Shell сам выбирает экран по адресу, чтобы держать
-            уходящий и входящий экраны одновременно (анимация .g-view). */}
-        <Route element={app}>
-          <Route path="/" element={null} />
-          <Route path="/shopping" element={null} />
-          <Route path="/templates" element={null} />
-          <Route path="/profile" element={null} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Остальные адреса — приложение: Shell сам выбирает раздел по адресу,
+            чтобы держать уходящий и входящий экраны одновременно (анимация .g-view),
+            а разделы разбирают свои адреса вложенным <Routes>. */}
+        <Route path="/*" element={app} />
       </Routes>
     </>
   );

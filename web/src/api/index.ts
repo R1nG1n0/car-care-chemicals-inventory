@@ -27,3 +27,4 @@ export const api = {
   acceptInvite: (token: string, login: string, password: string) =>
     request<Session>(`${tokenPath(token)}/accept`, { method: 'POST', body: { login, password } }),
 };
+export * from './inventory';

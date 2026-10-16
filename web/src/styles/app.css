@@ -87,3 +87,12 @@ a.g-btn { text-decoration: none; }
   .app-views { min-height: calc(100dvh - var(--sp-6) - var(--sp-10)); }
   .app-toast-slot { bottom: var(--sp-6); left: 220px; }
 }
+
+/* ---------- Затемнение и шторки поверх приложения ---------- */
+.app-overlay {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  background: color-mix(in srgb, #0E0E10 55%, transparent);
+}
+.app-overlay > .g-sheet { width: 100%; max-width: 560px; margin: 0 auto; padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom)); }
+.app-toast__text { flex: 1; min-width: 0; }
