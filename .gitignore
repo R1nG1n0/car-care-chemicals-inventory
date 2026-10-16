@@ -1,0 +1,29 @@
+# Ruflo local secrets and runtime data
+.env
+.env.local
+.env.*.local
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
+
+# Ruflo: инструменты Claude Code, в репозиторий не входят
+.claude/
+.agents/
+.claude-flow/
+.swarm/
+.mcp.json
+ruvector.db
+CLAUDE.md
+
+# Сборка и зависимости
+bin/
+web/node_modules/
+web/dist/*
+!web/dist/.keep
+
+# Тестовые данные (make dev / make run)
+.dev/
+
+# macOS и exFAT
+.DS_Store
+._*

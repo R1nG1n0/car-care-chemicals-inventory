@@ -1,0 +1,239 @@
+/*
+ * garage — компоненты дизайн-системы «Сумерки».
+ * Все значения берутся из tokens.css. Префикс классов — g-.
+ * Версия 1.1 — правки по разбору design-critique.
+ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: var(--fw-medium) var(--fs-14) / var(--lh-body) var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.g-num { font-family: var(--font-display); font-weight: var(--fw-heavy); font-variant-numeric: tabular-nums; }
+.g-num small { font-size: var(--fs-12); }
+.g-muted { color: var(--text-muted); }
+.g-title { font: var(--fw-heavy) var(--fs-20) / var(--lh-tight) var(--font-display); margin: 0; }
+.g-label { font-size: var(--fs-12); font-weight: var(--fw-bold); color: var(--text-muted); }
+
+/* Нажатие: элемент «вдавливается» в свою тень */
+.g-press {
+  transition: transform var(--dur-press) var(--ease-out), box-shadow var(--dur-press) var(--ease-out);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.g-press:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--shadow) !important; }
+
+/* ---------- Кнопки ---------- */
+.g-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+  min-height: var(--tap); padding: 0 var(--sp-4);
+  border: var(--bw) solid var(--line); border-radius: var(--r-control);
+  background: var(--surface); color: var(--text); box-shadow: var(--sh-md);
+  font: var(--fw-heavy) var(--fs-13) var(--font-display);
+}
+.g-btn--cta { background: var(--cta); color: var(--on-cta); border-color: var(--line-key); box-shadow: var(--sh-key); }
+.g-btn--accent { background: var(--accent); color: var(--on-accent); }
+.g-btn--danger { background: var(--danger); color: var(--on-danger); }
+.g-btn--block { width: 100%; }
+/* Маленькая — только по ширине и шрифту, высота не меньше зоны нажатия */
+.g-btn--sm { padding: 0 var(--sp-3); font-size: var(--fs-12); box-shadow: var(--sh-sm); }
+.g-btn--icon { width: var(--tap); padding: 0; }
+.g-btn .ti { font-size: 20px; }
+/* Без рамки — объявлена после --sm, чтобы её тень не возвращалась */
+.g-btn--ghost { background: transparent; border-color: transparent; box-shadow: none; font-family: var(--font-body); font-weight: var(--fw-bold); }
+.g-btn[aria-disabled="true"] { opacity: 0.55; }
+
+/* ---------- Поля ---------- */
+.g-field { display: grid; gap: var(--sp-1); }
+.g-input {
+  min-height: var(--tap); width: 100%; padding: 0 var(--sp-3);
+  border: var(--bw) solid var(--field-line); border-radius: var(--r-control);
+  background: var(--surface); color: var(--text); box-shadow: var(--sh-sm);
+  font: var(--fw-semibold) var(--fs-16) var(--font-body);
+}
+.g-input::placeholder { color: var(--text-muted); }
+.g-field--error .g-input { border-color: var(--danger); }
+.g-field__error { color: var(--danger-text); font-size: var(--fs-12); font-weight: var(--fw-bold); }
+
+.g-search { position: relative; }
+.g-search .g-input { padding-left: 38px; box-shadow: var(--sh-md); }
+.g-search__icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+
+/* ---------- Карточка позиции ---------- */
+.g-card {
+  position: relative; overflow: hidden; min-width: 0;
+  background: var(--surface); border: var(--bw) solid var(--line);
+  border-radius: var(--r-card); box-shadow: var(--sh-lg);
+}
+.g-card__head {
+  display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2);
+  padding: 5px var(--sp-3); background: var(--cat, var(--cat-slate)); color: var(--on-cat);
+  border-bottom: var(--bw) solid var(--line);
+  font-size: var(--fs-12); font-weight: var(--fw-bold);
+}
+/* Полоса категории на главной: категория передаётся только цветом */
+.g-card__strip { height: 8px; background: var(--cat, var(--cat-slate)); border-bottom: var(--bw) solid var(--line); }
+.g-card__body { padding: var(--sp-2) var(--sp-3) var(--sp-3); }
+.g-card__top { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-2); }
+.g-card__name { font-size: var(--fs-14); font-weight: var(--fw-bold); }
+.g-card__qty { display: flex; align-items: baseline; gap: 6px; margin: var(--sp-1) 0 6px; }
+.g-card__qty .g-num { font-size: var(--fs-24); }
+.g-card__open { margin-top: 4px; font-size: var(--fs-12); font-weight: var(--fw-semibold); color: var(--text-muted); }
+/* Выбранная карточка (панель позиции на компьютере) */
+.g-card[aria-current="true"] { border-color: var(--focus); box-shadow: 6px 6px 0 var(--focus); }
+
+/* Быстрый расход свайпом влево по карточке на главной */
+.g-swipe { position: relative; }
+.g-swipe__action {
+  position: absolute; inset: 0; display: flex; justify-content: flex-end; align-items: center; gap: var(--sp-2);
+  padding-right: var(--sp-4); background: var(--cta); color: var(--on-cta);
+  border: var(--bw) solid var(--line-key); border-radius: var(--r-card);
+  font: var(--fw-heavy) var(--fs-13) var(--font-display);
+}
+.g-swipe > .g-card { transform: translateX(var(--swipe, 0)); transition: transform var(--dur-sheet) var(--ease-drawer); }
+
+/* Место хранения */
+.g-chip {
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+  padding: 0 6px; border: var(--bw-thin) solid var(--line); border-radius: var(--r-chip);
+  background: var(--bg); color: var(--text); font-size: var(--fs-12); font-weight: var(--fw-bold);
+}
+
+/* Уровень остатка */
+.g-meter {
+  height: 12px; overflow: hidden; background: var(--surface-raised);
+  border: var(--bw) solid var(--line); border-radius: 6px;
+}
+/* В тёмной теме заливка осветляется (--meter-lift), чтобы шкала читалась (≥ 3:1) */
+.g-meter__fill {
+  height: 100%; background: color-mix(in srgb, var(--cat, var(--accent)), #fff var(--meter-lift)); border-right: var(--bw) solid var(--line);
+  transform-origin: left; animation: g-fill var(--dur-fill) var(--ease-out) both;
+}
+.g-meter--low .g-meter__fill { background: color-mix(in srgb, var(--danger), #fff var(--meter-lift)); }
+@keyframes g-fill { from { transform: scaleX(0); } }
+
+/* Наклейка «мало!» */
+.g-sticker {
+  position: absolute; top: 48px; right: var(--sp-3); transform: rotate(8deg);
+  padding: 3px 7px; background: var(--danger); color: var(--on-danger);
+  border: var(--bw) solid var(--line); border-radius: var(--r-chip);
+  font: var(--fw-heavy) var(--fs-12) var(--font-display);
+}
+
+/* ---------- Ввод количества (ФТ-5.8) ---------- */
+.g-qty { display: grid; gap: var(--sp-2); }
+.g-qty__value {
+  display: flex; align-items: baseline; gap: 6px;
+  border: var(--bw) solid var(--field-line); border-radius: var(--r-control);
+  background: var(--bg); padding: 2px var(--sp-3);
+}
+.g-qty__value input {
+  width: 100%; min-width: 0; border: 0; background: transparent; color: var(--text); padding: 0;
+  font: var(--fw-heavy) var(--fs-32) / 1.2 var(--font-display); font-variant-numeric: tabular-nums;
+}
+.g-qty__value input:focus { outline: none; }
+.g-qty__value:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
+.g-qty__steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-2); }
+.g-qty__steps .g-btn { padding: 0; min-height: var(--tap-lg); font-size: 15px; }
+.g-qty__hint { font-size: var(--fs-12); color: var(--text-muted); }
+
+/* Число в строке шаблона: вписывается вручную, рядом кнопки ± */
+.g-num-input {
+  width: 72px; height: var(--tap); padding: 0 var(--sp-2); text-align: right;
+  border: var(--bw) solid var(--field-line); border-radius: var(--r-control); background: var(--bg); color: var(--text);
+  font: var(--fw-heavy) 15px var(--font-display); font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Переключатель ---------- */
+.g-seg {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 3px; gap: 3px;
+  border: var(--bw) solid var(--line); border-radius: var(--r-control); background: var(--bg);
+}
+.g-seg button {
+  min-height: var(--tap); border: 0; border-radius: 5px; background: transparent; color: var(--text-muted);
+  font: var(--fw-bold) var(--fs-13) var(--font-body); cursor: pointer;
+}
+.g-seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 var(--bw) var(--line); }
+
+/* ---------- Списки и строки ---------- */
+.g-list { border: var(--bw) solid var(--line); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--sh-lg); overflow: hidden; }
+.g-row {
+  display: flex; align-items: center; gap: var(--sp-3); min-height: 52px; padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px dashed var(--text-muted);
+}
+.g-row:last-child { border-bottom: 0; }
+.g-row__main { flex: 1; min-width: 0; }
+.g-row__title { font-weight: var(--fw-bold); }
+.g-row__sub { font-size: var(--fs-12); color: var(--text-muted); }
+.g-row--warn { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.g-row--link { color: inherit; text-decoration: none; cursor: pointer; }
+.g-row__go { color: var(--text-muted); font-size: 20px; }
+.g-handle {
+  display: grid; place-items: center; width: var(--tap); height: var(--tap); margin: 0 calc(-1 * var(--sp-2)) 0 calc(-1 * var(--sp-3));
+  border: 0; background: transparent; color: var(--text-muted); cursor: grab; touch-action: none; font-size: 20px;
+}
+/* Отметка: видимый квадрат 24 px внутри зоны 44 px */
+.g-check { display: grid; place-items: center; width: var(--tap); height: var(--tap); flex: none; margin-left: calc(-1 * var(--sp-2)); border: 0; background: transparent; cursor: pointer; padding: 0; }
+.g-check__box {
+  width: 24px; height: 24px; display: grid; place-items: center; color: transparent;
+  border: var(--bw) solid var(--line); border-radius: var(--r-chip); background: var(--surface);
+}
+.g-check--on .g-check__box { background: var(--accent); color: var(--on-accent); }
+
+/* ---------- Навигация ---------- */
+.g-tabbar {
+  display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
+  border-top: var(--bw) solid var(--line); background: var(--surface); padding: 6px var(--sp-2) var(--sp-2);
+}
+.g-tabbar a { display: grid; justify-items: center; gap: 2px; color: var(--text-muted); text-decoration: none; font-size: var(--fs-12); font-weight: var(--fw-bold); min-height: var(--tap); align-content: center; }
+.g-tabbar a[aria-current="page"] { color: var(--text); }
+.g-tabbar a[aria-current="page"] .g-tabbar__ico { background: var(--accent); color: var(--on-accent); border-color: var(--line-key); }
+.g-tabbar__ico { display: grid; place-items: center; width: 44px; height: 28px; border: var(--bw) solid transparent; border-radius: var(--r-control); font-size: 20px; }
+.g-tabbar__plus { width: 52px; height: 52px; margin: -18px auto 0; border: var(--bw) solid var(--line-key); border-radius: var(--r-card); background: var(--cta); color: var(--on-cta); box-shadow: var(--sh-key); display: grid; place-items: center; font-size: 26px; }
+
+.g-side { display: grid; align-content: start; gap: var(--sp-1); padding: var(--sp-4) var(--sp-3); background: var(--surface); border-right: var(--bw) solid var(--line); }
+.g-side a { display: flex; align-items: center; min-height: var(--tap); gap: var(--sp-2); padding: var(--sp-2); border: var(--bw) solid transparent; border-radius: var(--r-control); color: var(--text); text-decoration: none; font-weight: var(--fw-bold); }
+.g-side a[aria-current="page"] { background: var(--accent); color: var(--on-accent); border-color: var(--line-key); box-shadow: var(--sh-key); }
+.g-side .ti { font-size: 20px; }
+
+/* ---------- Нижняя шторка и уведомление ---------- */
+.g-sheet {
+  background: var(--surface); border: var(--bw) solid var(--line); border-bottom: 0;
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0; padding: var(--sp-2) var(--sp-4) var(--sp-4);
+  animation: g-sheet-in var(--dur-sheet) var(--ease-drawer) both;
+}
+.g-sheet__grab { width: 40px; height: 4px; border-radius: 2px; background: var(--text-muted); margin: 0 auto var(--sp-3); }
+@keyframes g-sheet-in { from { transform: translateY(100%); } }
+
+.g-toast {
+  display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
+  background: var(--text); color: var(--bg); border: var(--bw) solid var(--line); border-radius: var(--r-control);
+  box-shadow: var(--sh-md); font-weight: var(--fw-bold); font-size: var(--fs-13);
+}
+.g-toast .g-btn { box-shadow: none; }
+
+/* ---------- Плашки ---------- */
+.g-badge { display: inline-block; padding: 1px 6px; border-radius: var(--r-chip); background: var(--surface-raised); color: var(--text); font-size: var(--fs-12); font-weight: var(--fw-bold); }
+.g-badge--danger { background: var(--danger); color: var(--on-danger); }
+.g-badge--accent { background: var(--accent); color: var(--on-accent); }
+
+@media (hover: hover) and (pointer: fine) {
+  .g-press:hover { box-shadow: 5px 5px 0 var(--shadow); transform: translate(-1px, -1px); }
+  .g-press:hover:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--shadow); }
+  .g-btn--ghost.g-press:hover { box-shadow: none; transform: none; }
+  .g-btn--cta.g-press:hover:not(:active) { box-shadow: 5px 5px 0 var(--shadow-key); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .g-meter__fill, .g-sheet { animation: none; }
+  .g-swipe > .g-card { transition: none; }
+  .g-press:active, .g-press:hover { transform: none; }
+}

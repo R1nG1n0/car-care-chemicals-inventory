@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>garage — макеты</title>
+<!-- Только для просмотра макетов. В приложении шрифты и иконки свои, без CDN -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="../../web/src/styles/tokens.css">
+<link rel="stylesheet" href="../../web/src/styles/components.css">
+<style>
+  /* Оформление страницы с макетами, в систему не входит */
+  .mk-top { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 24px; background: var(--surface); border-bottom: var(--bw) solid var(--line); }
+  .mk-wrap { max-width: 1480px; margin: 0 auto; padding: 24px; }
+  .mk-h { font: 800 18px var(--font-display); margin: 40px 0 6px; }
+  .mk-p { color: var(--text-muted); margin: 0 0 16px; max-width: 780px; }
+  .mk-row { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+  .mk-cap { font-size: 12px; font-weight: 700; color: var(--text-muted); margin: 0 0 8px; }
+  .ph { width: 360px; height: 760px; border: 3px solid var(--line); border-radius: 40px; overflow: hidden; background: var(--bg); display: flex; flex-direction: column; position: relative; box-shadow: var(--sh-lg); }
+  .ph__bar { display: flex; justify-content: space-between; padding: 10px 26px 4px; font: 700 12px var(--font-body); }
+  .ph__scr { flex: 1; overflow: hidden; padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .ph__scr > * { flex-shrink: 0; }  /* содержимое не сжимается, лишнее обрезается краем экрана */
+  .ph__dim { position: absolute; inset: 0; background: rgba(10, 10, 12, 0.55); display: flex; flex-direction: column; justify-content: flex-end; }
+  .pc { width: min(1180px, 100%); border: 3px solid var(--line); border-radius: 14px; overflow-x: auto; background: var(--bg); box-shadow: var(--sh-lg); }
+  .pc__bar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: var(--surface); border-bottom: var(--bw) solid var(--line); font-size: 12px; color: var(--text-muted); }
+  .pc__dot { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--line); }
+  .pc__grid { display: grid; grid-template-columns: 220px minmax(0, 1fr) 340px; min-height: 640px; min-width: 1100px; }
+  .hstack { display: flex; gap: 8px; align-items: center; }
+  .between { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .fchip { display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border: var(--bw) solid var(--line); border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--surface); }
+  .fchip[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+  .logo { font: 800 20px var(--font-display); }
+  .logo b { color: var(--danger-text); }
+  .stack { display: grid; gap: 14px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .sum { font: 800 15px var(--font-display); }
+  .strike { text-decoration: line-through; color: var(--text-muted); }
+  .tpl-ctl { display: flex; gap: 6px; align-items: center; }
+  .tpl-ctl .g-btn { box-shadow: var(--sh-sm); }
+</style>
+</head>
+<body>
+<header class="mk-top">
+  <div class="hstack"><span class="logo">garage<b>.</b></span><span class="g-muted">макеты · дизайн-система «Сумерки» 1.1</span></div>
+  <div class="g-seg" role="group" aria-label="Тема" style="width:280px">
+    <button type="button" data-theme-set="light" aria-pressed="false">Светлая</button>
+    <button type="button" data-theme-set="dark" aria-pressed="true">Тёмная</button>
+  </div>
+</header>
+
+<main class="mk-wrap">
+  <h2 class="mk-h">1. Телефон — основные экраны</h2>
+  <p class="mk-p">Крупное число везде — общий остаток позиции, под шкалой — сколько во вскрытой бутылке. Свайп влево по карточке открывает расход (показан на второй карточке). Кнопки ±, переключатели и отметки нажимаются.</p>
+  <div class="mk-row" id="phones-1"></div>
+
+  <h2 class="mk-h">2. Телефон — расход и шаблон</h2>
+  <p class="mk-p">Расход — шторка поверх главной: число вручную, кнопки ±10/±50 высотой 48 px, выбор бутылки. После списания 10 секунд можно отменить. В шаблоне количество тоже вписывается вручную или кнопками.</p>
+  <div class="mk-row" id="phones-2"></div>
+
+  <h2 class="mk-h">3. Телефон — покупка, список покупок, места</h2>
+  <p class="mk-p">Места хранения — редактируемый список: перетаскивание за ручку, переименование в строке, архив. Все зоны нажатия — не меньше 44 px.</p>
+  <div class="mk-row" id="phones-3"></div>
+
+  <h2 class="mk-h">4. Компьютер</h2>
+  <p class="mk-p">Боковое меню, карточки в две колонки, выбранная карточка выделена. Справа — панель позиции с расходом. Горчичная кнопка на экране одна — «Списать».</p>
+  <div class="stack" id="desktop"></div>
+</main>
+
+<script>
+const ITEMS = [
+  { n: "Koch Chemie Gsf", c: "Шампунь", cat: "blue", u: "мл", o: 320, cap: 1000, s: 2, p: "Коробка 3" },
+  { n: "Gyeon Q²M Foam", c: "Активная пена", cat: "berry", u: "мл", o: 80, cap: 1000, s: 0, p: "Полка 2", low: true },
+  { n: "Sonax Glas Klar", c: "Стёкла", cat: "petrol", u: "мл", o: 410, cap: 500, s: 0, p: "Полка 1" },
+  { n: "Koch Chemie Felgenblitz", c: "Шины и диски", cat: "slate", u: "мл", o: 650, cap: 1000, s: 1, p: "Коробка 3" },
+  { n: "Микрофибра 40×40", c: "Микрофибра", cat: "umber", u: "шт", o: 6, cap: 10, s: 0, p: "Пакет 1" },
+  { n: "Gtechniq C2v3", c: "Полироли и защита", cat: "ochre", u: "мл", o: 190, cap: 250, s: 0, p: "Полка 1" },
+];
+const fmt = (n) => n.toLocaleString("ru-RU");
+const total = (i) => i.o + i.s * i.cap;
+const ico = (name, label) => `<i class="ti ti-${name}"${label ? ` aria-label="${label}"` : ' aria-hidden="true"'}></i>`;
+const openLine = (i) => i.u === "шт"
+  ? `в пачке ${i.o} из ${i.cap}`
+  : `вскрыта: ${fmt(i.o)} из ${fmt(i.cap)}${i.s ? ` · ещё ${i.s} запечатан${i.s > 1 ? "ы" : "а"}` : ""}`;
+
+const card = (i, opts = {}) => `
+<a class="g-card g-press" href="#" ${opts.current ? 'aria-current="true"' : ""} style="--cat:var(--cat-${i.cat});color:inherit;text-decoration:none;display:block" aria-label="${i.n}, ${i.c}">
+  <div class="g-card__strip"></div>
+  <div class="g-card__body">
+    <div class="g-card__top"><span class="g-card__name">${i.n}</span><span class="g-chip">${i.p}</span></div>
+    <div class="g-card__qty"><span class="g-num">${fmt(total(i))}</span><b>${i.u}</b></div>
+    <div class="g-meter${i.low ? " g-meter--low" : ""}" role="meter" aria-label="Во вскрытой" aria-valuenow="${i.o}" aria-valuemax="${i.cap}"><div class="g-meter__fill" style="width:${(i.o / i.cap) * 100}%"></div></div>
+    <div class="g-card__open">${openLine(i)}</div>
+  </div>
+  ${i.low ? `<span class="g-sticker">мало!</span>` : ""}
+</a>`;
+
+const swiped = (i) => `
+<div class="g-swipe" style="--swipe:-112px">
+  <div class="g-swipe__action">${ico("droplet")} Расход</div>
+  ${card(i)}
+</div>`;
+
+const qty = (v, hint, unit = "мл") => `
+<div class="g-qty" data-qty data-max="320">
+  <label class="g-label" for="q${v}${hint.length}">Количество</label>
+  <div class="g-qty__value"><input id="q${v}${hint.length}" inputmode="numeric" value="${v}"><b>${unit}</b></div>
+  <div class="g-qty__steps">
+    ${[-50, -10, 10, 50].map((s) => `<button type="button" class="g-btn g-press" data-step="${s}" aria-label="${s > 0 ? "Плюс" : "Минус"} ${Math.abs(s)} ${unit}">${s > 0 ? "+" : "−"}${Math.abs(s)}</button>`).join("")}
+  </div>
+  <div class="g-qty__hint">${hint}</div>
+</div>`;
+
+const tabbar = (cur) => `
+<nav class="g-tabbar" aria-label="Разделы">
+  <a href="#" ${cur === 0 ? 'aria-current="page"' : ""}><span class="g-tabbar__ico">${ico("package")}</span>Остатки</a>
+  <a href="#" ${cur === 1 ? 'aria-current="page"' : ""}><span class="g-tabbar__ico">${ico("shopping-cart")}</span>Купить</a>
+  <a href="#" aria-label="Добавить"><span class="g-tabbar__plus">${ico("plus")}</span></a>
+  <a href="#" ${cur === 3 ? 'aria-current="page"' : ""}><span class="g-tabbar__ico">${ico("stack-2")}</span>Шаблоны</a>
+  <a href="#" ${cur === 4 ? 'aria-current="page"' : ""}><span class="g-tabbar__ico">${ico("dots")}</span>Ещё</a>
+</nav>`;
+
+const phone = (cap, body, opts = {}) => `
+<figure style="margin:0"><figcaption class="mk-cap">${cap}</figcaption>
+<div class="ph">
+  <div class="ph__bar"><span>9:41</span><span>VPN ● 87%</span></div>
+  <div class="ph__scr">${body}</div>
+  ${opts.tab !== undefined ? tabbar(opts.tab) : ""}
+  ${opts.overlay || ""}
+</div></figure>`;
+
+const back = (t) => `<a href="#" class="g-btn g-btn--ghost g-btn--sm" style="padding:0 8px 0 0">${ico("chevron-left")}${t}</a>`;
+const search = `<div class="g-search" role="search"><span class="g-search__icon">${ico("search")}</span><input class="g-input" type="search" placeholder="Шампунь, Koch, штрихкод"></div>`;
+const filters = `<div class="chips"><span class="fchip" aria-pressed="true">Все 24</span><span class="fchip">Мало 2</span><span class="fchip">Коробка 3</span><span class="fchip">Полка 1</span></div>`;
+
+/* ---------- Экраны: группа 1 ---------- */
+const scrLogin = `
+<div style="flex:1;display:grid;align-content:center;gap:20px">
+  <div><div class="logo" style="font-size:34px">garage<b>.</b></div><p class="g-muted" style="margin:6px 0 0">Учёт автохимии и инструментов</p></div>
+  <div class="g-field"><label class="g-label" for="l1">Логин</label><input class="g-input" id="l1" value="ringino"></div>
+  <div class="g-field g-field--error"><label class="g-label" for="l2">Пароль</label><input class="g-input" id="l2" type="password" value="12345678" aria-describedby="l2e"><span class="g-field__error" id="l2e">Неверный логин или пароль. Осталось 3 попытки.</span></div>
+  <button class="g-btn g-btn--cta g-btn--block g-press">Войти</button>
+  <p class="g-muted" style="font-size:12px;margin:0;text-align:center">Нет учётной записи? Попросите приглашение у владельца.</p>
+</div>`;
+
+const homeList = (swipeSecond) => `<div class="stack" style="overflow:hidden">${ITEMS.slice(0, 4).map((i, k) => (swipeSecond && k === 1 ? swiped(i) : card(i))).join("")}</div>`;
+const homeHead = `<div class="between"><h1 class="g-title">Остатки</h1><span class="g-badge g-badge--danger">2 мало</span></div>${search}${filters}`;
+
+const exemplar = (st, q, cap, pl, lv) => `
+<div class="g-row"><div class="g-row__main"><div class="between"><span class="g-row__title">${st}</span><span class="g-num" style="font-size:14px">${fmt(q)} <small>мл</small></span></div>
+<div class="between g-row__sub" style="margin:2px 0 6px"><span>${pl}</span><span>из ${fmt(cap)}</span></div>
+<div class="g-meter" style="--cat:var(--cat-blue);height:10px"><div class="g-meter__fill" style="width:${lv}%"></div></div></div></div>`;
+
+const scrItem = `
+<div class="between">${back("Остатки")}<button class="g-btn g-btn--icon g-btn--ghost" aria-label="Меню позиции: штрихкод, изменить, архив">${ico("dots-vertical")}</button></div>
+<div class="g-card" style="--cat:var(--cat-blue)">
+  <div class="g-card__head"><span>Шампунь · Koch Chemie</span></div>
+  <div class="g-card__body">
+    <div class="g-card__name" style="font-size:16px">Koch Chemie Gsf, 1000 мл</div>
+    <div class="hstack" style="align-items:baseline;margin:6px 0 2px"><span class="g-num" style="font-size:40px;line-height:1">2 320</span><b>мл</b></div>
+    <div class="g-muted" style="font-size:12px;font-weight:600">вскрыта: 320 из 1000 · ещё 2 запечатаны · мин. 500 мл</div>
+  </div>
+</div>
+<div class="two"><button class="g-btn g-btn--cta g-press">Расход</button><button class="g-btn g-press">Покупка</button></div>
+<div class="g-label">Экземпляры</div>
+<div class="g-list">${exemplar("Вскрыта", 320, 1000, "Коробка 3", 32)}${exemplar("Запечатана × 2", 1000, 1000, "Коробка 3", 100)}</div>
+<div class="g-label">Покупки</div>
+<div class="g-list">
+  <div class="g-row"><div class="g-row__main"><div class="g-row__title">02.10 · Автохим</div><div class="g-row__sub">2 шт · 119 ₽ за 100 мл</div></div><span class="g-num" style="font-size:14px">2 380 ₽</span></div>
+  <div class="g-row"><div class="g-row__main"><div class="g-row__title">14.07 · Ozon</div><div class="g-row__sub">1 шт · 132 ₽ за 100 мл</div></div><span class="g-num" style="font-size:14px">1 320 ₽</span></div>
+</div>`;
+
+/* ---------- Экраны: группа 2 ---------- */
+const sheetConsume = `
+<div class="ph__dim">
+  <div style="padding:0 16px 12px"><div class="g-toast" role="status"><span style="flex:1">Списано 40 мл · Koch Chemie Gsf</span><button class="g-btn g-btn--sm g-press">Отменить</button></div></div>
+  <section class="g-sheet" role="dialog" aria-modal="true" aria-label="Расход">
+    <div class="g-sheet__grab"></div>
+    <div class="g-seg" role="group" aria-label="Способ" style="margin-bottom:12px"><button type="button" aria-pressed="true">Одна позиция</button><button type="button" aria-pressed="false">Шаблон</button></div>
+    <div class="between" style="margin-bottom:8px"><div><div class="g-card__name">Koch Chemie Gsf</div><div class="g-row__sub">Шампунь · Коробка 3</div></div><button class="g-btn g-btn--sm g-btn--ghost">Сменить</button></div>
+    ${qty(40, "В прошлый раз 40 мл · во вскрытой бутылке 320 мл")}
+    <div class="g-label" style="margin:12px 0 6px">Из бутылки</div>
+    <div class="g-seg" role="group" aria-label="Экземпляр"><button type="button" aria-pressed="true">Вскрытая · 320</button><button type="button" aria-pressed="false">Новая · 1000</button></div>
+    <button class="g-btn g-btn--cta g-btn--block g-press" style="margin-top:14px">Списать 40 мл</button>
+  </section>
+</div>`;
+
+const tplRow = (n, v, u, warn) => `
+<div class="g-row${warn ? " g-row--warn" : ""}" style="flex-wrap:wrap">
+  <div class="g-row__main" style="flex-basis:100%"><div class="g-row__title">${n}</div>${warn ? `<div class="g-row__sub" style="color:var(--danger-text);font-weight:700">${warn}</div>` : ""}</div>
+  <div class="tpl-ctl" style="margin-left:auto">
+    <button class="g-btn g-btn--icon g-press" data-tstep="-10" aria-label="Минус 10 ${u}">${ico("minus")}</button>
+    <input class="g-num-input" inputmode="numeric" value="${v}" aria-label="Количество, ${u}"><b style="min-width:22px">${u}</b>
+    <button class="g-btn g-btn--icon g-press" data-tstep="10" aria-label="Плюс 10 ${u}">${ico("plus")}</button>
+  </div>
+</div>`;
+
+const scrTemplate = `
+<div class="between">${back("Шаблоны")}<button class="g-btn g-btn--sm g-btn--ghost">Изменить</button></div>
+<h1 class="g-title">Мойка кузова</h1>
+<p class="g-muted" style="margin:-6px 0 0;font-size:13px">Последний раз 12.10 · число можно вписать</p>
+<div class="g-list">
+  ${tplRow("Gyeon Q²M Foam", 100, "мл", "Есть только 80 мл — спишется 80")}
+  ${tplRow("Koch Chemie Gsf", 40, "мл")}
+  ${tplRow("Koch Chemie Felgenblitz", 60, "мл")}
+</div>
+<div class="between" style="padding:0 2px"><span class="g-muted">Себестоимость</span><span class="sum">≈ 352 ₽</span></div>
+<div style="flex:1"></div>
+<button class="g-btn g-btn--cta g-btn--block g-press">Списать всё</button>`;
+
+const scrTemplates = `
+<div class="between"><h1 class="g-title">Шаблоны</h1><button class="g-btn g-btn--sm g-press">${ico("plus")} Новый</button></div>
+<div class="g-list">
+  ${[["Мойка кузова", "3 позиции · ≈ 352 ₽"], ["Двухфазка", "3 позиции · ≈ 290 ₽"], ["Колёса", "2 позиции · ≈ 180 ₽"], ["Стёкла", "2 позиции · ≈ 95 ₽"]]
+    .map(([a, b]) => `<a href="#" class="g-row g-row--link"><div class="g-row__main"><div class="g-row__title">${a}</div><div class="g-row__sub">${b}</div></div><span class="g-row__go">${ico("chevron-right")}</span></a>`).join("")}
+</div>
+<p class="g-muted" style="font-size:12px;margin:0">Нажмите шаблон, чтобы проверить количества и списать. Шаблон можно сохранить из последнего расхода.</p>`;
+
+/* ---------- Экраны: группа 3 ---------- */
+const scrPurchase = `
+<div class="between">${back("Отмена")}<span class="g-label">Новая покупка</span></div>
+<div class="two"><div class="g-field"><label class="g-label">Дата</label><input class="g-input" value="15.10.2026"></div><div class="g-field"><label class="g-label">Магазин</label><input class="g-input" value="Автохим"></div></div>
+<div class="g-card" style="--cat:var(--cat-berry)">
+  <div class="g-card__head" style="padding:0 0 0 12px"><span>Строка 1 · Активная пена</span><button class="g-btn g-btn--icon g-btn--ghost" style="color:var(--on-cat)" aria-label="Удалить строку">${ico("x")}</button></div>
+  <div class="g-card__body" style="display:grid;gap:10px">
+    <div class="g-field"><label class="g-label">Позиция</label><input class="g-input" value="Gyeon Q²M Foam, 1000 мл"></div>
+    <div class="two">
+      <div class="g-field"><label class="g-label">Упаковок</label><div class="hstack"><button class="g-btn g-btn--icon g-press" aria-label="Меньше">${ico("minus")}</button><span class="g-num" style="font-size:20px;min-width:20px;text-align:center">2</span><button class="g-btn g-btn--icon g-press" aria-label="Больше">${ico("plus")}</button></div></div>
+      <div class="g-field"><label class="g-label">Цена за шт, ₽</label><input class="g-input" inputmode="numeric" value="2 450"></div>
+    </div>
+    <div class="g-field"><label class="g-label">Место</label><input class="g-input" value="Полка 2"></div>
+  </div>
+</div>
+<button class="g-btn g-btn--block g-press">${ico("plus")} Ещё позиция</button>
+<div style="flex:1"></div>
+<div class="between"><span class="g-muted">Итого · 2 упаковки</span><span class="sum">4 900 ₽</span></div>
+<button class="g-btn g-btn--cta g-btn--block g-press">Сохранить покупку</button>`;
+
+const buyRow = (n, sub, on, auto) => `
+<div class="g-row"><button class="g-check${on ? " g-check--on" : ""}" data-check aria-pressed="${on}" aria-label="Куплено: ${n}"><span class="g-check__box">${ico("check")}</span></button>
+<div class="g-row__main"><div class="g-row__title${on ? " strike" : ""}">${n}</div><div class="g-row__sub">${sub}</div></div>${auto ? `<span class="g-badge g-badge--danger">${auto}</span>` : ""}</div>`;
+
+const scrShopping = `
+<h1 class="g-title">Купить</h1>
+<div class="g-label">Ниже минимума</div>
+<div class="g-list">
+  ${buyRow("Gyeon Q²M Foam", "мин. 200 мл · 2 450 ₽ · дешевле в Автохим", false, "80 мл")}
+  ${buyRow("Gtechniq C2v3", "мин. 200 мл · 3 100 ₽ · Ozon", false, "190 мл")}
+</div>
+<div class="g-label">Добавлено вручную</div>
+<div class="g-list">
+  ${buyRow("Аппликаторы поролоновые", "последняя цена 90 ₽/шт", false)}
+  ${buyRow("Глина для кузова", "не покупал", false)}
+  ${buyRow("Микрофибра 40×40", "куплено 14.10", true)}
+</div>
+<button class="g-btn g-btn--block g-press">${ico("plus")} Добавить в список</button>`;
+
+const placeRow = (n, c, edit) => `
+<div class="g-row"><button class="g-handle" aria-label="Перетащить ${n}">${ico("grip-vertical")}</button>
+<div class="g-row__main">${edit ? `<input class="g-input" value="${n}" aria-label="Название места">` : `<div class="g-row__title">${n}</div><div class="g-row__sub">${c}</div>`}</div>
+${edit ? `<button class="g-btn g-btn--icon g-btn--accent g-press" aria-label="Сохранить">${ico("check")}</button>` : `<button class="g-btn g-btn--icon g-btn--ghost" aria-label="Меню места ${n}">${ico("dots-vertical")}</button>`}</div>`;
+
+const scrPlaces = `
+<div class="between"><h1 class="g-title">Места</h1><button class="g-btn g-btn--sm g-press">${ico("plus")} Место</button></div>
+<p class="g-muted" style="margin:-6px 0 0;font-size:13px">Перетащите за ручку, чтобы поменять порядок. Нажмите на название, чтобы переименовать.</p>
+<div class="g-list">
+  ${placeRow("Полка 1", "3 экземпляра")}
+  ${placeRow("Полка 2", "", true)}
+  ${placeRow("Коробка 3", "5 экземпляров")}
+  ${placeRow("Пакет 1", "1 пачка · 6 шт")}
+  ${placeRow("Багажник", "пусто")}
+</div>
+<a href="#" class="between g-muted" style="font-size:13px;font-weight:700;padding:0 4px;min-height:44px;color:var(--text-muted);text-decoration:none"><span>Архив · 2 места</span>${ico("chevron-right")}</a>`;
+
+/* ---------- Компьютер ---------- */
+const side = (cur) => `
+<nav class="g-side" aria-label="Разделы">
+  <div class="logo" style="margin:0 0 14px 8px">garage<b>.</b></div>
+  ${[["Остатки", "package"], ["Купить", "shopping-cart"], ["Покупки", "receipt"], ["Шаблоны", "stack-2"], ["Места", "box"], ["Справочники", "tags"], ["Профиль", "user"]]
+    .map(([x, i], k) => `<a href="#" ${k === cur ? 'aria-current="page"' : ""}>${ico(i)}${x}</a>`).join("")}
+  <button class="g-btn g-press" style="margin-top:16px">${ico("plus")} Покупка</button>
+</nav>`;
+
+const desktopHome = `
+<figure style="margin:0"><figcaption class="mk-cap">Остатки — компьютер</figcaption>
+<div class="pc"><div class="pc__bar"><span class="pc__dot"></span><span class="pc__dot"></span><span class="pc__dot"></span><span style="margin-left:8px">garage.north-flow.online</span></div>
+<div class="pc__grid">${side(0)}
+  <section style="padding:20px 24px;display:grid;gap:14px;align-content:start;min-width:0">
+    ${homeHead}
+    <div class="two">${ITEMS.map((i, k) => card(i, { current: k === 0 })).join("")}</div>
+  </section>
+  <aside style="border-left:var(--bw) solid var(--line);background:var(--surface);padding:20px;display:grid;gap:12px;align-content:start">
+    <div class="g-label">Выбрано</div>
+    <div class="g-card__name" style="font-size:16px">Koch Chemie Gsf</div>
+    <div class="hstack" style="align-items:baseline"><span class="g-num" style="font-size:32px;line-height:1">2 320</span><b>мл</b></div>
+    <div class="g-row__sub">вскрыта: 320 из 1000 · ещё 2 запечатаны</div>
+    <div class="g-list">${exemplar("Вскрыта", 320, 1000, "Коробка 3", 32)}${exemplar("Запечатана × 2", 1000, 1000, "Коробка 3", 100)}</div>
+    <div class="g-row__sub">Последняя покупка: 02.10 · Автохим · 1 190 ₽</div>
+    <div style="border-top:var(--bw) solid var(--line);padding-top:12px">${qty(40, "В прошлый раз 40 мл")}</div>
+    <button class="g-btn g-btn--cta g-btn--block g-press">Списать 40 мл</button>
+  </aside>
+</div></div></figure>`;
+
+document.getElementById("phones-1").innerHTML =
+  phone("Вход · ошибка пароля", scrLogin) +
+  phone("Остатки — вторая карточка сдвинута свайпом", homeHead + homeList(true), { tab: 0 }) +
+  phone("Карточка позиции", scrItem);
+document.getElementById("phones-2").innerHTML =
+  phone("Расход — шторка + отмена", homeHead + homeList(false), { tab: 0, overlay: sheetConsume }) +
+  phone("Шаблоны", scrTemplates, { tab: 3 }) +
+  phone("Применение шаблона", scrTemplate);
+document.getElementById("phones-3").innerHTML =
+  phone("Новая покупка", scrPurchase) +
+  phone("Список покупок", scrShopping, { tab: 1 }) +
+  phone("Места хранения", scrPlaces, { tab: 4 });
+document.getElementById("desktop").innerHTML = desktopHome;
+
+/* ---------- Поведение макета ---------- */
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button, a");
+  if (!t) return;
+  if (t.tagName === "A") e.preventDefault();
+  if (t.dataset.themeSet) {
+    document.documentElement.dataset.theme = t.dataset.themeSet;
+    document.querySelectorAll("[data-theme-set]").forEach((b) => b.setAttribute("aria-pressed", String(b === t)));
+    return;
+  }
+  if (t.dataset.step) {
+    const box = t.closest("[data-qty]"), inp = box.querySelector("input");
+    const v = Math.max(0, Math.min(+box.dataset.max, (parseInt(inp.value, 10) || 0) + +t.dataset.step));
+    inp.value = v;
+    const cta = box.parentElement.parentElement.querySelector(".g-btn--cta.g-btn--block");
+    if (cta && cta.textContent.startsWith("Списать")) cta.textContent = `Списать ${v} мл`;
+    return;
+  }
+  if (t.dataset.tstep) {
+    const inp = t.closest(".tpl-ctl").querySelector("input");
+    inp.value = Math.max(0, (parseInt(inp.value, 10) || 0) + +t.dataset.tstep);
+    return;
+  }
+  if (t.dataset.check !== undefined) {
+    const on = t.classList.toggle("g-check--on");
+    t.setAttribute("aria-pressed", String(on));
+    t.nextElementSibling.querySelector(".g-row__title").classList.toggle("strike", on);
+    return;
+  }
+  const seg = t.closest(".g-seg");
+  if (seg) seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === t)));
+});
+</script>
+</body>
+</html>

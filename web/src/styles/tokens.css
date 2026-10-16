@@ -1,0 +1,135 @@
+/*
+ * garage — токены дизайн-системы «Сумерки» (нео-брутализм, приглушённые тона).
+ * Светлая тема — по умолчанию, тёмная — по системной настройке или data-theme="dark".
+ * Контраст всех пар «текст — фон» проверен расчётом: не ниже 4,5:1 (WCAG AA),
+ * рамок и шкал — не ниже 3:1. Версия 1.1 — правки по разбору design-critique.
+ */
+
+:root {
+  /* Шрифты. В приложении — свои woff2 с кириллицей, без внешних CDN */
+  --font-display: "Unbounded", "Manrope", system-ui, sans-serif;
+  --font-body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Кегли */
+  --fs-12: 12px;  /* минимальный кегль: подписи, чипы, вторичный текст */
+  --fs-13: 13px;  /* поля, кнопки */
+  --fs-14: 14px;  /* основной текст, названия */
+  --fs-16: 16px;  /* поле ввода на телефоне — без зума iOS */
+  --fs-20: 20px;  /* заголовок экрана */
+  --fs-24: 24px;  /* число остатка в карточке */
+  --fs-32: 32px;  /* число в панели расхода */
+  --fs-40: 40px;  /* число на экране позиции */
+
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --fw-heavy: 800;
+
+  --lh-tight: 1.15;
+  --lh-body: 1.45;
+
+  /* Отступы, шаг 4 px */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+
+  /* Форма */
+  --bw: 2px;          /* основная рамка */
+  --bw-thin: 1.5px;   /* чипы, мелкие элементы */
+  --r-chip: 6px;
+  --r-control: 8px;
+  --r-card: 12px;
+  --r-sheet: 20px;
+  --tap: 44px;        /* минимальная зона нажатия */
+  --tap-lg: 48px;     /* частые действия: кнопки количества */
+
+  /* Жёсткие тени — смещение без размытия */
+  --sh-sm: 2px 2px 0 var(--shadow);
+  --sh-md: 3px 3px 0 var(--shadow);
+  --sh-lg: 4px 4px 0 var(--shadow);
+  --sh-key: 3px 3px 0 var(--shadow-key);  /* главная кнопка, активный раздел */
+
+  /* Движение */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-press: 120ms;
+  --dur-fast: 160ms;
+  --dur-sheet: 280ms;
+  --dur-fill: 700ms;
+
+  /* Категории — общие для обеих тем, текст на них всегда светлый */
+  --cat-blue: #4A6A8E;
+  --cat-berry: #86506A;
+  --cat-olive: #566F38;
+  --cat-ochre: #82652A;
+  --cat-petrol: #2F6B6B;
+  --cat-plum: #5E4C86;
+  --cat-slate: #4B5A6B;
+  --cat-umber: #6E5A44;
+  --on-cat: #F2EEE4;
+
+  /* Светлая тема */
+  --bg: #F1ECE2;
+  --surface: #FFFCF5;
+  --surface-raised: #E8E2D5;
+  --text: #1C1B20;
+  --text-muted: #625E55;
+  --line: #1C1B20;
+  --shadow: #1C1B20;
+  --field-line: #1C1B20;
+  --line-key: #1C1B20;     /* рамка ключевых элементов */
+  --shadow-key: #1C1B20;
+  --meter-lift: 0%;        /* осветление заливки шкалы */
+
+  --cta: #D4B26A;
+  --on-cta: #111113;
+  --accent: #566F38;
+  --on-accent: #F2EEE4;
+  --danger: #B24A33;
+  --danger-text: #B24A33;
+  --on-danger: #F2EEE4;
+  --focus: #82652A;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1E1D22;
+    --surface: #2A2930;
+    --surface-raised: #33313A;
+    --text: #F2EEE4;
+    --text-muted: #A5A197;
+    --line: #7E7A71;          /* светлые рамки: 3,9:1 к фону, 3,4:1 к карточке */
+    --shadow: #7E7A71;
+    --field-line: #7E7A71;
+    --line-key: #EDE6D6;      /* кремовые на ключевых элементах */
+    --shadow-key: #EDE6D6;
+    --meter-lift: 20%;
+    --danger-text: #E08A6D;
+    --focus: #D4B26A;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #1E1D22;
+  --surface: #2A2930;
+  --surface-raised: #33313A;
+  --text: #F2EEE4;
+  --text-muted: #A5A197;
+  --line: #7E7A71;      /* светлые рамки: 3,9:1 к фону, 3,4:1 к карточке */
+  --shadow: #7E7A71;
+  --field-line: #7E7A71;
+  --line-key: #EDE6D6;    /* кремовые на ключевых элементах */
+  --shadow-key: #EDE6D6;
+  --meter-lift: 20%;
+  --danger-text: #E08A6D;
+  --focus: #D4B26A;
+  color-scheme: dark;
+}

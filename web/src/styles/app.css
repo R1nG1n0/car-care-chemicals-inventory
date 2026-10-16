@@ -1,0 +1,18 @@
+/* Раскладка приложения. Цвета и размеры — только из tokens.css. */
+
+.app-shell {
+  display: grid;
+  gap: var(--sp-4);
+  max-width: 480px;
+  margin: 0 auto;
+  padding: var(--sp-10) var(--sp-4);
+}
+
+.app-logo { margin: 0; font: var(--fw-heavy) var(--fs-40) / 1 var(--font-display); }
+.app-logo__dot { color: var(--danger-text); }
+
+.app-status__strip { background: var(--accent); }
+.app-status__text { margin: var(--sp-1) 0 0; font-weight: var(--fw-bold); }
+.app-status__text--error { color: var(--danger-text); }
+
+.app-note { font-size: var(--fs-13); }
