@@ -1,54 +1,77 @@
-import { useEffect, useState } from 'react';
+// Корень приложения: React Query, маршруты, состояние входа.
+// Пока идёт первый /api/auth/me — подложки; сервер не ответил — «Сервер недоступен»;
+// дальше вход или приложение. 401 из любого запроса уводит на вход.
+import { QueryClientProvider } from '@tanstack/react-query';
+import { useState, type ReactNode } from 'react';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router';
+import { ConnectionBanner } from './app/ConnectionBanner';
+import { createQueryClient, useSession } from './app/session';
+import { Shell } from './app/Shell';
+import { InviteScreen } from './screens/InviteScreen';
+import { LoginScreen } from './screens/LoginScreen';
+import { BootScreen, OfflineScreen } from './screens/SystemScreens';
+import { returnPath } from './lib/nav';
 
-type Health = { status: string; version: string };
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { data } = useSession();
+  const location = useLocation();
+  if (!data) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  return children;
+}
 
-type State =
-  | { kind: 'loading' }
-  | { kind: 'ok'; health: Health }
-  | { kind: 'error'; message: string };
+function GuestOnly({ children }: { children: ReactNode }) {
+  const { data } = useSession();
+  const location = useLocation();
+  if (data) return <Navigate to={returnPath(location.state)} replace />;
+  return children;
+}
 
-// Каркас этапа 0: проверяет, что интерфейс собран, встроен в бинарник
-// и достучался до API. Экраны v1.0 появятся на этапе 3.
-export function App() {
-  const [state, setState] = useState<State>({ kind: 'loading' });
-
-  useEffect(() => {
-    const ctrl = new AbortController();
-    fetch('/api/health', { signal: ctrl.signal })
-      .then((r) => {
-        if (!r.ok) throw new Error(`Сервер ответил ${r.status}`);
-        return r.json() as Promise<Health>;
-      })
-      .then((health) => setState({ kind: 'ok', health }))
-      .catch((err: unknown) => {
-        if (ctrl.signal.aborted) return;
-        setState({ kind: 'error', message: err instanceof Error ? err.message : 'Сервер недоступен' });
-      });
-    return () => ctrl.abort();
-  }, []);
-
+function Root() {
+  const me = useSession();
+  if (me.isPending) return <BootScreen />;
+  if (me.data === undefined) {
+    return <OfflineScreen error={me.error} lastAttempt={me.errorUpdatedAt} retrying={me.isFetching} onRetry={() => void me.refetch()} />;
+  }
+  const app = (
+    <RequireAuth>
+      <Shell />
+    </RequireAuth>
+  );
   return (
-    <main className="app-shell">
-      <h1 className="app-logo">
-        garage<span className="app-logo__dot">.</span>
-      </h1>
-      <p className="g-muted">Учёт автохимии и инструментов</p>
+    <>
+      <ConnectionBanner />
+      <Routes>
+        <Route
+          path="/login"
+          element={
+            <GuestOnly>
+              <LoginScreen />
+            </GuestOnly>
+          }
+        />
+        <Route path="/invite/:token" element={<InviteScreen />} />
+        <Route path="/more" element={<Navigate to="/profile" replace />} />
+        {/* Общий макет: Shell сам выбирает экран по адресу, чтобы держать
+            уходящий и входящий экраны одновременно (анимация .g-view). */}
+        <Route element={app}>
+          <Route path="/" element={null} />
+          <Route path="/shopping" element={null} />
+          <Route path="/templates" element={null} />
+          <Route path="/profile" element={null} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
+  );
+}
 
-      <section className="g-card app-status" aria-live="polite">
-        <div className="g-card__strip app-status__strip" />
-        <div className="g-card__body">
-          <div className="g-label">Сервер</div>
-          {state.kind === 'loading' && <p className="app-status__text">Проверяю…</p>}
-          {state.kind === 'ok' && (
-            <p className="app-status__text">
-              Работает · версия <span className="g-num">{state.health.version}</span>
-            </p>
-          )}
-          {state.kind === 'error' && <p className="app-status__text app-status__text--error">{state.message}</p>}
-        </div>
-      </section>
-
-      <p className="g-muted app-note">Каркас приложения. Экраны остатков, покупок и расхода появятся на этапе 3.</p>
-    </main>
+export function App() {
+  const [client] = useState(createQueryClient);
+  return (
+    <QueryClientProvider client={client}>
+      <BrowserRouter>
+        <Root />
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }

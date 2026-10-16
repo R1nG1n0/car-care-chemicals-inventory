@@ -20,6 +20,13 @@ import './styles/states.css';
 import './styles/motion.css';
 import './styles/app.css';
 import { App } from './App';
+import { listenInstallPrompt } from './app/install';
+import { syncThemeColor } from './app/themeColor';
+
+// До первого рендера: beforeinstallprompt приходит рано (И-2.1),
+// цвет строки состояния — по текущей теме (И-2.2).
+listenInstallPrompt();
+syncThemeColor();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

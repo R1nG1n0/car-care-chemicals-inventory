@@ -1,5 +1,6 @@
 {
   "listen": "127.0.0.1:8090",
   "data_dir": "../.dev",
-  "log_level": "debug"
+  "log_level": "debug",
+  "insecure_cookies": true
 }

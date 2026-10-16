@@ -6,44 +6,78 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+
+	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/auth"
 )
+
+// Options — зависимости сервера.
+type Options struct {
+	Log     *slog.Logger
+	Version string
+	// UI — файлы интерфейса (обычно webui.Dist()), nil — интерфейс не подключён.
+	UI fs.FS
+	// Auth — учётные записи, сессии и приглашения.
+	Auth *auth.Service
+	// Limiter — ограничение попыток входа; nil — 5 неудач за 15 минут (ТБ-4).
+	Limiter *auth.Limiter
+	// InsecureCookies убирает Secure у cookie сессии (локальная разработка по http).
+	InsecureCookies bool
+}
 
 // Server обслуживает /api/ и одностраничный интерфейс.
 type Server struct {
-	log     *slog.Logger
-	version string
-	ui      fs.FS
-	mux     *http.ServeMux
+	log             *slog.Logger
+	version         string
+	ui              fs.FS
+	auth            *auth.Service
+	limiter         *auth.Limiter
+	insecureCookies bool
+	mux             *http.ServeMux
 }
 
-// New собирает сервер. ui — файлы интерфейса (обычно webui.Dist()),
-// nil — интерфейс не подключён.
-func New(log *slog.Logger, version string, ui fs.FS) *Server {
-	s := &Server{log: log, version: version, ui: ui, mux: http.NewServeMux()}
+// New собирает сервер.
+func New(opt Options) *Server {
+	s := &Server{
+		log:             opt.Log,
+		version:         opt.Version,
+		ui:              opt.UI,
+		auth:            opt.Auth,
+		limiter:         opt.Limiter,
+		insecureCookies: opt.InsecureCookies,
+		mux:             http.NewServeMux(),
+	}
+	if s.log == nil {
+		s.log = slog.Default()
+	}
+	if s.limiter == nil {
+		s.limiter = auth.NewLimiter(auth.LimitAttempts, auth.LimitWindow, nil)
+	}
 	s.routes()
 	return s
 }
 
 func (s *Server) routes() {
-	s.mux.HandleFunc("/api/health", only(http.MethodGet, s.handleHealth))
+	s.api("/api/health", public, methods{http.MethodGet: s.handleHealth})
+
+	s.api("/api/auth/login", public, methods{http.MethodPost: s.handleLogin})
+	s.api("/api/auth/me", signedIn, methods{http.MethodGet: s.handleMe})
+	s.api("/api/auth/logout", public, methods{http.MethodPost: s.handleLogout})
+	s.api("/api/auth/logout-all", signedIn, methods{http.MethodPost: s.handleLogoutAll})
+	s.api("/api/auth/password", signedIn, methods{http.MethodPost: s.handlePassword})
+	s.api("/api/auth/settings", signedIn, methods{http.MethodPut: s.handleSettings})
+
+	s.api("/api/invites", ownerOnly, methods{
+		http.MethodGet:  s.handleListInvites,
+		http.MethodPost: s.handleCreateInvite,
+	})
+	s.api("/api/invites/{id}", ownerOnly, methods{http.MethodDelete: s.handleRevokeInvite})
+	s.api("/api/invites/by-token/{token}", public, methods{http.MethodGet: s.handleCheckInvite})
+	s.api("/api/invites/by-token/{token}/accept", public, methods{http.MethodPost: s.handleAcceptInvite})
+
 	s.mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Нет такого метода API")
 	})
 	s.mux.HandleFunc("/", s.handleSPA)
-}
-
-// only пропускает запросы с одним методом, на остальные отвечает 405.
-// Шаблон «GET /api/…» в ServeMux не годится: запрос другим методом ушёл бы
-// в общий обработчик /api/ и получил 404 вместо 405.
-func only(method string, h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != method && !(method == http.MethodGet && r.Method == http.MethodHead) {
-			w.Header().Set("Allow", method)
-			writeError(w, http.StatusMethodNotAllowed, "Метод не поддерживается")
-			return
-		}
-		h(w, r)
-	}
 }
 
 // Handler возвращает обработчик со служебными заголовками (ТБ-6).
@@ -73,11 +107,17 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 }
 
 type errorResponse struct {
-	Error string `json:"error"`
+	Error      string `json:"error"`
+	Field      string `json:"field,omitempty"`
+	RetryAfter int    `json:"retry_after,omitempty"`
 }
 
 func writeError(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, errorResponse{Error: msg})
+}
+
+func writeFieldError(w http.ResponseWriter, code int, field, msg string) {
+	writeJSON(w, code, errorResponse{Error: msg, Field: field})
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -85,4 +125,9 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeNoContent(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -253,14 +253,14 @@
                                     │ proxy_pass
                           127.0.0.1:8090 — служба garage
                                     │
-                          /var/lib/garage/data.db
+                          /var/lib/garage/garage.db
 ```
 
 - Р5.1. Приложение слушает только `127.0.0.1:8090`. Порт 8080 занят панелью.
 - Р5.2. В nginx добавляется отдельный `server` с `listen 10.211.7.1:443` и своим `server_name`. Новых портов в файрволе не открывается.
 - Р5.3. В AdGuard добавляется перезапись имени на `10.211.7.1`.
 - Р5.4. Служба systemd от отдельного непривилегированного пользователя, `StateDirectory`, `ProtectSystem=strict`, `NoNewPrivileges`.
-- Р5.5. Доверие к `X-Forwarded-For` и признак HTTPS — только от loopback, как в панели.
+- Р5.5. Доверие к `X-Forwarded-For` и признак HTTPS — только от loopback, как в панели. nginx передаёт `Host`, `X-Real-IP` и `X-Forwarded-Proto $scheme` — по ним строится ссылка приглашения.
 - Р5.6. Деплой: `make deploy HOST=relay` — сборка статического бинарника, копирование, перезапуск службы.
 
 ### 5.3. Резервное копирование

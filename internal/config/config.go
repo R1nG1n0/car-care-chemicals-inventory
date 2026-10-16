@@ -23,6 +23,10 @@ type Config struct {
 
 	// LogLevel — debug | info | warn | error.
 	LogLevel string `json:"log_level"`
+
+	// InsecureCookies убирает у cookie сессии флаг Secure. Только для
+	// локальной разработки по http: на relay сайт работает через HTTPS.
+	InsecureCookies bool `json:"insecure_cookies"`
 }
 
 // Default — значения для полей, которых нет в файле.

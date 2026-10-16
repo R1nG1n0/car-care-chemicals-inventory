@@ -1,18 +1,89 @@
-/* Раскладка приложения. Цвета и размеры — только из tokens.css. */
+/* Раскладка приложения. Цвета и размеры — только из tokens.css,
+   компоненты — из components.css / states.css / motion.css. */
 
-.app-shell {
-  display: grid;
-  gap: var(--sp-4);
-  max-width: 480px;
-  margin: 0 auto;
-  padding: var(--sp-10) var(--sp-4);
+/* ---------- Логотип ---------- */
+.app-logo { font: var(--fw-heavy) var(--fs-20) / var(--lh-tight) var(--font-display); }
+.app-logo--lg { font-size: var(--fs-32); }
+.app-logo b { color: var(--danger-text); }
+
+/* ---------- Общие ---------- */
+/* Ссылка в виде кнопки (.g-btn на <a>) — без подчёркивания */
+a.g-btn { text-decoration: none; }
+.app-stack { display: grid; align-content: start; gap: var(--sp-4); }
+.app-stack p { margin: 0; }
+.app-stack--fill { min-height: 100%; grid-template-rows: auto 1fr; }
+.app-two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
+.app-inline { display: flex; align-items: center; gap: var(--sp-3); }
+.app-form { gap: var(--sp-4); }
+.app-form p { margin: 0; }
+
+/* Строка списка-кнопка («Сменить пароль»): вид .g-row--link без оформления кнопки */
+.app-row-btn {
+  width: 100%; border-top: 0; border-left: 0; border-right: 0;
+  background: transparent; color: inherit; font: inherit; text-align: left;
 }
 
-.app-logo { margin: 0; font: var(--fw-heavy) var(--fs-40) / 1 var(--font-display); }
-.app-logo__dot { color: var(--danger-text); }
+/* ---------- Экраны без меню: вход, приглашение, загрузка, нет связи ---------- */
+.app-plain {
+  display: flex; flex-direction: column; gap: var(--sp-4);
+  min-height: 100dvh; max-width: 440px; margin: 0 auto;
+  padding: var(--sp-4) var(--sp-4) calc(var(--sp-6) + env(safe-area-inset-bottom));
+}
+.app-auth { flex: 1; display: grid; align-content: center; gap: var(--sp-5); }
+.app-auth p { margin: 0; }
+.app-auth__sub { margin-top: var(--sp-2) !important; }
+.app-auth__note { font-size: var(--fs-12); text-align: center; }
 
-.app-status__strip { background: var(--accent); }
-.app-status__text { margin: var(--sp-1) 0 0; font-weight: var(--fw-bold); }
-.app-status__text--error { color: var(--danger-text); }
+/* Полоса «нет связи» — поверх всего, у верхнего края */
+.app-banner {
+  position: sticky; top: var(--sp-2); z-index: 30;
+  max-width: 720px; margin: var(--sp-2) var(--sp-4) 0;
+}
+@media (min-width: 752px) {
+  .app-banner { margin-inline: auto; }
+}
 
-.app-note { font-size: var(--fs-13); }
+/* ---------- Приложение: телефон ---------- */
+.app { min-height: 100dvh; }
+.app-side { display: none; }
+.app-main {
+  max-width: 720px; margin: 0 auto;
+  padding: var(--sp-4) var(--sp-4) calc(var(--tap) + var(--sp-10) + env(safe-area-inset-bottom));
+}
+
+/* Экраны разделов лежат в одной ячейке сетки: уходящий гаснет поверх входящего */
+.app-views { display: grid; min-height: calc(100dvh - var(--tap) - var(--sp-10) - var(--sp-4)); }
+.app-views > .g-view { grid-area: 1 / 1; min-width: 0; }
+.app-views > .g-view.is-leaving { z-index: 1; }
+
+.app-tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  padding-bottom: calc(var(--sp-2) + env(safe-area-inset-bottom));
+}
+/* «+» — кнопка, а не ссылка: раскладка как у пунктов .g-tabbar a */
+.app-tabbar__btn {
+  display: grid; justify-items: center; align-content: center; min-height: var(--tap);
+  padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer;
+}
+.app-tabbar__btn[aria-disabled="true"] .g-tabbar__plus { opacity: 0.55; }
+
+/* Подсказка «+»: уведомление без полоски-таймера (таймер — только у «Отменить») */
+.app-toast-slot {
+  position: fixed; left: var(--sp-4); right: var(--sp-4); z-index: 25;
+  bottom: calc(var(--tap) + var(--sp-10) + env(safe-area-inset-bottom));
+  display: grid; justify-items: center; pointer-events: none;
+}
+.app-toast--plain { padding: var(--sp-3) var(--sp-4); }
+.app-toast--plain::after { display: none; }
+
+/* ---------- Компьютер: боковое меню ---------- */
+@media (min-width: 1024px) {
+  .app { display: grid; grid-template-columns: 220px minmax(0, 1fr); }
+  .app-side { display: grid; position: sticky; top: 0; height: 100dvh; }
+  .app-side__logo { margin: 0 0 var(--sp-3) var(--sp-2); }
+  .app-side__plus { margin-top: var(--sp-4); }
+  .app-tabbar { display: none; }
+  .app-main { width: 100%; padding: var(--sp-6) var(--sp-6) var(--sp-10); }
+  .app-views { min-height: calc(100dvh - var(--sp-6) - var(--sp-10)); }
+  .app-toast-slot { bottom: var(--sp-6); left: 220px; }
+}

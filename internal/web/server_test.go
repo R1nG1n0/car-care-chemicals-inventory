@@ -13,10 +13,11 @@ import (
 
 func newTestServer(ui fstest.MapFS) http.Handler {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	if ui == nil {
-		return New(log, "test", nil).Handler()
+	opt := Options{Log: log, Version: "test"}
+	if ui != nil {
+		opt.UI = ui
 	}
-	return New(log, "test", ui).Handler()
+	return New(opt).Handler()
 }
 
 func get(t *testing.T, h http.Handler, method, target string) *httptest.ResponseRecorder {

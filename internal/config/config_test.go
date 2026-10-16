@@ -59,3 +59,19 @@ func TestLoadMissingFile(t *testing.T) {
 		t.Fatal("ожидалась ошибка")
 	}
 }
+
+func TestInsecureCookies(t *testing.T) {
+	if Default().InsecureCookies {
+		t.Fatal("по умолчанию cookie должны быть Secure")
+	}
+	cfg, err := Load(writeConfig(t, `{"insecure_cookies": true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.InsecureCookies {
+		t.Fatal("insecure_cookies не прочитан")
+	}
+	if _, err := Load(writeConfig(t, `{"insecure_cookies": "yes"}`)); err == nil {
+		t.Fatal("строка вместо bool принята")
+	}
+}
