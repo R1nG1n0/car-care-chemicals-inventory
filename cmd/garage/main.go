@@ -71,7 +71,7 @@ func run() error {
 	if len(args) > 0 {
 		return runUser(context.Background(), svc, args[1:])
 	}
-	return serve(log, cfg, *cfgPath, svc)
+	return serve(log, cfg, *cfgPath, svc, db)
 }
 
 func usage() {
@@ -105,7 +105,7 @@ func openDB(log *slog.Logger, path string) (*store.DB, error) {
 	return db, nil
 }
 
-func serve(log *slog.Logger, cfg config.Config, cfgPath string, svc *auth.Service) error {
+func serve(log *slog.Logger, cfg config.Config, cfgPath string, svc *auth.Service, db *store.DB) error {
 	log.Info("запуск garage", "version", version, "config", cfgPath)
 	if cfg.InsecureCookies {
 		log.Warn("insecure_cookies: cookie сессии без Secure — только для локальной разработки")
@@ -119,6 +119,7 @@ func serve(log *slog.Logger, cfg config.Config, cfgPath string, svc *auth.Servic
 			UI:              webui.Dist(),
 			Auth:            svc,
 			InsecureCookies: cfg.InsecureCookies,
+			DB:              db.DB,
 		}).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,

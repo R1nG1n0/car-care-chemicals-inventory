@@ -1,6 +1,6 @@
 # API garage
 
-Договор между сервером (`internal/web`) и интерфейсом (`web/src`). Этап 1 — учётные записи, сессии, приглашения (ФТ-1). Разделы следующих этапов добавляются сюда же.
+Договор между сервером (`internal/web`) и интерфейсом (`web/src`). Этап 1 — учётные записи, сессии, приглашения (ФТ-1). Этап 2 — справочники, позиции, склад, покупки, расход, список покупок, шаблоны (ФТ-2…ФТ-8).
 
 ## Общие правила
 
@@ -110,6 +110,154 @@
 - При создании пользователю заполняются справочники по умолчанию (ФТ-2.1): категории с цветами — Шампуни `blue`, Активная пена `berry`, Очистители `olive`, Полироли и защита `ochre`, Стёкла `petrol`, Кожа и пластик `plum`, Шины и диски `slate`, Микрофибра `umber`, Губки и аппликаторы `umber`, Щётки `umber`, Прочее `slate`. Места и магазины — пустые.
 - `404` — приглашение недействительно; `409 {"error": "Этот логин уже занят", "field": "login"}` — приглашение при этом не расходуется; `400` — проверка ввода.
 - Использование приглашения и создание пользователя — одна транзакция: одно приглашение — один пользователь.
+
+## Этап 2: справочники, позиции, склад, покупки, расход, шаблоны
+
+Все адреса этого раздела — **с входом** (`401` без сессии). Каждый запрос видит **только данные текущего пользователя** (ТБ-5): `user_id` берётся из сессии, чужой или несуществующий `id` в адресе или в теле — `404 {"error": "… не найдено"}` (одинаково, чтобы нельзя было узнать, существует ли чужая запись). Списки — объект с одним массивом: `{"categories": […]}`.
+
+**Количество** — целое: мл или шт (по `unit` позиции). **Деньги** — копейки, целое. **Даты покупок** — `"ГГГГ-ММ-ДД"`. Ошибки проверки — `400` с `field`; нарушение уникальности имени — `409` с `field: "name"`.
+
+### Справочники (ФТ-2)
+
+```json
+// Category
+{ "id": 3, "name": "Шампуни", "color": "blue", "sort": 0, "archived": false, "products_count": 4 }
+// Location
+{ "id": 5, "name": "Коробка 3", "sort": 2, "archived": false, "units_count": 5 }
+// Store
+{ "id": 2, "name": "Автохим", "url": "", "archived": false }
+```
+
+| Адрес | Что делает |
+|---|---|
+| `GET /api/categories?archived=1` | Список по `sort`, затем по имени. Без `archived=1` — только действующие. `products_count` — неархивные позиции |
+| `POST /api/categories` `{name, color}` | `201 Category`. Имя 1–40 символов, `color` — один из восьми; новая — в конец (`sort` = max+1) |
+| `PATCH /api/categories/{id}` `{name?, color?, archived?}` | `200 Category`. Архивировать можно всегда: позиции остаются, но в формах архивная категория не предлагается |
+| `POST /api/categories/reorder` `{ids: [...]}` | `204`. Новый порядок действующих: `ids` — ровно все действующие категории пользователя, иначе `400` |
+| `GET /api/locations?archived=1`, `POST`, `PATCH /{id}`, `POST /reorder` | То же для мест. `units_count` — экземпляры в статусах `sealed`/`open`. **Архивировать место с экземплярами нельзя**: `409 {"error": "В месте лежат экземпляры: 5. Сначала переложите их"}` |
+| `GET /api/stores?archived=1`, `POST {name, url}`, `PATCH /{id}` | То же для магазинов, порядок — по имени, без `reorder`. `url` — пусто или `http(s)://…` |
+
+Удаления справочников нет — только архив (ФТ-2.4).
+
+### Позиции (ФТ-3, ФТ-6)
+
+```json
+// ProductSummary — строка списка остатков
+{
+  "id": 12, "category_id": 3, "name": "Koch Chemie Gsf", "brand": "Koch Chemie",
+  "unit": "ml", "package_size": 1000, "barcode": "", "min_stock": 500, "note": "", "archived": false,
+  "stock": {
+    "total": 2320,          // сумма remaining_qty по sealed + open
+    "open_qty": 320,        // остаток вскрытого (самого раннего вскрытого), null — вскрытого нет
+    "open_capacity": 1000,  // его initial_qty, null — вскрытого нет
+    "sealed_count": 2,      // запечатанных экземпляров
+    "units_count": 3        // sealed + open
+  },
+  "low": false,             // min_stock задан и total < min_stock
+  "location_ids": [5],      // места, где лежат sealed/open экземпляры, без повторов
+  "last_consume_qty": 40    // сколько списывали в прошлый раз (ФТ-5.8), null — не списывали
+}
+```
+
+| Адрес | Что делает |
+|---|---|
+| `GET /api/products` | Список `ProductSummary` по имени. Параметры: `q` — поиск по названию, бренду и штрихкоду **без учёта регистра, с кириллицей** (фильтровать в Go: `LOWER` в SQLite знает только латиницу); `category_id`, `location_id`; `filter` = `all` (по умолчанию) \| `low` \| `out` (total = 0) \| `in` (total > 0); `archived=1` — только архивные |
+| `GET /api/products/{id}` | `{product: ProductSummary, units: [Unit], purchases: [PurchaseRow], movements: [Movement]}`: экземпляры sealed/open (вскрытые первыми), последние 20 покупок этой позиции, последние 50 движений |
+| `POST /api/products` | `201 ProductSummary`. Поля: `category_id` (действующая), `name` 1–80, `brand` 0–60, `unit` `ml`\|`pcs`, `package_size` 1–100000, `barcode` 0–32 (цифры), `min_stock` null или 0–1000000, `note` 0–500 |
+| `PATCH /api/products/{id}` | `200 ProductSummary`, любые поля из `POST` + `archived`. Менять `unit`, когда есть экземпляры, нельзя — `409`. Новый `package_size` не трогает существующие экземпляры |
+| `GET /api/brands` | `{brands: ["Gyeon", "Koch Chemie", …]}` — бренды пользователя без повторов, для подсказки |
+
+```json
+// Unit — экземпляр (бутылка или пачка)
+{ "id": 40, "product_id": 12, "location_id": 5, "initial_qty": 1000, "remaining_qty": 320,
+  "status": "open", "opened_at": 1792100000, "created_at": 1791900000,
+  "unit_price": 119000 }      // цена упаковки в копейках; null — экземпляр без покупки
+// PurchaseRow
+{ "purchase_id": 8, "date": "2026-10-02", "store": "Автохим", "packages": 2,
+  "price_per_package": 119000, "price_per_100": 11900 }   // для шт — "price_per_unit"
+// Movement
+{ "id": 91, "unit_id": 40, "product_id": 12, "type": "consume", "qty_delta": -40,
+  "from_location_id": null, "to_location_id": null, "reason": "", "recipe_run_id": null,
+  "cost": 4760, "created_at": 1792140000 }   // cost — копейки, по цене экземпляра; null — нет цены
+```
+
+### Список покупок (ФТ-7)
+
+| Адрес | Что делает |
+|---|---|
+| `GET /api/shopping` | `{low: [LowItem], manual: [ShoppingItem]}`. `low` — позиции ниже минимума (не архивные); `manual` — добавленные вручную: невыполненные и выполненные за последние 7 дней (новые сверху) |
+| `POST /api/shopping` `{product_id?, title?}` | `201 ShoppingItem`. Нужно одно из двух; `title` 1–80 |
+| `PATCH /api/shopping/{id}` `{done: true\|false}` | `200 ShoppingItem` |
+| `DELETE /api/shopping/{id}` | `204` |
+
+```json
+// LowItem
+{ "product": ProductSummary, "last_price": 245000, "last_store": "Автохим",
+  "cheapest_store": "Автохим" }   // магазин с наименьшей ценой за 100 мл / за шт; null — покупок не было
+// ShoppingItem
+{ "id": 4, "product_id": null, "title": "Глина для кузова", "product": null, "done_at": null, "created_at": 1792140000 }
+```
+
+Покупка позиции автоматически отмечает выполненными её невыполненные пункты в `manual`.
+
+### Покупки и экземпляры (ФТ-4, ФТ-5)
+
+| Адрес | Что делает |
+|---|---|
+| `POST /api/purchases` | Покупка: `{date, store_id?, note?, lines: [{product_id, packages, price_per_package, location_id?}]}` — 1–30 строк, `packages` 1–100, цена 0–100000000. Одна транзакция: покупка, строки, **по экземпляру на каждую упаковку** (`initial = remaining = package_size` позиции, `sealed`), движение `purchase` (+package_size) на каждый экземпляр. Место — `location_id` строки, иначе место последнего экземпляра этой позиции, иначе null. `201 {purchase: Purchase}` |
+| `GET /api/purchases?before={id}&limit=50` | `{purchases: [PurchaseShort]}` — новые сверху, постранично |
+| `GET /api/purchases/{id}` | `{purchase: Purchase}` |
+| `POST /api/units` | **Ввод имеющегося остатка** — то, что уже лежит дома без покупки: `{product_id, remaining_qty, initial_qty?, location_id?}`. `initial_qty` по умолчанию — `package_size`; `remaining_qty` 1…initial. Статус `sealed`, если остаток равен объёму, иначе `open`. Движение `adjust` (+remaining, причина «Начальный остаток»). `201 Unit` |
+| `POST /api/units/{id}/move` `{location_id}` | Перемещение: движение `move` (0, from/to). `200 Unit`. Только sealed/open |
+| `POST /api/units/{id}/adjust` `{remaining_qty, reason?}` | Корректировка (ФТ-5.5): движение `adjust` на разницу; 0 → `finished`; > 0 у `finished` → `open`; у `sealed` при изменении → `open`. `200 Unit` |
+| `POST /api/units/{id}/writeoff` `{qty?, reason}` | Списание (ФТ-5.3): `qty` по умолчанию — весь остаток; `reason` 1–80 обязателен («Испорчено», «Ошибка ввода»…). Движение `writeoff`; при 0 — `written_off`. `200 Unit` |
+
+```json
+// Purchase
+{ "id": 8, "date": "2026-10-02", "store_id": 2, "store": "Автохим", "note": "", "total": 238000,
+  "lines": [{ "id": 15, "product_id": 12, "product": "Koch Chemie Gsf", "packages": 2,
+              "price_per_package": 119000, "unit_ids": [40, 41] }],
+  "created_at": 1792000000 }
+// PurchaseShort
+{ "id": 8, "date": "2026-10-02", "store": "Автохим", "total": 238000, "lines_count": 1 }
+```
+
+Отмены покупки целиком нет (Р-13): ошибки исправляются корректировкой и списанием.
+
+### Расход (ФТ-5.1, ФТ-5.2, ФТ-5.6)
+
+`POST /api/consume` `{product_id, qty, unit_id?}` — списать `qty` (1–100000).
+
+- Без `unit_id`: сначала вскрытый экземпляр (самый ранний `opened_at`), затем запечатанные — самый старый по дате покупки, затем по `id`. С `unit_id` — начать с него (sealed/open этой позиции), дальше по тому же правилу.
+- Не хватает в экземпляре — добирается из следующего. Запечатанный при первом расходе становится `open` (`opened_at` = сейчас); дошедший до 0 — `finished` (`finished_at`).
+- Всего меньше `qty` — `409 {"error": "Не хватает: есть 260 мл", "available": 260}` и ничего не списывается.
+- Одна транзакция, по движению `consume` на каждый затронутый экземпляр.
+- `201 {movements: [Movement], product: ProductSummary, opened_unit_ids: [...], finished_unit_ids: [...], cost: 4760}`.
+
+`POST /api/movements/revert` `{ids: [...]}` — отмена (кнопка «Отменить» 10 секунд и удаление из журнала). Все или ничего; разрешены только `consume`, `writeoff`, `adjust` своего пользователя, иначе `404`/`409`. Остаток возвращается; если по экземпляру больше нет движений расхода, списания и корректировок — он снова `sealed` (`opened_at` = null), иначе `open`; `finished`/`written_off` с ненулевым остатком → `open`. Нарушение `remaining ≤ initial` — `409`. Движения удаляются из журнала. `200 {products: [ProductSummary]}` — обновлённые позиции.
+
+`GET /api/movements?product_id=&before={id}&limit=50` — журнал, новые сверху.
+
+### Шаблоны расхода (ФТ-8)
+
+```json
+// Recipe
+{ "id": 2, "name": "Мойка кузова", "sort": 0, "last_used_at": 1792000000, "cost": 41200,
+  "items": [{ "product_id": 12, "qty": 40, "product": ProductSummary,
+              "available": 2320, "short": false }] }
+// cost — оценка себестоимости по ценам экземпляров, из которых пойдёт списание; null — цен нет
+```
+
+| Адрес | Что делает |
+|---|---|
+| `GET /api/recipes` | `{recipes: [Recipe]}` — по `sort`, `items` с `product` |
+| `GET /api/recipes/{id}` | `{recipe: Recipe}` |
+| `POST /api/recipes` `{name, items: [{product_id, qty}]}` | `201 Recipe`. Имя 1–60, 1–30 строк, позиции без повторов |
+| `PUT /api/recipes/{id}` | Замена имени и строк, `200 Recipe` |
+| `DELETE /api/recipes/{id}` | `204` (журнал не трогается) |
+| `POST /api/recipes/{id}/apply` `{items: [{product_id, qty}]}` | Применение с поправленными количествами (ФТ-8.2, ФТ-8.4); `qty` 0 — строка пропускается; позиции — любые свои, не обязательно из шаблона. Одна транзакция: `recipe_runs` + расход по правилам `consume`. **Нехватка не ошибка** (ФТ-8.6): списывается сколько есть. `201 {run_id, movements: [Movement], products: [ProductSummary], shortages: [{product_id, requested, consumed}], cost}` |
+
+Порядок шаблонов — `POST /api/recipes/reorder {ids}`, как у категорий.
 
 ## Служебное
 

@@ -63,6 +63,8 @@ func newEnv(t *testing.T, insecure bool) *env {
 		Auth:            svc,
 		Limiter:         auth.NewLimiter(auth.LimitAttempts, auth.LimitWindow, c.Now),
 		InsecureCookies: insecure,
+		DB:              db.DB,
+		Now:             c.Now,
 	})
 	return &env{t: t, h: srv.Handler(), svc: svc, clock: c}
 }

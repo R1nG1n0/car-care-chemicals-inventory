@@ -2,10 +2,12 @@
 package web
 
 import (
+	"database/sql"
 	"encoding/json"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/auth"
 )
@@ -22,6 +24,10 @@ type Options struct {
 	Limiter *auth.Limiter
 	// InsecureCookies убирает Secure у cookie сессии (локальная разработка по http).
 	InsecureCookies bool
+	// DB — база для разделов этапа 2 (справочники, склад); nil — разделы не подключаются.
+	DB *sql.DB
+	// Now — часы для отметок времени; nil — time.Now. В тестах подменяется.
+	Now func() time.Time
 }
 
 // Server обслуживает /api/ и одностраничный интерфейс.
@@ -32,6 +38,8 @@ type Server struct {
 	auth            *auth.Service
 	limiter         *auth.Limiter
 	insecureCookies bool
+	db              *sql.DB
+	now             func() time.Time
 	mux             *http.ServeMux
 }
 
@@ -44,7 +52,12 @@ func New(opt Options) *Server {
 		auth:            opt.Auth,
 		limiter:         opt.Limiter,
 		insecureCookies: opt.InsecureCookies,
+		db:              opt.DB,
+		now:             opt.Now,
 		mux:             http.NewServeMux(),
+	}
+	if s.now == nil {
+		s.now = time.Now
 	}
 	if s.log == nil {
 		s.log = slog.Default()
@@ -73,6 +86,13 @@ func (s *Server) routes() {
 	s.api("/api/invites/{id}", ownerOnly, methods{http.MethodDelete: s.handleRevokeInvite})
 	s.api("/api/invites/by-token/{token}", public, methods{http.MethodGet: s.handleCheckInvite})
 	s.api("/api/invites/by-token/{token}/accept", public, methods{http.MethodPost: s.handleAcceptInvite})
+
+	// Этап 2: адреса регистрируются в своих файлах (handlers_catalog.go,
+	// handlers_stock.go), чтобы разделы развивались независимо.
+	if s.db != nil {
+		s.catalogRoutes()
+		s.stockRoutes()
+	}
 
 	s.mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Нет такого метода API")
