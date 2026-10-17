@@ -1,14 +1,18 @@
-// Купить — список покупок, новая покупка, история покупок (этап 3, coder «shopping»).
-// Заготовка: адреса раздела разбирает вложенный <Routes>.
-import { IconPackage } from '@tabler/icons-react';
+// Купить — список покупок, новая покупка, история покупок.
+// Адреса раздела разбирает вложенный <Routes>.
 import { Route, Routes, type Location } from 'react-router';
-import { StubScreen } from '../StubScreen';
+import { PurchaseNew } from './PurchaseNew';
+import { PurchasesHistory, PurchaseView } from './Purchases';
+import { ShoppingScreen } from './ShoppingScreen';
 
 /** location — адрес, «замороженный» для уходящего экрана при смене раздела (см. Shell). */
 export function ShoppingSection({ location }: { location: Location }) {
   return (
     <Routes location={location}>
-      <Route path="*" element={<StubScreen id="ShoppingSection" title="Раздел" icon={IconPackage} empty="Скоро" text="Экран в работе." />} />
+      <Route path="/purchases/new" element={<PurchaseNew key={location.key} />} />
+      <Route path="/purchases/:id" element={<PurchaseView />} />
+      <Route path="/purchases" element={<PurchasesHistory />} />
+      <Route path="*" element={<ShoppingScreen />} />
     </Routes>
   );
 }

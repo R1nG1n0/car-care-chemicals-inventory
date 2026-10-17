@@ -15,7 +15,7 @@ import {
   IconX,
 } from '@tabler/icons-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import { NavLink, useLocation, useNavigate, type Location } from 'react-router';
+import { Link, NavLink, useLocation, useNavigate, type Location } from 'react-router';
 import { Ico, Logo } from '../components/ui';
 import { MoreSection } from '../screens/more/MoreSection';
 import { ShoppingSection } from '../screens/shopping/ShoppingSection';
@@ -58,6 +58,13 @@ function screen(key: SectionKey, location: Location): ReactNode {
 type View = { key: SectionKey; id: number; dir?: 'forward' | 'back'; leaving: boolean; location: Location };
 
 const LEAVE_MS = 200; // --dur-fast (160 мс) + запас
+
+/**
+ * Корневые экраны разделов. На вложенных (карточка позиции, формы, применение
+ * шаблона) нижнее меню на телефоне скрыто: у них своя горчичная кнопка, а «+»
+ * в меню тоже горчичный — правило «одна горчичная на экран». Назад — кнопкой экрана.
+ */
+const ROOTS = new Set(['/', '/shopping', '/templates', '/more', '/purchases']);
 
 /** Меню «+»: покупка, расход, новая позиция. Шторка снизу (.g-sheet). */
 function PlusMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -135,10 +142,10 @@ export function Shell() {
           <div className="app-side__logo">
             <Logo />
           </div>
-          <NavLink to="/" end aria-current={current('stock')}>
+          <Link to="/" aria-current={current('stock')}>
             <Ico icon={IconPackage} />
             Остатки
-          </NavLink>
+          </Link>
           <NavLink to="/shopping" aria-current={current('shopping')}>
             <Ico icon={IconShoppingCart} />
             Купить
@@ -166,13 +173,13 @@ export function Shell() {
           </div>
         </main>
 
-        <nav className="g-tabbar app-tabbar" aria-label="Разделы">
-          <NavLink to="/" end aria-current={current('stock')}>
+        <nav className="g-tabbar app-tabbar" aria-label="Разделы" hidden={!ROOTS.has(location.pathname)}>
+          <Link to="/" aria-current={current('stock')}>
             <span className="g-tabbar__ico">
               <Ico icon={IconPackage} />
             </span>
             Остатки
-          </NavLink>
+          </Link>
           <NavLink to="/shopping" aria-current={current('shopping')}>
             <span className="g-tabbar__ico">
               <Ico icon={IconShoppingCart} />

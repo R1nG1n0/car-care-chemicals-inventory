@@ -1,1 +1,100 @@
 /* Экраны «Купить», «Шаблоны», «Ещё»: список покупок, покупка, шаблоны, справочники. Только токены. */
+
+/* ---------- Цвет категории классом (атрибут style запрещён CSP) ---------- */
+.shop-cat--blue { --cat: var(--cat-blue); --sw: var(--cat-blue); }
+.shop-cat--berry { --cat: var(--cat-berry); --sw: var(--cat-berry); }
+.shop-cat--olive { --cat: var(--cat-olive); --sw: var(--cat-olive); }
+.shop-cat--ochre { --cat: var(--cat-ochre); --sw: var(--cat-ochre); }
+.shop-cat--petrol { --cat: var(--cat-petrol); --sw: var(--cat-petrol); }
+.shop-cat--plum { --cat: var(--cat-plum); --sw: var(--cat-plum); }
+.shop-cat--slate { --cat: var(--cat-slate); --sw: var(--cat-slate); }
+.shop-cat--umber { --cat: var(--cat-umber); --sw: var(--cat-umber); }
+
+/* ---------- Общие ---------- */
+.shop-between { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); min-width: 0; }
+.shop-back { justify-self: start; padding: 0 var(--sp-2) 0 0; }
+.shop-hint { margin: calc(-1 * var(--sp-2)) 0 0 !important; color: var(--text-muted); font-size: var(--fs-13); }
+.shop-block { display: block; }
+.shop-sum { font: var(--fw-heavy) var(--fs-20) var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shop-num { font: var(--fw-heavy) var(--fs-14) var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shop-strike { text-decoration: line-through; color: var(--text-muted); }
+.shop-warn { color: var(--danger-text); font-weight: var(--fw-bold); }
+.shop-skel { display: grid; }
+.shop-skel > .g-skel__body + .g-skel__body { border-top: 1px dashed var(--surface-raised); }
+.shop-link { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; color: var(--text-muted); overflow-wrap: anywhere; }
+
+/* Выбор из списка (магазин, место) — вид поля .g-input */
+select.g-input {
+  appearance: none; padding-right: 36px; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text) 50%), linear-gradient(135deg, var(--text) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
+  background-size: 6px 6px; background-repeat: no-repeat;
+}
+
+/* Строка-кнопка внутри .g-row: без оформления кнопки, вся зона нажимается */
+.shop-rowbtn {
+  display: grid; align-content: center; min-height: var(--tap); padding: 0;
+  border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  text-decoration: none;
+}
+.shop-rowbtn > span { display: block; }
+.shop-h { margin: 0; }
+.shop-row--wrap, .shop-row--open { flex-wrap: wrap; }
+.shop-edit { display: flex; gap: var(--sp-2); align-items: center; }
+.shop-edit .g-input { flex: 1; min-width: 0; }
+
+/* Действия строки, раскрытые из меню «⋯» */
+.shop-rowmenu { padding-left: 0; }
+.shop-rowmenu__btns { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+
+.shop-store-form { display: grid; gap: var(--sp-3); }
+
+/* «Архив · 2 места» */
+.shop-archive-link {
+  display: flex; justify-content: space-between; align-items: center; width: 100%;
+  min-height: var(--tap); padding: 0 var(--sp-1); border: 0; background: transparent; cursor: pointer;
+  color: var(--text-muted); font: var(--fw-bold) var(--fs-13) var(--font-body);
+}
+
+/* ---------- Список покупок ---------- */
+.shop-item { transition: opacity var(--dur-fast) var(--ease-out); }
+.shop-item--done .g-row__title { text-decoration: line-through; color: var(--text-muted); }
+.shop-item--done { opacity: 0.8; }
+.shop-add { display: grid; gap: var(--sp-3); padding: var(--sp-3); }
+.shop-del { color: var(--text-muted); }
+
+/* ---------- Новая покупка ---------- */
+.shop-line .g-card__head { padding: 0 0 0 var(--sp-3); }
+.shop-line .g-card__head .g-btn { color: var(--on-cat); }
+.shop-line .g-card__body { display: grid; gap: var(--sp-3); }
+.shop-pkg { display: flex; align-items: center; gap: var(--sp-2); }
+.shop-pkg .g-num { min-width: 28px; text-align: center; font-size: var(--fs-20); }
+.shop-foot { display: grid; gap: var(--sp-3); }
+.shop-two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); align-items: start; }
+.shop-new-ref { display: flex; gap: var(--sp-2); }
+.shop-new-ref .g-input { flex: 1; min-width: 0; }
+
+/* Главная кнопка формы держится у нижнего края. На вложенных экранах нижнего
+   меню нет (Shell ставит hidden), а если оно видно — кнопка встаёт над ним */
+.shop-sticky {
+  position: sticky; z-index: 5; bottom: 0;
+  padding: var(--sp-3) 0 calc(var(--sp-3) + env(safe-area-inset-bottom)); background: var(--bg);
+  border-top: var(--bw) solid var(--line);
+}
+@media (max-width: 1023px) {
+  .app:has(.app-tabbar:not([hidden])) .shop-sticky { bottom: calc(var(--tap) + var(--sp-10) + env(safe-area-inset-bottom) - var(--sp-6)); padding-bottom: var(--sp-1); }
+}
+
+/* ---------- Шаблоны ---------- */
+.shop-tpl-row { flex-wrap: wrap; }
+.shop-tpl-row > .g-row__main { flex-basis: 100%; }
+.shop-tpl-ctl { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; }
+.shop-tpl-ctl b { min-width: 22px; }
+.shop-tpl-edit { display: grid; gap: var(--sp-3); flex-basis: 100%; }
+
+/* Нехватка в строке — терракотовым и словами (.g-row--warn даёт фон) */
+.shop-short { color: var(--danger-text); font-weight: var(--fw-bold); font-size: var(--fs-12); }
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-item { transition: none; }
+}

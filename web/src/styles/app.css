@@ -96,3 +96,6 @@ a.g-btn { text-decoration: none; }
 }
 .app-overlay > .g-sheet { width: 100%; max-width: 560px; margin: 0 auto; padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom)); }
 .app-toast__text { flex: 1; min-width: 0; }
+
+/* Нижнее меню скрыто на вложенных экранах (Shell, ROOTS): класс .g-tabbar задаёт display, поэтому [hidden] — явно */
+.app-tabbar[hidden] { display: none; }

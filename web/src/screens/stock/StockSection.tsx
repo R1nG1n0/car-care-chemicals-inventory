@@ -1,14 +1,18 @@
 // Остатки — список, карточка позиции, форма позиции, расход (этап 3, coder «stock»).
-// Заготовка: адреса раздела разбирает вложенный <Routes>.
-import { IconPackage } from '@tabler/icons-react';
+// Адреса раздела разбирает вложенный <Routes>.
 import { Route, Routes, type Location } from 'react-router';
-import { StubScreen } from '../StubScreen';
+import { ProductForm } from './ProductForm';
+import { ProductScreen } from './ProductScreen';
+import { StockHome } from './StockHome';
 
 /** location — адрес, «замороженный» для уходящего экрана при смене раздела (см. Shell). */
 export function StockSection({ location }: { location: Location }) {
   return (
     <Routes location={location}>
-      <Route path="*" element={<StubScreen id="StockSection" title="Раздел" icon={IconPackage} empty="Скоро" text="Экран в работе." />} />
+      <Route path="/items/new" element={<ProductForm />} />
+      <Route path="/items/:id/edit" element={<ProductForm />} />
+      <Route path="/items/:id" element={<ProductScreen />} />
+      <Route path="*" element={<StockHome />} />
     </Routes>
   );
 }

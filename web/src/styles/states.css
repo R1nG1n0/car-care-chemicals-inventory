@@ -119,13 +119,7 @@
   background: var(--text); color: var(--bg); border-color: var(--line-key);
   box-shadow: var(--sh-sm);
 }
-.g-catpick__opt[aria-checked="true"] /* В одну строку с прокруткой — когда форма длинная */
-.g-catpick--scroll {
-  flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
-  margin: 0 calc(-1 * var(--sp-2)); padding: 2px var(--sp-2) var(--sp-1);
-}
-.g-catpick--scroll .g-catpick__opt { flex: none; }
-.g-catpick__dot { border-color: var(--bg); }
+.g-catpick__opt[aria-checked="true"] .g-catpick__dot { border-color: var(--bg); }
 
 /* ---------- Формы ---------- */
 /* Форма на телефоне: прокручиваемая часть и закреплённая главная кнопка */

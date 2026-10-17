@@ -1,0 +1,186 @@
+// Форма позиции /items/new и /items/:id/edit (макет «Новая позиция», ФТ-3):
+// название (?name= подставляется), бренд с подсказкой, категория чипами,
+// мл/шт, размер упаковки, минимум, штрихкод (сканер — в 1.1), заметка.
+// Ошибки сервера — под полями по field. После создания — на карточку позиции.
+import { IconBarcode, IconChevronLeft } from '@tabler/icons-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, type FormEvent } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { inventory, isApiError, isNetworkError, type ProductInput, type ProductSummary } from '../../api';
+import { invalidateRefs, invalidateStock, keys } from '../../app/queries';
+import { useStockRefs } from '../../components/StockRefs';
+import { busyProps, Field, Ico } from '../../components/ui';
+import { unitLabel } from '../../lib/stock';
+import { validateProduct, type ProductErrors, type ProductFields } from '../../lib/stockMoney';
+import { BrandField, CategoryPick } from './ProductFormParts';
+
+export function ProductForm() {
+  const params = useParams();
+  const id = params.id ? Number(params.id) : null;
+  const detail = useQuery({
+    queryKey: keys.product(id ?? 0),
+    queryFn: ({ signal }) => inventory.product(id!, signal),
+    enabled: id !== null,
+  });
+  if (id !== null && !detail.data) {
+    return (
+      <div className="stock-item">
+        <p className="g-muted" aria-busy={detail.isPending}>
+          {detail.isPending ? 'Загружаю позицию…' : (detail.error?.message ?? 'Не загрузилось')}
+        </p>
+      </div>
+    );
+  }
+  return <FormBody key={id ?? 'new'} product={detail.data?.product} hasUnits={(detail.data?.units.length ?? 0) > 0} />;
+}
+
+function FormBody({ product, hasUnits }: { product: ProductSummary | undefined; hasUnits: boolean }) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [search] = useSearchParams();
+  const refs = useStockRefs();
+  const [f, setF] = useState<ProductFields>(() => ({
+    name: product?.name ?? search.get('name') ?? '',
+    brand: product?.brand ?? '',
+    category_id: product?.category_id ?? null,
+    unit: product?.unit ?? 'ml',
+    package_size: product ? String(product.package_size) : '',
+    min_stock: product?.min_stock != null ? String(product.min_stock) : '',
+    barcode: product?.barcode ?? '',
+    note: product?.note ?? '',
+  }));
+  const [errors, setErrors] = useState<ProductErrors>({});
+  const cats = refs.categoryList.filter((c) => !c.archived || c.id === f.category_id);
+  const u = unitLabel(f.unit);
+  const backTo = product ? `/items/${product.id}` : '/';
+
+  const set = <K extends keyof ProductFields>(k: K, v: ProductFields[K]) => {
+    setF((x) => ({ ...x, [k]: v }));
+    setErrors((e) => ({ ...e, [k]: undefined, form: undefined }));
+  };
+
+  const save = useMutation({
+    mutationFn: (v: ProductInput) => (product ? inventory.updateProduct(product.id, v) : inventory.createProduct(v)),
+    onSuccess: async (r) => {
+      await Promise.all([invalidateRefs(qc), invalidateStock(qc), qc.invalidateQueries({ queryKey: keys.brands })]);
+      navigate(`/items/${r.id}`, { replace: true });
+    },
+    onError: (error) => {
+      const err: unknown = error;
+      if (isNetworkError(err)) return setErrors({ form: 'Нет связи — позиция не сохранена' });
+      if (!isApiError(err)) return setErrors({ form: 'Не получилось сохранить' });
+      const known: (keyof ProductFields)[] = ['name', 'brand', 'category_id', 'unit', 'package_size', 'min_stock', 'barcode', 'note'];
+      if (err.field && known.includes(err.field as keyof ProductFields)) setErrors({ [err.field]: err.message });
+      else setErrors({ form: err.message });
+    },
+  });
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (save.isPending) return;
+    const r = validateProduct(f);
+    if (!r.ok) {
+      setErrors(r.errors);
+      const first = Object.keys(r.errors)[0];
+      document.getElementById(`np-${first}`)?.focus();
+      return;
+    }
+    setErrors({});
+    save.mutate(r.value);
+  };
+
+  return (
+    <div className="stock-item">
+      <div className="stock-item__bar">
+        <Link className="g-btn g-btn--ghost g-btn--sm stock-back" to={backTo}>
+          <Ico icon={IconChevronLeft} />
+          Отмена
+        </Link>
+        <h1 className="g-label">{product ? 'Изменить позицию' : 'Новая позиция'}</h1>
+      </div>
+      <form className="g-form stock-form" onSubmit={submit} noValidate>
+        <div className="stock-form">
+          <Field id="np-name" label="Название" value={f.name} maxLength={80} autoComplete="off" onChange={(e) => set('name', e.target.value)} error={errors.name} />
+          <BrandField value={f.brand} onChange={(v) => set('brand', v)} error={errors.brand} />
+          <CategoryPick categories={cats} value={f.category_id} onChange={(v) => set('category_id', v)} error={errors.category_id} />
+          <div className="g-field">
+            <span className="g-label" id="np-unit-l">
+              Единица
+            </span>
+            <div className="g-seg" role="group" aria-labelledby="np-unit-l" aria-describedby={hasUnits ? 'np-unit-hint' : undefined}>
+              {(['ml', 'pcs'] as const).map((x) => (
+                <button key={x} id={x === 'ml' ? 'np-unit' : undefined} type="button" aria-pressed={f.unit === x} aria-disabled={(hasUnits && f.unit !== x) || undefined} onClick={() => !hasUnits && set('unit', x)}>
+                  {unitLabel(x)}
+                </button>
+              ))}
+            </div>
+            {hasUnits && (
+              <span className="g-field__hint" id="np-unit-hint">
+                Единицу нельзя сменить: у позиции есть экземпляры
+              </span>
+            )}
+            {errors.unit && <span className="g-field__error">{errors.unit}</span>}
+          </div>
+          <div className="app-two">
+            <Field id="np-package_size" label={`Размер упаковки, ${u}`} inputMode="numeric" value={f.package_size} onChange={(e) => set('package_size', e.target.value)} error={errors.package_size} />
+            <Field id="np-min_stock" label={`Мин. остаток, ${u}`} inputMode="numeric" value={f.min_stock} placeholder="не задан" onChange={(e) => set('min_stock', e.target.value)} error={errors.min_stock} />
+          </div>
+          <div className={`g-field${errors.barcode ? ' g-field--error' : ''}`}>
+            <label className="g-label" htmlFor="np-barcode">
+              Штрихкод <span className="g-field__opt">· необязательно</span>
+            </label>
+            <div className="g-field__row">
+              <input
+                className="g-input"
+                id="np-barcode"
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="4007218000123"
+                value={f.barcode}
+                aria-invalid={errors.barcode ? true : undefined}
+                aria-describedby={errors.barcode ? 'np-barcode-err np-code-hint' : 'np-code-hint'}
+                onChange={(e) => set('barcode', e.target.value)}
+              />
+              <button type="button" className="g-btn g-btn--sm" aria-disabled="true" aria-describedby="np-code-hint">
+                <Ico icon={IconBarcode} /> Сканировать
+              </button>
+            </div>
+            <span className="g-field__hint" id="np-code-hint">
+              Сканер появится в версии 1.1
+            </span>
+            {errors.barcode && (
+              <span className="g-field__error" id="np-barcode-err">
+                {errors.barcode}
+              </span>
+            )}
+          </div>
+          <div className={`g-field${errors.note ? ' g-field--error' : ''}`}>
+            <label className="g-label" htmlFor="np-note">
+              Заметка <span className="g-field__opt">· необязательно</span>
+            </label>
+            <textarea
+              className="g-input g-input--area"
+              id="np-note"
+              placeholder="Разведение, особенности"
+              maxLength={500}
+              value={f.note}
+              aria-invalid={errors.note ? true : undefined}
+              onChange={(e) => set('note', e.target.value)}
+            />
+            {errors.note && <span className="g-field__error">{errors.note}</span>}
+          </div>
+        </div>
+        {errors.form && (
+          <p className="g-field__error" role="alert">
+            {errors.form}
+          </p>
+        )}
+        <div className="g-form__foot">
+          <button type="submit" className="g-btn g-btn--cta g-btn--block g-press" {...busyProps(save.isPending)}>
+            {save.isPending ? 'Сохраняю…' : 'Сохранить позицию'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
