@@ -19,6 +19,8 @@ import './styles/components.css';
 import './styles/states.css';
 import './styles/motion.css';
 import './styles/app.css';
+import './styles/stock.css';
+import './styles/shopping.css';
 import { App } from './App';
 import { listenInstallPrompt } from './app/install';
 import { syncThemeColor } from './app/themeColor';
