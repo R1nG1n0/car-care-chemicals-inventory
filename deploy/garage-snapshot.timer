@@ -1,0 +1,9 @@
+[Unit]
+Description=Снимок базы garage перед ночной копией (node-backup, 23:05)
+
+[Timer]
+OnCalendar=*-*-* 22:50:00 Europe/Moscow
+Persistent=true
+
+[Install]
+WantedBy=timers.target

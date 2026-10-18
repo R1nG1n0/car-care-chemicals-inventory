@@ -3,7 +3,7 @@ PKG     := ./cmd/garage
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: build build-linux web dev run test vet clean
+.PHONY: build build-linux web dev run test vet clean deploy
 
 ## build — сборка под текущую платформу (для локальной проверки)
 build:
@@ -40,6 +40,14 @@ test: vet
 vet:
 	go vet ./...
 	@test -z "$$(gofmt -l cmd internal web/embed.go)" || (gofmt -l cmd internal web/embed.go; echo "gofmt: файлы не отформатированы"; exit 1)
+
+## deploy — выкладка на сервер (ТЗ Р5.6): make deploy HOST=relay.
+## Первичная установка (пользователь, служба, nginx, снимки) — файлы deploy/; здесь
+## только замена бинарника и перезапуск службы garage.
+deploy: build-linux
+	@test -n "$(HOST)" || (echo "укажите HOST=, например make deploy HOST=relay"; exit 1)
+	scp bin/$(BINARY)-linux-amd64 $(HOST):/usr/local/bin/$(BINARY).new
+	ssh $(HOST) 'install -m 0755 /usr/local/bin/$(BINARY).new /usr/local/bin/$(BINARY) && rm /usr/local/bin/$(BINARY).new && systemctl restart $(BINARY) && systemctl is-active $(BINARY)'
 
 clean:
 	rm -rf bin

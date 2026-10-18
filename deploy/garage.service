@@ -1,0 +1,42 @@
+# Служба garage на relay (ТЗ Р5.1, Р5.4): только 127.0.0.1:8090,
+# отдельный непривилегированный пользователь, база в /var/lib/garage.
+[Unit]
+Description=garage — учёт автохимии
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=garage
+Group=garage
+ExecStart=/usr/local/bin/garage -config /etc/garage/config.json
+Restart=on-failure
+RestartSec=5s
+
+# Каталог базы создаёт systemd, доступ только владельцу
+StateDirectory=garage
+StateDirectoryMode=0700
+UMask=0077
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

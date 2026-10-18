@@ -1,0 +1,11 @@
+#!/bin/bash
+# Ежедневный снимок базы garage (ТЗ Р5.7, Р5.8): VACUUM INTO безопасен при
+# работающей службе. Снимки забирает ночная копия relay (node-backup).
+# Хранятся 7 последних.
+set -euo pipefail
+DIR=/var/lib/garage/backup
+mkdir -p "$DIR"
+OUT="$DIR/garage-$(date +%F).db"
+rm -f "$OUT"
+sqlite3 /var/lib/garage/garage.db "VACUUM INTO '$OUT'"
+ls -1t "$DIR"/garage-*.db | tail -n +8 | xargs -r rm -f

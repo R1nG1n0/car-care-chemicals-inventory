@@ -1,0 +1,16 @@
+[Unit]
+Description=Снимок базы garage
+
+[Service]
+Type=oneshot
+User=garage
+Group=garage
+ExecStart=/usr/local/sbin/garage-snapshot
+StateDirectory=garage
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
