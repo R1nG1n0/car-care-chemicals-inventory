@@ -1,6 +1,7 @@
 // Форма позиции /items/new и /items/:id/edit (макет «Новая позиция», ФТ-3):
 // название (?name= подставляется), бренд с подсказкой, категория чипами,
-// мл/шт, размер упаковки, минимум, штрихкод (сканер — в 1.1), заметка.
+// мл/шт, размер упаковки, минимум, штрихкод (сканер заполняет поле, ФТ-9.3;
+// ?barcode= подставляется — «Создать позицию» после сканирования), заметка.
 // Ошибки сервера — под полями по field. После создания — на карточку позиции.
 import { IconBarcode } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -10,10 +11,18 @@ import { fieldErrors, inventory, type ProductInput, type ProductSummary } from '
 import { invalidateRefs, invalidateStock, keys } from '../../app/queries';
 import { BackLink } from '../../components/BackLink';
 import { BrandField, CategoryPick } from '../../components/ProductFields';
+import { Scanner } from '../../components/Scanner';
 import { useStockRefs } from '../../components/refs';
 import { busyProps, Field, Ico, LoadError } from '../../components/ui';
+import { parseManual } from '../../lib/barcode';
 import { PRODUCT_FIELDS, validateProduct, type ProductErrors, type ProductFields } from '../../lib/product';
 import { unitLabel } from '../../lib/stock';
+
+/** ?barcode= из ссылки «Создать позицию»: как при ручном вводе, мусор отбрасывается. */
+function barcodeParam(raw: string | null): string {
+  const r = raw ? parseManual(raw) : null;
+  return r?.ok ? r.code : '';
+}
 
 export function ProductForm() {
   const params = useParams();
@@ -54,10 +63,11 @@ function FormBody({ product, hasUnits }: { product: ProductSummary | undefined; 
     unit: product?.unit ?? 'ml',
     package_size: product ? String(product.package_size) : '',
     min_stock: product?.min_stock != null ? String(product.min_stock) : '',
-    barcode: product?.barcode ?? '',
+    barcode: product?.barcode ?? barcodeParam(search.get('barcode')),
     note: product?.note ?? '',
   }));
   const [errors, setErrors] = useState<ProductErrors>({});
+  const [scanning, setScanning] = useState(false);
   const cats = refs.categoryList.filter((c) => !c.archived || c.id === f.category_id);
   const u = unitLabel(f.unit);
   const backTo = product ? `/items/${product.id}` : '/';
@@ -136,16 +146,13 @@ function FormBody({ product, hasUnits }: { product: ProductSummary | undefined; 
                 placeholder="4007218000123"
                 value={f.barcode}
                 aria-invalid={errors.barcode ? true : undefined}
-                aria-describedby={errors.barcode ? 'np-barcode-err np-code-hint' : 'np-code-hint'}
+                aria-describedby={errors.barcode ? 'np-barcode-err' : undefined}
                 onChange={(e) => set('barcode', e.target.value)}
               />
-              <button type="button" className="g-btn g-btn--sm" aria-disabled="true" aria-describedby="np-code-hint">
+              <button type="button" className="g-btn g-btn--sm g-press" onClick={() => setScanning(true)}>
                 <Ico icon={IconBarcode} /> Сканировать
               </button>
             </div>
-            <span className="g-field__hint" id="np-code-hint">
-              Сканер появится в версии 1.1
-            </span>
             {errors.barcode && (
               <span className="g-field__error" id="np-barcode-err">
                 {errors.barcode}
@@ -179,6 +186,15 @@ function FormBody({ product, hasUnits }: { product: ProductSummary | undefined; 
           </button>
         </div>
       </form>
+      <Scanner
+        open={scanning}
+        title="Штрихкод позиции"
+        onClose={() => setScanning(false)}
+        onCode={(code) => {
+          set('barcode', code);
+          setScanning(false);
+        }}
+      />
     </div>
   );
 }

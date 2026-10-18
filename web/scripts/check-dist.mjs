@@ -2,6 +2,7 @@
 // script-src 'self'; style-src 'self' — никаких встроенных скриптов,
 // стилей, атрибутов style и внешних адресов в index.html, никакого eval
 // и new Function в скриптах.
+import { Buffer } from 'node:buffer';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -36,6 +37,14 @@ for (const f of files) {
     if (/new Function\(/.test(js)) fail(`new Function в ${f}`);
   }
   if (f.endsWith('.css') && /url\(\s*["']?(https?:)?\/\//.test(readFileSync(f, 'utf8'))) fail(`внешний адрес в ${f}`);
+  // Модуль сканера (zxing-wasm, ФТ-9.6): только в assets/ (Go-сервер кэширует
+  // их навсегда и отдаёт application/wasm) и настоящий WebAssembly
+  if (f.endsWith('.wasm')) {
+    if (!f.startsWith(join('dist', 'assets'))) fail(`${f}: .wasm должен лежать в assets/`);
+    if (!readFileSync(f).subarray(0, 4).equals(Buffer.from([0, 0x61, 0x73, 0x6d]))) fail(`${f}: не WebAssembly`);
+  }
 }
+// Сканер грузится только при первом открытии: в index.html его нет
+if (/zxing|reader-[\w-]+\.js/i.test(html)) fail('модуль сканера подключён в index.html — он должен грузиться по требованию');
 for (const f of files.sort()) console.log(`  ${f.padEnd(40)} ${(statSync(f).size / 1024).toFixed(1).padStart(8)} КБ`);
 console.log(`check-dist: ок, ${files.length} файлов, ${(total / 1024).toFixed(1)} КБ`);

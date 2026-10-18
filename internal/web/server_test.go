@@ -28,10 +28,11 @@ func get(t *testing.T, h http.Handler, method, target string) *httptest.Response
 }
 
 var testUI = fstest.MapFS{
-	"index.html":           {Data: []byte("<!doctype html><title>garage</title>")},
-	"assets/app-1a2b.js":   {Data: []byte("console.log(1)")},
-	"favicon.svg":          {Data: []byte("<svg/>")},
-	"manifest.webmanifest": {Data: []byte(`{"name":"garage"}`)},
+	"index.html":             {Data: []byte("<!doctype html><title>garage</title>")},
+	"assets/app-1a2b.js":     {Data: []byte("console.log(1)")},
+	"favicon.svg":            {Data: []byte("<svg/>")},
+	"manifest.webmanifest":   {Data: []byte(`{"name":"garage"}`)},
+	"assets/zxing-1a2b.wasm": {Data: []byte("\x00asm\x01\x00\x00\x00")},
 }
 
 func TestHealth(t *testing.T) {
@@ -78,8 +79,13 @@ func TestSecurityHeaders(t *testing.T) {
 			t.Errorf("%s: нет служебных заголовков", target)
 		}
 	}
-	if !strings.Contains(contentSecurityPolicy, "frame-ancestors 'none'") || strings.Contains(contentSecurityPolicy, "unsafe") {
-		t.Fatal("политика должна запрещать фреймы и не разрешать unsafe-*")
+	if !strings.Contains(contentSecurityPolicy, "frame-ancestors 'none'") {
+		t.Fatal("политика должна запрещать фреймы")
+	}
+	// Из послаблений — только компиляция WebAssembly для сканера (ФТ-9.6)
+	if !strings.Contains(contentSecurityPolicy, "script-src 'self' 'wasm-unsafe-eval';") ||
+		strings.Count(contentSecurityPolicy, "unsafe") != 1 {
+		t.Fatal("политика не должна разрешать unsafe-* кроме 'wasm-unsafe-eval' в script-src")
 	}
 }
 
@@ -125,5 +131,15 @@ func TestManifestType(t *testing.T) {
 	rec := get(t, newTestServer(testUI), http.MethodGet, "/manifest.webmanifest")
 	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/manifest+json" {
 		t.Fatalf("манифест: код %d, Content-Type %q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+}
+
+func TestWasmType(t *testing.T) {
+	rec := get(t, newTestServer(testUI), http.MethodGet, "/assets/zxing-1a2b.wasm")
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/wasm" {
+		t.Fatalf("wasm: код %d, Content-Type %q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	if !strings.Contains(rec.Header().Get("Cache-Control"), "immutable") {
+		t.Fatal("wasm из assets/ должен кэшироваться навсегда")
 	}
 }

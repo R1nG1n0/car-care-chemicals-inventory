@@ -3,7 +3,8 @@
 // Свайп влево — расход, нажатие — карточка позиции. На ширине от 1024 px нажатие
 // выбирает карточку, справа панель позиции с расходом. /?consume=1 — расход с выбором
 // позиции (меню «+»), /?location=ID и /?filter=low|out — начальный фильтр.
-import { IconPackage, IconPlus, IconSearch, IconSearchOff, IconX } from '@tabler/icons-react';
+// Кнопка сканера в строке поиска — ScanFlow (ФТ-9.2).
+import { IconPackage, IconPlus, IconScan, IconSearch, IconSearchOff, IconX } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { DESKTOP, useMedia } from '../../components/hooks';
@@ -11,6 +12,7 @@ import { catClass, useProducts, useStockRefs } from '../../components/refs';
 import { Empty, Ico, LoadError } from '../../components/ui';
 import { parseFilter, stockCounts, visibleProducts, type StockFilter } from '../../lib/stock';
 import { ConsumeSheet } from './ConsumeSheet';
+import { ScanFlow } from './ScanFlow';
 import { StockList } from './StockList';
 import { StockPanel } from './StockPanel';
 
@@ -25,6 +27,7 @@ export function StockHome() {
   );
   const [selected, setSelected] = useState<number | null>(null);
   const [swiped, setSwiped] = useState<number | null>(null);
+  const [scanning, setScanning] = useState(false);
 
   const all = useMemo(() => products.data ?? [], [products.data]);
   const items = useMemo(() => visibleProducts(all, q, filter), [all, q, filter]);
@@ -78,7 +81,7 @@ export function StockHome() {
   } else {
     body = (
       <>
-        <div className="g-search stock-search" role="search">
+        <div className="g-search stock-search scan-search" role="search">
           <span className="g-search__icon">
             <Ico icon={IconSearch} />
           </span>
@@ -97,6 +100,9 @@ export function StockHome() {
               <Ico icon={IconX} />
             </button>
           )}
+          <button type="button" className="g-btn g-btn--icon g-btn--ghost scan-search__btn" aria-label="Сканировать штрихкод" onClick={() => setScanning(true)}>
+            <Ico icon={IconScan} />
+          </button>
         </div>
         <div className="g-filters" role="group" aria-label="Фильтр">
           {chip('all', `Все\u00a0${counts.all}`)}
@@ -134,6 +140,7 @@ export function StockHome() {
       </div>
       {current && <StockPanel product={current} />}
       <ConsumeSheet open={sheetOpen} onClose={closeSheet} productId={swiped} />
+      <ScanFlow open={scanning} onClose={() => setScanning(false)} />
     </div>
   );
 }

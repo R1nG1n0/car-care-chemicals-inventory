@@ -14,11 +14,13 @@ import (
 // Интерфейс — одностраничное приложение. Сервер отдаёт его файлы, а на любой
 // неизвестный путь вне /api/ — index.html: экранами управляет роутер в браузере.
 
-// Манифест PWA: в системной таблице типов его может не быть (на macOS
-// mime.TypeByExtension возвращает пустую строку), а с nosniff браузер
-// не станет угадывать тип сам.
+// Манифест PWA и модуль сканера штрихкодов (zxing-wasm, ФТ-9.6): в системной
+// таблице типов их может не быть (на macOS mime.TypeByExtension возвращает
+// пустую строку), а с nosniff браузер не станет угадывать тип сам.
+// WebAssembly.instantiateStreaming принимает только application/wasm.
 func init() {
 	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
+	_ = mime.AddExtensionType(".wasm", "application/wasm")
 }
 
 // assetsPrefix — каталог файлов сборки с хешем в имени: их можно кэшировать

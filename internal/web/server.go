@@ -114,7 +114,9 @@ func (s *Server) Handler() http.Handler {
 
 // contentSecurityPolicy — строгая политика без встроенных скриптов и стилей
 // и без внешних адресов: шрифты и иконки поставляются вместе с приложением.
-const contentSecurityPolicy = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; " +
+// 'wasm-unsafe-eval' разрешает только компиляцию WebAssembly (сканер штрихкодов,
+// ФТ-9.6) — eval и new Function для JavaScript остаются запрещены.
+const contentSecurityPolicy = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self'; " +
 	"font-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
 
 type healthResponse struct {

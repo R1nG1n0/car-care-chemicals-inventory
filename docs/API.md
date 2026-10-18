@@ -73,11 +73,13 @@
 На всех ответах (API и интерфейс):
 
 ```
-Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'
+Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'
 X-Content-Type-Options: nosniff
 Referrer-Policy: same-origin
 Cross-Origin-Opener-Policy: same-origin
 ```
+
+`'wasm-unsafe-eval'` (с версии 1.1) разрешает только компиляцию WebAssembly — модуля сканера штрихкодов `zxing-wasm` (ФТ-9.6); `eval` и `new Function` для скриптов по-прежнему запрещены. Файл модуля лежит в `assets/` рядом с остальной сборкой и отдаётся с `Content-Type: application/wasm`, внешних адресов нет.
 
 Всё, что вне `/api/`, — файлы интерфейса; неизвестный путь без расширения отдаёт `index.html` (экранами управляет роутер в браузере), отсутствующий файл с расширением — `404`.
 
