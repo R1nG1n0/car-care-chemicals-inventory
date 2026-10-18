@@ -3,6 +3,7 @@
 # работающей службе. Снимки забирает ночная копия relay (node-backup).
 # Хранятся 7 последних.
 set -euo pipefail
+umask 077
 DIR=/var/lib/garage/backup
 mkdir -p "$DIR"
 OUT="$DIR/garage-$(date +%F).db"
