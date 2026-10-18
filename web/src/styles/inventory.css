@@ -1,0 +1,61 @@
+/* Инвентаризация (ФТ-10.1): выбор места, строки экземпляров, метка исхода, сводка.
+   Только токены. Анимация — transform и opacity; при reduced-motion остаётся прозрачность. */
+
+.inv-block { display: block; }
+.inv-pending { color: var(--text); }
+
+/* ---------- Прогресс ---------- */
+.inv-progress { display: grid; gap: var(--sp-2); }
+.inv-progress .stock-between b { font-size: var(--fs-14); }
+
+/* ---------- Строка экземпляра ---------- */
+.inv-list { list-style: none; margin: 0; padding: 0; }
+.inv-row { position: relative; flex-wrap: wrap; row-gap: var(--sp-2); isolation: isolate; --tone: var(--accent); }
+.inv-row--fixed, .inv-row--moved { --tone: var(--text-muted); }
+.inv-row--missing { --tone: var(--danger); }
+.inv-row__info { flex: 1 1 160px; min-width: 0; }
+.inv-row__info .g-row__title { overflow-wrap: anywhere; }
+.inv-row__actions { display: flex; gap: var(--sp-2); flex: none; margin-left: auto; }
+
+/* Подсветка строки в момент отметки: слой за содержимым, гаснет */
+.inv-row::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: var(--tone); opacity: 0;
+}
+.inv-row.is-fresh::before { animation: inv-flash 700ms var(--ease-out) both; }
+
+/* Метка исхода: «печать» */
+.inv-badge {
+  display: inline-flex; align-items: center; gap: 6px; flex: none; margin-left: auto;
+  min-height: 28px; padding: 0 var(--sp-2);
+  border: var(--bw-thin) solid var(--line); border-radius: var(--r-chip);
+  background: var(--surface-raised); color: var(--text);
+  font: var(--fw-heavy) var(--fs-12) var(--font-display);
+}
+.inv-badge--ok { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.inv-badge--missing { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }
+.inv-row.is-fresh .inv-badge { animation: inv-stamp 340ms var(--ease-out) both; }
+
+@keyframes inv-flash { from { opacity: 0.2; } to { opacity: 0; } }
+@keyframes inv-stamp {
+  0% { opacity: 0; transform: scale(1.5) rotate(-8deg); }
+  60% { opacity: 1; transform: scale(0.94) rotate(1deg); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* ---------- Закреплённая кнопка «Завершить» ---------- */
+.inv-foot {
+  position: sticky; bottom: 0; z-index: 2;
+  padding: var(--sp-2) 0 calc(var(--sp-2) + env(safe-area-inset-bottom));
+  background: var(--bg);
+}
+
+/* ---------- Сводка ---------- */
+.inv-sum { list-style: none; margin: 0; padding: 0; }
+.inv-sum__row--missing .g-num { color: var(--danger-text); }
+
+@media (prefers-reduced-motion: reduce) {
+  .inv-row.is-fresh::before { animation-duration: 400ms; }
+  .inv-row.is-fresh .inv-badge { animation-name: inv-fade; animation-duration: var(--dur-fast); }
+  @keyframes inv-fade { from { opacity: 0; } to { opacity: 1; } }
+}

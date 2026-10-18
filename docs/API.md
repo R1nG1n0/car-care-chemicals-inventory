@@ -93,7 +93,7 @@ Cross-Origin-Opener-Policy: same-origin
 | `GET /api/invites`, `POST /api/invites`, `DELETE /api/invites/{id}` | только владелец |
 | `GET /api/invites/by-token/{token}`, `POST /api/invites/by-token/{token}/accept` | без входа |
 | `GET`/`POST /api/categories`, `PATCH /api/categories/{id}`, `POST /api/categories/reorder` | с входом |
-| `GET`/`POST /api/locations`, `PATCH /api/locations/{id}`, `POST /api/locations/reorder` | с входом |
+| `GET`/`POST /api/locations`, `PATCH /api/locations/{id}`, `POST /api/locations/reorder`, `GET /api/locations/{id}/units`, `POST /api/locations/{id}/checked` | с входом |
 | `GET`/`POST /api/stores`, `PATCH /api/stores/{id}` | с входом |
 | `GET`/`POST /api/products`, `GET`/`PATCH /api/products/{id}`, `GET /api/brands` | с входом |
 | `GET`/`POST /api/shopping`, `PATCH`/`DELETE /api/shopping/{id}` | с входом |
@@ -211,7 +211,8 @@ Cross-Origin-Opener-Policy: same-origin
 // Category
 { "id": 3, "name": "Шампуни", "color": "blue", "sort": 0, "archived": false, "products_count": 4 }
 // Location
-{ "id": 5, "name": "Коробка 3", "sort": 2, "archived": false, "units_count": 5 }
+{ "id": 5, "name": "Коробка 3", "sort": 2, "archived": false, "units_count": 5, "checked_at": 1792140000 }
+// checked_at — когда место проверяли инвентаризацией (unix-секунды); null — не проверялось
 // Store
 { "id": 2, "name": "Автохим", "url": "", "archived": false }
 ```
@@ -223,6 +224,8 @@ Cross-Origin-Opener-Policy: same-origin
 | `PATCH /api/categories/{id}` `{name?, color?, archived?}` | `200 Category`. Архивировать можно всегда: позиции остаются, но в формах архивная категория не предлагается |
 | `POST /api/categories/reorder` `{ids: [...]}` | `204`. Новый порядок действующих: `ids` — ровно все действующие категории пользователя, каждая один раз, иначе `400 {"error": "Список устарел: обновите страницу", "field": "ids"}` |
 | `GET /api/locations[?archived=1]` → `{locations: [Location]}`, `POST {name}`, `PATCH /{id} {name?, archived?}`, `POST /reorder {ids}` | То же для мест. `units_count` — экземпляры в статусах `sealed`/`open`. **Архивировать место с экземплярами нельзя**: `409 {"error": "В месте лежат экземпляры: 5. Сначала переложите их"}` |
+| `GET /api/locations/{id}/units` | Инвентаризация (ФТ-10.1): `200 {units: [InventoryUnit]}` — экземпляры `sealed`/`open` **действующих** позиций в месте: `Unit` + `product: {id, name, brand, unit, package_size}`. Порядок: по названию позиции (без учёта регистра), вскрытые раньше запечатанных, по `id`. Чужое или несуществующее место — `404`; архивное — пустой список |
+| `POST /api/locations/{id}/checked` | Инвентаризация: ставит `checked_at` = сейчас, без тела. `200 Location`. Чужое/несуществующее — `404`, архивное — `409` |
 | `GET /api/stores[?archived=1]` → `{stores: [Store]}`, `POST {name, url?}`, `PATCH /{id} {name?, url?, archived?}` | То же для магазинов, порядок — по имени, без `reorder`. `url` — пусто или `http(s)://хост…`, до 500 символов (`400`, `field: "url"`) |
 
 - Удаления справочников нет — только архив (ФТ-2.4).

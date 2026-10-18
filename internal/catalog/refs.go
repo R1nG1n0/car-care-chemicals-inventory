@@ -27,6 +27,9 @@ type Location struct {
 	Sort       int64  `json:"sort"`
 	Archived   bool   `json:"archived"`
 	UnitsCount int64  `json:"units_count"`
+	// CheckedAt — когда место последний раз проверяли инвентаризацией
+	// (unix-секунды); null — не проверялось (ФТ-10.1.4).
+	CheckedAt *int64 `json:"checked_at"`
 }
 
 // Store — магазин.
@@ -287,12 +290,15 @@ func (s *Service) ReorderCategories(ctx context.Context, userID int64, ids []int
 // ---------- Места ----------
 
 const locationSelect = `SELECT l.id, l.name, l.sort, l.archived,
-	(SELECT COUNT(*) FROM units u WHERE u.user_id = l.user_id AND u.location_id = l.id AND u.status IN ('sealed', 'open'))
+	(SELECT COUNT(*) FROM units u WHERE u.user_id = l.user_id AND u.location_id = l.id AND u.status IN ('sealed', 'open')),
+	l.checked_at
 	FROM locations l `
 
 func scanLocation(sc interface{ Scan(...any) error }) (Location, error) {
 	var l Location
-	err := sc.Scan(&l.ID, &l.Name, &l.Sort, &l.Archived, &l.UnitsCount)
+	var checked sql.NullInt64
+	err := sc.Scan(&l.ID, &l.Name, &l.Sort, &l.Archived, &l.UnitsCount, &checked)
+	l.CheckedAt = nullInt(checked)
 	return l, err
 }
 

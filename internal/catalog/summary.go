@@ -259,6 +259,16 @@ func scanUnit(sc interface{ Scan(...any) error }) (Unit, error) {
 	return u, err
 }
 
+// scanUnitExtra читает экземпляр и следом имя, бренд, единицу и объём упаковки позиции.
+func scanUnitExtra(sc interface{ Scan(...any) error }, p *InventoryProduct) (Unit, error) {
+	var u Unit
+	var loc, opened, price sql.NullInt64
+	err := sc.Scan(&u.ID, &u.ProductID, &loc, &u.InitialQty, &u.RemainingQty, &u.Status,
+		&opened, &u.CreatedAt, &price, &p.Name, &p.Brand, &p.Unit, &p.PackageSize)
+	u.LocationID, u.OpenedAt, u.UnitPrice = nullInt(loc), nullInt(opened), nullInt(price)
+	return u, err
+}
+
 // UnitByID — экземпляр пользователя в любом статусе; чужой — ErrNotFound.
 func (s *Service) UnitByID(ctx context.Context, userID, unitID int64) (Unit, error) {
 	u, err := scanUnit(s.q.QueryRowContext(ctx,

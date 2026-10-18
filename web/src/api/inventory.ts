@@ -6,7 +6,15 @@ export type CatColor = 'blue' | 'berry' | 'olive' | 'ochre' | 'petrol' | 'plum' 
 export const CAT_COLORS: CatColor[] = ['blue', 'berry', 'olive', 'ochre', 'petrol', 'plum', 'slate', 'umber'];
 
 export type Category = { id: number; name: string; color: CatColor; sort: number; archived: boolean; products_count: number };
-export type Location = { id: number; name: string; sort: number; archived: boolean; units_count: number };
+export type Location = {
+  id: number;
+  name: string;
+  sort: number;
+  archived: boolean;
+  units_count: number;
+  /** Когда место проверяли инвентаризацией (секунды Unix); null — не проверялось. */
+  checked_at: number | null;
+};
 export type Store = { id: number; name: string; url: string; archived: boolean };
 
 export type Unit = 'ml' | 'pcs';
@@ -48,6 +56,11 @@ export type StockUnit = {
   opened_at: number | null;
   created_at: number;
   unit_price: number | null;
+};
+
+/** Экземпляр места для инвентаризации: данные позиции приходят вместе с ним. */
+export type InventoryUnit = StockUnit & {
+  product: { id: number; name: string; brand: string; unit: Unit; package_size: number };
 };
 
 /** Ответ корректировки и списания: экземпляр и созданное движение (null — без изменений). */
@@ -186,6 +199,9 @@ export const inventory = {
   updateLocation: (id: number, b: Partial<{ name: string; archived: boolean }>) =>
     send<Location>('PATCH', `/api/locations/${id}`, b),
   reorderLocations: (ids: number[]) => send<undefined>('POST', '/api/locations/reorder', { ids }),
+  locationUnits: async (id: number, signal?: AbortSignal) =>
+    (await get<{ units: InventoryUnit[] }>(`/api/locations/${id}/units`, signal)).units,
+  markLocationChecked: (id: number) => send<Location>('POST', `/api/locations/${id}/checked`),
 
   stores: async (archived = false, signal?: AbortSignal) =>
     (await get<{ stores: Store[] }>(`/api/stores${qs({ archived })}`, signal)).stores,

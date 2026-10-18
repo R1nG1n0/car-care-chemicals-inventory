@@ -29,6 +29,8 @@ func (s *Server) catalogRoutes() {
 	})
 	s.api("/api/locations/reorder", signedIn, methods{http.MethodPost: h.reorder(h.cat.ReorderLocations)})
 	s.api("/api/locations/{id}", signedIn, methods{http.MethodPatch: h.updateLocation})
+	s.api("/api/locations/{id}/units", signedIn, methods{http.MethodGet: h.locationUnits})
+	s.api("/api/locations/{id}/checked", signedIn, methods{http.MethodPost: h.locationChecked})
 
 	s.api("/api/stores", signedIn, methods{
 		http.MethodGet:  h.listStores,

@@ -116,8 +116,8 @@ describe('шкала', () => {
 
 describe('места, наклейка, порог', () => {
   const locs = new Map<number, Location>([
-    [5, { id: 5, name: 'Полка 1', sort: 0, archived: false, units_count: 1 }],
-    [6, { id: 6, name: 'Коробка 3', sort: 1, archived: false, units_count: 1 }],
+    [5, { id: 5, name: 'Полка 1', sort: 0, archived: false, units_count: 1, checked_at: null }],
+    [6, { id: 6, name: 'Коробка 3', sort: 1, archived: false, units_count: 1, checked_at: null }],
   ]);
   it('чип места', () => {
     expect(locationChip([5], locs)).toBe('Полка 1');

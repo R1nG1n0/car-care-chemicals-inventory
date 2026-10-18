@@ -22,6 +22,7 @@ import './styles/app.css';
 import './styles/stock.css';
 import './styles/shopping.css';
 import './styles/scanner.css';
+import './styles/inventory.css';
 import { App } from './App';
 import { listenInstallPrompt } from './app/install';
 import { syncThemeColor } from './app/themeColor';

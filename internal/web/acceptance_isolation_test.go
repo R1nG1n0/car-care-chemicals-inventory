@@ -84,6 +84,8 @@ func TestAccIsolationAllStage2(t *testing.T) {
 		{"порядок: чужая категория", http.MethodPost, "/api/categories/reorder", map[string]any{"ids": []int64{catA}}, 400},
 		{"переименование места", http.MethodPatch, stkPath("/api/locations/", locA, ""), map[string]any{"name": "Взлом"}, 404},
 		{"архив места", http.MethodPatch, stkPath("/api/locations/", locA, ""), map[string]any{"archived": true}, 404},
+		{"экземпляры чужого места", http.MethodGet, stkPath("/api/locations/", locA, "/units"), nil, 404},
+		{"отметка проверки чужого места", http.MethodPost, stkPath("/api/locations/", locA, "/checked"), nil, 404},
 		{"порядок: чужое место", http.MethodPost, "/api/locations/reorder", map[string]any{"ids": []int64{locA}}, 400},
 		{"порядок: своё и чужое место", http.MethodPost, "/api/locations/reorder", map[string]any{"ids": []int64{locB, locA}}, 400},
 		{"переименование магазина", http.MethodPatch, stkPath("/api/stores/", storeA, ""), map[string]any{"name": "Взлом"}, 404},

@@ -8,6 +8,7 @@ export const keys = {
   categories: (archived = false) => ['categories', archived] as const,
   locations: (archived = false) => ['locations', archived] as const,
   stores: (archived = false) => ['stores', archived] as const,
+  locationUnits: (id: number) => ['locationUnits', id] as const,
   products: (q: ProductQuery = {}) => ['products', q] as const,
   product: (id: number) => ['product', id] as const,
   brands: ['brands'] as const,
