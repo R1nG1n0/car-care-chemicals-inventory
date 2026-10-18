@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -60,10 +61,21 @@ func TestProductsSearchAndFilters(t *testing.T) {
 	eq("архивные", names(ProductFilter{Archived: true}), "Пена")
 	eq("без архивных", names(ProductFilter{}), "Микрофибра", "Шампунь Активный")
 
-	brands, _ := f.svc.Brands(f.ctx, f.u1)
-	if len(brands) != 2 || brands[0] != "Grass" || brands[1] != "КОХ Хеми" {
-		t.Fatalf("бренды: %v", brands)
+	// Бренды: архивные позиции не участвуют; из вариантов написания —
+	// самый частый, при равенстве — первый по алфавиту.
+	brandsEq := func(what string, want ...string) {
+		t.Helper()
+		got, err := f.svc.Brands(f.ctx, f.u1)
+		if err != nil || strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Fatalf("бренды, %s: %v %v; ожидалось %v", what, err, got, want)
+		}
 	}
+	brandsEq("без архивной Пены", "Grass")
+	f.product(f.u1, f.cat1, "Воск", "Koch", "ml", 250, nil)
+	f.product(f.u1, f.cat1, "Полироль", "KOCH", "ml", 250, nil)
+	brandsEq("поровну — по алфавиту", "Grass", "KOCH")
+	f.product(f.u1, f.cat1, "Чернитель", "Koch", "ml", 250, nil)
+	brandsEq("самый частый", "Grass", "Koch")
 
 	// Единицу нельзя менять при экземплярах; минимум сбрасывается в null.
 	if _, err := f.svc.UpdateProduct(f.ctx, f.u1, shampoo, ProductPatch{Unit: ptr("pcs")}); !errors.Is(err, ErrConflict) {

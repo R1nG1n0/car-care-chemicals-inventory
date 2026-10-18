@@ -52,7 +52,7 @@ func validateItems(ctx context.Context, q querier, userID int64, items []ItemInp
 	out := make([]productInfo, 0, len(items))
 	for _, it := range items {
 		if it.Qty < minQty || it.Qty > maxQty {
-			return nil, &ValidationError{Field: "qty", Message: "Количество — от 1 до 100 000"}
+			return nil, &ValidationError{Field: "qty", Message: fmt.Sprintf("Количество — от %d до 100 000", minQty)}
 		}
 		if seen[it.ProductID] {
 			return nil, &ValidationError{Field: "items", Message: "Позиция повторяется в нескольких строках"}

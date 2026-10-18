@@ -95,14 +95,16 @@ func revertDeltas(ctx context.Context, tx *sql.Tx, userID int64, ids []int64) (m
 }
 
 // revertUnit возвращает экземпляру остаток после удаления его движений с
-// суммой delta и выставляет статус. Возвращает id позиции.
+// суммой delta и выставляет статус. Ожить (sealed/open) в архивном месте
+// экземпляр не может — 409. Возвращает id позиции.
 func revertUnit(ctx context.Context, tx *sql.Tx, userID, unitID, delta, now int64) (int64, error) {
 	var productID, initial, remaining int64
-	var fromPurchase bool
+	var fromPurchase, active bool
 	err := tx.QueryRowContext(ctx, `
-		SELECT product_id, initial_qty, remaining_qty, purchase_line_id IS NOT NULL
+		SELECT product_id, initial_qty, remaining_qty, purchase_line_id IS NOT NULL,
+		       status IN ('sealed', 'open')
 		FROM units WHERE user_id = ? AND id = ?`, userID, unitID).
-		Scan(&productID, &initial, &remaining, &fromPurchase)
+		Scan(&productID, &initial, &remaining, &fromPurchase, &active)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, errUnitNotFound
 	}
@@ -112,6 +114,11 @@ func revertUnit(ctx context.Context, tx *sql.Tx, userID, unitID, delta, now int6
 	left := remaining - delta
 	if left < 0 || left > initial {
 		return 0, &ConflictError{Message: "Нельзя отменить: остаток экземпляра вышел бы за пределы объёма. Отмените сначала более поздние движения"}
+	}
+	if left > 0 && !active {
+		if err := unitPlaceActive(ctx, tx, userID, unitID); err != nil {
+			return 0, err
+		}
 	}
 
 	// Остались ли движения, которые вскрывают экземпляр.

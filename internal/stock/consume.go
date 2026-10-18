@@ -138,7 +138,7 @@ func consumeTx(ctx context.Context, tx *sql.Tx, userID int64, p productInfo, qty
 			return res, fmt.Errorf("расход экземпляра: %w", err)
 		}
 		if n, err := r.RowsAffected(); err != nil || n != 1 {
-			return res, &ConflictError{Message: "Остаток изменился, повторите"}
+			return res, errUnitChanged
 		}
 		id, err := insertMovement(ctx, tx, movementRow{
 			userID: userID, unitID: u.ID, typ: "consume", delta: -t.n, runID: runID, batch: batch, at: now,

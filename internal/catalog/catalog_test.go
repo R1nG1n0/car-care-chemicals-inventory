@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -230,5 +231,34 @@ func TestWithTx(t *testing.T) {
 	s, err := f.svc.WithTx(tx).Summary(f.ctx, f.u1, p)
 	if err != nil || s.Stock.Total != 500 {
 		t.Fatalf("сводка в транзакции: %v %+v", err, s.Stock)
+	}
+}
+
+// Экземпляры в карточке — в порядке расхода (как stock.consumeOrder):
+// вскрытые по opened_at (без него — в конце), затем запечатанные по дате
+// покупки, у введённых без покупки — по дню создания, затем по id.
+func TestProductUnitsConsumeOrder(t *testing.T) {
+	f := newFixture(t)
+	p := f.product(f.u1, f.cat1, "Шампунь", "", "ml", 1000, nil)
+	early := f.purchase(f.u1, p, nil, "2026-10-01", 1, 100000, 1_792_000_000)
+	late := f.purchase(f.u1, p, nil, "2026-10-20", 1, 100000, 1_792_000_000)
+	sealedLate := f.unit(f.u1, p, &late, nil, 1000, 1000, "sealed", nil)
+	sealedFree := f.unit(f.u1, p, nil, nil, 1000, 1000, "sealed", nil) // создан 2026-10-14
+	sealedEarly := f.unit(f.u1, p, &early, nil, 1000, 1000, "sealed", nil)
+	openNoDate := f.unit(f.u1, p, nil, nil, 1000, 500, "open", nil)
+	openDated := f.unit(f.u1, p, nil, nil, 1000, 500, "open", ptr[int64](1_792_000_000))
+	f.unit(f.u1, p, nil, nil, 1000, 0, "finished", nil)
+
+	d, err := f.svc.Product(f.ctx, f.u1, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []int64{openDated, openNoDate, sealedEarly, sealedFree, sealedLate}
+	got := make([]int64, 0, len(d.Units))
+	for _, u := range d.Units {
+		got = append(got, u.ID)
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("порядок экземпляров: %v, ожидался %v", got, want)
 	}
 }

@@ -125,9 +125,10 @@ func TestCatProductListHTTP(t *testing.T) {
 	catEqual(t, "архивные", catNames(t, c, "?archived=1"), "пена")
 	catEqual(t, "действующие", catNames(t, c, ""), "Микрофибра", "Шампунь Активный")
 
+	// Бренд архивной позиции не подсказывается.
 	rec := c.do(http.MethodGet, "/api/brands", nil)
 	expect(t, rec, http.StatusOK, "бренды")
-	if got := decode[struct{ Brands []string }](t, rec).Brands; strings.Join(got, "|") != "Grass|Кох Хеми" {
+	if got := decode[struct{ Brands []string }](t, rec).Brands; strings.Join(got, "|") != "Grass" {
 		t.Fatalf("бренды: %v", got)
 	}
 }

@@ -272,13 +272,18 @@ func (s *Service) UnitByID(ctx context.Context, userID, unitID int64) (Unit, err
 	return u, nil
 }
 
-// productUnits — экземпляры sealed/open позиции: вскрытые первыми (по
-// opened_at), затем запечатанные по дате покупки и id — в порядке расхода.
+// productUnits — экземпляры sealed/open позиции в порядке расхода, как
+// stock.consumeOrder: вскрытые первыми (по opened_at, без него — в конце),
+// затем запечатанные по дате покупки (у введённых без покупки — по дню
+// создания), затем по id.
 func (s *Service) productUnits(ctx context.Context, userID, productID int64) ([]Unit, error) {
 	rows, err := s.q.QueryContext(ctx, `SELECT `+unitColumns+unitFrom+`
 		LEFT JOIN purchases p ON p.user_id = l.user_id AND p.id = l.purchase_id
 		WHERE u.user_id = ? AND u.product_id = ? AND u.status IN ('sealed', 'open')
-		ORDER BY u.status <> 'open', u.opened_at IS NULL, u.opened_at, p.date IS NULL, p.date, u.id`,
+		ORDER BY CASE u.status WHEN 'open' THEN 0 ELSE 1 END,
+		         CASE u.status WHEN 'open' THEN COALESCE(u.opened_at, 9223372036854775807) END,
+		         CASE u.status WHEN 'sealed' THEN COALESCE(p.date, date(u.created_at, 'unixepoch')) END,
+		         u.id`,
 		userID, productID)
 	if err != nil {
 		return nil, fmt.Errorf("экземпляры позиции: %w", err)

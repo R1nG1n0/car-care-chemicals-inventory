@@ -102,6 +102,15 @@ func TestRecipeCRUDAndApply(t *testing.T) {
 	// Все нули — нечего списывать; шаблон не изменился.
 	_, err = e.svc.ApplyRecipe(e.ctx, uid, id, []ItemInput{{ProductID: shampoo, Qty: 0}})
 	stkIs[*ValidationError](t, err, "все нули")
+	// Границы qty в тексте ошибки: при применении 0 допустим, в шаблоне — нет.
+	_, err = e.svc.ApplyRecipe(e.ctx, uid, id, []ItemInput{{ProductID: shampoo, Qty: -1}})
+	if ve := stkIs[*ValidationError](t, err, "qty < 0 при применении"); ve.Field != "qty" || ve.Message != "Количество — от 0 до 100 000" {
+		t.Fatalf("qty при применении: %+v", ve)
+	}
+	_, err = e.svc.CreateRecipe(e.ctx, uid, RecipeInput{Name: "Ноль", Items: []ItemInput{{ProductID: shampoo, Qty: 0}}})
+	if ve := stkIs[*ValidationError](t, err, "qty 0 в шаблоне"); ve.Message != "Количество — от 1 до 100 000" {
+		t.Fatalf("qty в шаблоне: %+v", ve)
+	}
 
 	// Замена, порядок, удаление.
 	id2, err := e.svc.CreateRecipe(e.ctx, uid, RecipeInput{Name: "Стёкла", Items: []ItemInput{{ProductID: towel, Qty: 1}}})

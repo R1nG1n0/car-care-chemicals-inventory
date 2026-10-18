@@ -125,14 +125,15 @@ func (s *Service) CheckInvite(ctx context.Context, token string) (time.Time, err
 // на ещё не использованное приглашение: из двух одновременных принятий
 // успешно ровно одно.
 func (s *Service) AcceptInvite(ctx context.Context, token, login, password string) (User, error) {
+	// Сначала приглашение: по мёртвой ссылке ошибки полей бессмысленны.
+	// Проверка дешёвая и идёт до argon2id — на такую ссылку не тратим время.
+	if _, err := s.CheckInvite(ctx, token); err != nil {
+		return User{}, err
+	}
 	if err := ValidateLogin(login); err != nil {
 		return User{}, err
 	}
 	if err := ValidatePassword(password); err != nil {
-		return User{}, err
-	}
-	// Дешёвая проверка до argon2id: на мёртвую ссылку не тратим время.
-	if _, err := s.CheckInvite(ctx, token); err != nil {
 		return User{}, err
 	}
 	hash, err := s.HashPassword(password)

@@ -184,7 +184,9 @@ type productInfo struct {
 	PackageSize int64
 }
 
-// product читает свою позицию; чужая или несуществующая — 404.
+// product читает свою позицию; чужая или несуществующая — 404. Архивная
+// принимается везде (покупка, расход, шаблоны): архив только скрывает
+// позицию из списков — решение владельца, см. API.md.
 func product(ctx context.Context, q querier, userID, id int64) (productInfo, error) {
 	p := productInfo{ID: id}
 	err := q.QueryRowContext(ctx,

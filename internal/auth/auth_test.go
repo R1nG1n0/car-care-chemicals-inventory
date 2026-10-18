@@ -397,6 +397,10 @@ func TestInvites(t *testing.T) {
 	if _, err := s.AcceptInvite(ctx, token, "friend2", "friend-password"); !errors.Is(err, ErrInviteInvalid) {
 		t.Fatalf("повторное принятие: %v", err)
 	}
+	// По мёртвой ссылке — ошибка приглашения раньше ошибок полей.
+	if _, err := s.AcceptInvite(ctx, token, "", "x"); !errors.Is(err, ErrInviteInvalid) {
+		t.Fatalf("мёртвая ссылка с плохим вводом: %v", err)
+	}
 	if _, err := s.CheckInvite(ctx, token); !errors.Is(err, ErrInviteInvalid) {
 		t.Fatalf("использованное приглашение действует: %v", err)
 	}

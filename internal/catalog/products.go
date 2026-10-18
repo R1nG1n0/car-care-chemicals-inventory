@@ -329,10 +329,13 @@ func (s *Service) productPurchases(ctx context.Context, userID int64, p ProductS
 	return out, rows.Err()
 }
 
-// Brands — бренды позиций пользователя без повторов (без учёта регистра),
-// по алфавиту.
+// Brands — бренды неархивных позиций пользователя без повторов (без учёта
+// регистра), по алфавиту. Из вариантов написания одного бренда берётся
+// самый частый, при равенстве — первый по алфавиту.
 func (s *Service) Brands(ctx context.Context, userID int64) ([]string, error) {
-	rows, err := s.q.QueryContext(ctx, `SELECT DISTINCT brand FROM products WHERE user_id = ? AND brand <> ''`, userID)
+	rows, err := s.q.QueryContext(ctx, `
+		SELECT brand FROM products WHERE user_id = ? AND brand <> '' AND archived = 0
+		GROUP BY brand ORDER BY COUNT(*) DESC, brand`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("бренды: %w", err)
 	}

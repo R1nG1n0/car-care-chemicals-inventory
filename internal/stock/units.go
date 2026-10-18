@@ -50,6 +50,45 @@ func loadUnit(ctx context.Context, q querier, userID, id int64) (unitState, erro
 
 var errUnitInactive = &ConflictError{Message: "Экземпляр уже закончился или списан"}
 
+var errUnitPlaceArchived = &ConflictError{Message: "Место экземпляра в архиве — сначала верните место из архива"}
+
+// unitPlaceActive проверяет перед возвратом экземпляра в sealed/open, что
+// его место не в архиве: в архивном месте не может лежать экземпляров
+// (закончившийся мог остаться в месте, которое потом архивировали). Без
+// места — можно.
+func unitPlaceActive(ctx context.Context, q querier, userID, unitID int64) error {
+	var archived bool
+	err := q.QueryRowContext(ctx, `
+		SELECT l.archived FROM units u
+		JOIN locations l ON l.user_id = u.user_id AND l.id = u.location_id
+		WHERE u.user_id = ? AND u.id = ?`, userID, unitID).Scan(&archived)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("чтение места экземпляра: %w", err)
+	}
+	if archived {
+		return errUnitPlaceArchived
+	}
+	return nil
+}
+
+// errUnitChanged — экземпляр изменили между чтением и записью.
+var errUnitChanged = &ConflictError{Message: "Остаток изменился, повторите"}
+
+// updatedOne проверяет, что UPDATE с условием на прежнее состояние
+// изменил ровно одну строку; иначе — errUnitChanged.
+func updatedOne(r sql.Result, err error, what string) error {
+	if err != nil {
+		return fmt.Errorf("%s: %w", what, err)
+	}
+	if n, err := r.RowsAffected(); err != nil || n != 1 {
+		return errUnitChanged
+	}
+	return nil
+}
+
 // AddUnitInput — ввод имеющегося остатка (POST /api/units).
 type AddUnitInput struct {
 	ProductID    int64  `json:"product_id"`
@@ -138,7 +177,8 @@ func (s *Service) Move(ctx context.Context, userID, unitID, locationID int64) er
 }
 
 // Adjust задаёт фактический остаток (ФТ-5.5): движение adjust на разницу.
-// 0 → finished; больше 0 → open (у sealed, finished и written_off).
+// 0 → finished; больше 0 → open (у sealed, finished и written_off). Вернуть
+// в open экземпляр, чьё место в архиве, нельзя — 409.
 // Тот же остаток — ничего не меняется. Возвращает id движения; 0 — его нет.
 func (s *Service) Adjust(ctx context.Context, userID, unitID, remaining int64, reason string) (int64, error) {
 	reason, err := cleanText(reason, 0, maxReasonLen, "reason", "Причина — не длиннее 80 символов")
@@ -158,18 +198,27 @@ func (s *Service) Adjust(ctx context.Context, userID, unitID, remaining int64, r
 		if remaining == u.Remaining {
 			return nil
 		}
+		// Условие на прежние остаток и статус — защита от гонки, как в расходе.
+		var r sql.Result
 		if remaining == 0 {
-			_, err = tx.ExecContext(ctx, `
+			r, err = tx.ExecContext(ctx, `
 				UPDATE units SET remaining_qty = 0, status = 'finished', finished_at = ?
-				WHERE user_id = ? AND id = ?`, now, userID, unitID)
+				WHERE user_id = ? AND id = ? AND remaining_qty = ? AND status = ?`,
+				now, userID, unitID, u.Remaining, u.Status)
 		} else {
-			_, err = tx.ExecContext(ctx, `
+			if !u.active() {
+				if err := unitPlaceActive(ctx, tx, userID, unitID); err != nil {
+					return err
+				}
+			}
+			r, err = tx.ExecContext(ctx, `
 				UPDATE units SET remaining_qty = ?, status = 'open', opened_at = COALESCE(opened_at, ?),
 				                 finished_at = NULL
-				WHERE user_id = ? AND id = ?`, remaining, now, userID, unitID)
+				WHERE user_id = ? AND id = ? AND remaining_qty = ? AND status = ?`,
+				remaining, now, userID, unitID, u.Remaining, u.Status)
 		}
-		if err != nil {
-			return fmt.Errorf("корректировка экземпляра: %w", err)
+		if err := updatedOne(r, err, "корректировка экземпляра"); err != nil {
+			return err
 		}
 		moved, err = insertMovement(ctx, tx, movementRow{
 			userID: userID, unitID: unitID, typ: "adjust", delta: remaining - u.Remaining,
@@ -209,17 +258,20 @@ func (s *Service) Writeoff(ctx context.Context, userID, unitID int64, qty *int64
 			return &ShortageError{Available: u.Remaining, Unit: u.Unit}
 		}
 		left := u.Remaining - n
+		var r sql.Result
 		if left == 0 {
-			_, err = tx.ExecContext(ctx, `
+			r, err = tx.ExecContext(ctx, `
 				UPDATE units SET remaining_qty = 0, status = 'written_off', finished_at = ?
-				WHERE user_id = ? AND id = ? AND remaining_qty = ?`, now, userID, unitID, u.Remaining)
+				WHERE user_id = ? AND id = ? AND remaining_qty = ? AND status IN ('sealed', 'open')`,
+				now, userID, unitID, u.Remaining)
 		} else {
-			_, err = tx.ExecContext(ctx, `
+			r, err = tx.ExecContext(ctx, `
 				UPDATE units SET remaining_qty = ?, status = 'open', opened_at = COALESCE(opened_at, ?)
-				WHERE user_id = ? AND id = ? AND remaining_qty = ?`, left, now, userID, unitID, u.Remaining)
+				WHERE user_id = ? AND id = ? AND remaining_qty = ? AND status IN ('sealed', 'open')`,
+				left, now, userID, unitID, u.Remaining)
 		}
-		if err != nil {
-			return fmt.Errorf("списание экземпляра: %w", err)
+		if err := updatedOne(r, err, "списание экземпляра"); err != nil {
+			return err
 		}
 		moved, err = insertMovement(ctx, tx, movementRow{
 			userID: userID, unitID: unitID, typ: "writeoff", delta: -n, reason: reason, at: now,
