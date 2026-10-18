@@ -101,6 +101,13 @@ func TestSPA(t *testing.T) {
 	if rec := get(t, h, http.MethodGet, "/assets/missing.js"); rec.Code != http.StatusNotFound {
 		t.Fatalf("отсутствующий файл сборки: код %d, ожидался 404", rec.Code)
 	}
+	// iOS запрашивает эти файлы до apple-touch-icon.png; HTML с кодом 200
+	// вместо картинки даёт на главном экране букву вместо иконки.
+	for _, target := range []string{"/apple-touch-icon-precomposed.png", "/favicon.ico"} {
+		if rec := get(t, h, http.MethodGet, target); rec.Code != http.StatusNotFound {
+			t.Errorf("%s: код %d, ожидался 404", target, rec.Code)
+		}
+	}
 
 	if rec := get(t, h, http.MethodPost, "/"); rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST /: код %d, ожидался 405", rec.Code)

@@ -47,9 +47,11 @@ func (s *Server) handleSPA(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		// Отсутствующий файл сборки — 404, а не index.html: иначе браузер
-		// получил бы HTML вместо скрипта и молча сломался.
-		if strings.HasPrefix(name, assetsPrefix) {
+		// Отсутствующий файл — 404, а не index.html: иначе браузер получил бы
+		// HTML вместо скрипта и молча сломался, а iOS приняла бы его за
+		// /apple-touch-icon-precomposed.png и нарисовала букву вместо иконки.
+		// У адресов экранов (/items/1, /login) расширения нет.
+		if strings.HasPrefix(name, assetsPrefix) || path.Ext(name) != "" {
 			http.NotFound(w, r)
 			return
 		}
