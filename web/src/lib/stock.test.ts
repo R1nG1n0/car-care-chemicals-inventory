@@ -91,11 +91,13 @@ describe('подпись остатка', () => {
   it('штуки', () => {
     expect(openLine(stock({ total: 6, open_qty: 6, open_capacity: 10 }), 'pcs')).toBe('в пачке 6 из 10');
     expect(openLine(stock({ total: 26, open_qty: 6, open_capacity: 10, sealed_count: 2 }), 'pcs')).toBe('в пачке 6 из 10 · ещё 2 пачки');
+    expect(openLine(stock({ total: 5, sealed_count: 5 }), 'pcs', 1)).toBe('запечатаны: 5 шт');
+    expect(openLine(stock({ total: 20, sealed_count: 2 }), 'pcs', 10)).toBe('запечатаны: 2 пачки × 10');
   });
   it('все запечатаны и пусто', () => {
     expect(openLine(stock({ total: 500, sealed_count: 1 }), 'ml')).toBe('запечатана');
-    expect(norm(openLine(stock({ total: 2000, sealed_count: 2 }), 'ml'))).toBe('запечатаны: 2 × 1 000');
-    expect(openLine(stock({ total: 1501, sealed_count: 2 }), 'ml')).toBe('запечатаны: 2');
+    expect(norm(openLine(stock({ total: 2000, sealed_count: 2 }), 'ml', 1000))).toBe('запечатаны: 2 × 1 000');
+    expect(norm(openLine(stock({ total: 1501, sealed_count: 2 }), 'ml', 1000))).toBe('запечатаны: 2 · всего 1 501');
     expect(openLine(stock({}), 'ml')).toBe('нет в наличии');
   });
   it('мета карточки с минимумом', () => {

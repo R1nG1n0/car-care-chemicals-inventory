@@ -279,18 +279,18 @@ func TestAddUnitMoveAdjustWriteoff(t *testing.T) {
 	stkIs[*ValidationError](t, e.svc.Move(e.ctx, uid, full, box), "архивное место")
 
 	// Корректировка: sealed → open, 0 → finished, > 0 у finished → open.
-	if err := e.svc.Adjust(e.ctx, uid, full, 900, "Пролил"); err != nil {
+	if _, err := e.svc.Adjust(e.ctx, uid, full, 900, "Пролил"); err != nil {
 		t.Fatal(err)
 	}
 	stkWant(t, e.stkUnit(full), 900, "open")
-	if err := e.svc.Adjust(e.ctx, uid, full, 0, ""); err != nil {
+	if _, err := e.svc.Adjust(e.ctx, uid, full, 0, ""); err != nil {
 		t.Fatal(err)
 	}
 	if r := e.stkUnit(full); r.Status != "finished" || !r.Finished.Valid {
 		t.Fatalf("после корректировки в 0: %+v", r)
 	}
 	stkIs[*ConflictError](t, e.svc.Move(e.ctx, uid, full, shelf), "перемещение законченного")
-	if err := e.svc.Adjust(e.ctx, uid, full, 300, ""); err != nil {
+	if _, err := e.svc.Adjust(e.ctx, uid, full, 300, ""); err != nil {
 		t.Fatal(err)
 	}
 	if r := e.stkUnit(full); r.Status != "open" || r.Finished.Valid || r.Remaining != 300 {
@@ -299,26 +299,29 @@ func TestAddUnitMoveAdjustWriteoff(t *testing.T) {
 	if n := e.stkCount(`SELECT COUNT(*) FROM movements WHERE unit_id = ? AND type = 'adjust'`, full); n != 4 {
 		t.Fatalf("движений adjust: %d", n)
 	}
-	stkIs[*ValidationError](t, e.svc.Adjust(e.ctx, uid, full, 1001, ""), "больше объёма")
+	stkIs[*ValidationError](t, second(e.svc.Adjust(e.ctx, uid, full, 1001, "")), "больше объёма")
 
 	// Списание: часть, больше остатка, всё.
 	ten := int64(10)
-	if err := e.svc.Writeoff(e.ctx, uid, full, &ten, "Испорчено"); err != nil {
+	if _, err := e.svc.Writeoff(e.ctx, uid, full, &ten, "Испорчено"); err != nil {
 		t.Fatal(err)
 	}
 	stkWant(t, e.stkUnit(full), 290, "open")
 	big := int64(291)
-	if se := stkIs[*ShortageError](t, e.svc.Writeoff(e.ctx, uid, full, &big, "Испорчено"), "больше остатка"); se.Available != 290 {
+	if se := stkIs[*ShortageError](t, second(e.svc.Writeoff(e.ctx, uid, full, &big, "Испорчено")), "больше остатка"); se.Available != 290 {
 		t.Fatalf("available %d", se.Available)
 	}
-	stkIs[*ValidationError](t, e.svc.Writeoff(e.ctx, uid, full, nil, " "), "без причины")
-	if err := e.svc.Writeoff(e.ctx, uid, full, nil, "Ошибка ввода"); err != nil {
+	stkIs[*ValidationError](t, second(e.svc.Writeoff(e.ctx, uid, full, nil, " ")), "без причины")
+	if _, err := e.svc.Writeoff(e.ctx, uid, full, nil, "Ошибка ввода"); err != nil {
 		t.Fatal(err)
 	}
 	stkWant(t, e.stkUnit(full), 0, "written_off")
 	// Корректировка списанного возвращает его в open.
-	if err := e.svc.Adjust(e.ctx, uid, full, 50, ""); err != nil {
+	if _, err := e.svc.Adjust(e.ctx, uid, full, 50, ""); err != nil {
 		t.Fatal(err)
 	}
 	stkWant(t, e.stkUnit(full), 50, "open")
 }
+
+// second отбрасывает первое значение (id движения) и оставляет ошибку.
+func second(_ int64, err error) error { return err }

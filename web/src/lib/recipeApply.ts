@@ -1,26 +1,19 @@
 // Шаблоны расхода (ФТ-8): строки применения, нехватка, «из последнего расхода».
-import type { Movement, RecipeInput, Unit } from '../api';
-import { formatQty } from './format';
-import { unitLabel } from './stock';
+import type { ApplyResult, Movement, Recipe, RecipeInput, Unit } from '../api';
+import { formatMoney, formatQty } from './format';
+import { MAX_QTY, parseQty } from './qty';
+import { qtyText, unitLabel } from './stock';
+import { plural, POSITIONS } from './text';
 
-export const MAX_QTY = 100_000;
+export { MAX_QTY };
 
-/** Шаг кнопок ± в строке шаблона: для мл — малый шаг из профиля, для шт — 1. */
-export function rowStep(unit: Unit, stepSmall: number): number {
-  return unit === 'pcs' ? 1 : stepSmall;
-}
-
-export function clampQty(n: number): number {
-  if (!Number.isFinite(n)) return 0;
-  return Math.min(MAX_QTY, Math.max(0, Math.trunc(n)));
-}
-
-/** Текст поля → количество; пусто — 0, мусор — null. */
-export function parseQty(s: string): number | null {
-  const t = s.replace(/\s/g, '');
-  if (t === '') return 0;
-  if (!/^\d+$/.test(t)) return null;
-  return clampQty(Number(t));
+/**
+ * Текст поля строки шаблона → количество; пусто — 0, мусор — null.
+ * Число больше 100 000 не обрезается: форма покажет ошибку, а не тихую подмену.
+ */
+export function parseRowQty(s: string): number | null {
+  if (s.replace(/\s/gu, '') === '') return 0;
+  return parseQty(s);
 }
 
 /** «Есть только 80 мл — спишется 80» или null, если хватает. */
@@ -45,18 +38,37 @@ export function qtyChanged(rows: ApplyRow[], original: ApplyRow[]): boolean {
 
 /**
  * Последний ручной расход по журналу (ФТ-8.5). Журнал — новые сверху.
- * Одно нажатие «Списать» — движения consume с одинаковым created_at без recipe_run_id
- * (batch_id в JSON не отдаётся). Количества одной позиции складываются,
+ * Одно нажатие «Списать» — движения consume с одним batch_id без recipe_run_id
+ * (добор из второй бутылки — то же нажатие). Количества одной позиции складываются,
  * порядок — как в журнале снизу вверх (как списывали).
  * Возвращает null, если ручного расхода в этой странице журнала нет.
  */
 export function lastManualConsume(movements: Movement[]): ApplyRow[] | null {
-  const first = movements.find((m) => m.type === 'consume' && m.recipe_run_id === null);
+  const manual = (m: Movement) => m.type === 'consume' && m.recipe_run_id === null;
+  const first = movements.find(manual);
   if (!first) return null;
-  const group = movements.filter((m) => m.type === 'consume' && m.recipe_run_id === null && m.created_at === first.created_at);
+  const group = movements.filter((m) => manual(m) && m.batch_id === first.batch_id);
   const byProduct = new Map<number, number>();
   for (const m of [...group].reverse()) byProduct.set(m.product_id, (byProduct.get(m.product_id) ?? 0) - m.qty_delta);
   return [...byProduct].map(([product_id, qty]) => ({ product_id, qty })).filter((r) => r.qty > 0);
+}
+
+/** «Koch Gsf — списано 400 мл из 600 мл; Позиция» — отчёт о нехватке после применения. */
+export function shortageReport(shortages: ApplyResult['shortages'], items: readonly Pick<Recipe['items'][number], 'product_id' | 'product'>[]): string {
+  return shortages
+    .map((s) => {
+      const it = items.find((i) => i.product_id === s.product_id);
+      if (!it) return 'Позиция';
+      const u = it.product.unit;
+      return `${it.product.name} — списано ${qtyText(s.consumed, u)} из ${qtyText(s.requested, u)}`;
+    })
+    .join('; ');
+}
+
+/** Подпись строки шаблона в списке: «4 позиции · ≈ 1 272,20 ₽». */
+export function recipeSub(r: Pick<Recipe, 'items' | 'cost'>): string {
+  const n = r.items.length;
+  return [`${n} ${plural(n, POSITIONS)}`, r.cost !== null ? `≈ ${formatMoney(r.cost)}` : ''].filter(Boolean).join(' · ');
 }
 
 export type RecipeRowDraft = { key: number; product_id: number | null; qty: string };
@@ -76,10 +88,10 @@ export function validateRecipe(name: string, rows: RecipeRowDraft[]): { ok: true
     if (r.product_id === null) re.product = 'Выберите позицию';
     else if (seen.has(r.product_id)) re.product = 'Позиция уже есть в шаблоне';
     if (r.product_id !== null) seen.add(r.product_id);
-    const q = parseQty(r.qty);
-    if (q === null || q < 1) re.qty = 'От 1 до 100 000';
+    const q = parseRowQty(r.qty);
+    if (q === null || q < 1 || q > MAX_QTY) re.qty = 'От 1 до 100 000';
     if (re.product || re.qty) e.byRow[r.key] = re;
   }
   if (e.name || e.rows || Object.keys(e.byRow).length > 0) return { ok: false, errors: e };
-  return { ok: true, value: { name: n, items: rows.map((r) => ({ product_id: r.product_id!, qty: parseQty(r.qty)! })) } };
+  return { ok: true, value: { name: n, items: rows.map((r) => ({ product_id: r.product_id!, qty: parseRowQty(r.qty)! })) } };
 }

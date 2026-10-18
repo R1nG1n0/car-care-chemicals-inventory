@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { kopecksToInput, parseRubles } from './shopMoney';
+import { kopecksToInput, parseRubles } from './money';
 
 describe('parseRubles', () => {
   it('целые рубли и разряды через пробел', () => {

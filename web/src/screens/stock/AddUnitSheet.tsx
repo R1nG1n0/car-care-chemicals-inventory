@@ -2,15 +2,15 @@
 // объём упаковки (по умолчанию размер упаковки позиции), сколько в ней осталось, место.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
-import { inventory, isApiError, isNetworkError, type ProductSummary } from '../../api';
+import { fieldErrors, inventory, type ProductSummary } from '../../api';
 import { invalidateStock } from '../../app/queries';
 import { useToast } from '../../app/toast';
 import { QtyInput } from '../../components/QtyInput';
 import { Sheet } from '../../components/Sheet';
-import { useStockRefs } from '../../components/StockRefs';
+import { useStockRefs } from '../../components/refs';
 import { busyProps, Field } from '../../components/ui';
 import { qtyText, unitLabel } from '../../lib/stock';
-import { parseQty } from '../../lib/stockQty';
+import { MAX_QTY, parseQty } from '../../lib/qty';
 
 type Props = { open: boolean; product: ProductSummary; onClose: () => void; defaultLocation: number | null };
 
@@ -40,13 +40,9 @@ function AddUnitBody({ product: p, onClose, defaultLocation }: Omit<Props, 'open
       await invalidateStock(qc);
       toast.show({ text: `Добавлено: ${qtyText(u.remaining_qty, p.unit)} · ${p.name}` });
     },
-    onError: (error) => {
-      const err: unknown = error;
-      if (isNetworkError(err)) return setErrors({ form: 'Нет связи — не сохранено' });
-      if (!isApiError(err)) return setErrors({ form: 'Не получилось' });
-      if (err.field === 'initial_qty') setErrors({ initial: err.message });
-      else if (err.field === 'remaining_qty') setErrors({ left: err.message });
-      else setErrors({ form: err.message });
+    onError: (err) => {
+      const f = fieldErrors(err, ['initial_qty', 'remaining_qty'] as const);
+      setErrors({ initial: f.initial_qty, left: f.remaining_qty, form: f.form });
     },
   });
 
@@ -54,7 +50,7 @@ function AddUnitBody({ product: p, onClose, defaultLocation }: Omit<Props, 'open
     e.preventDefault();
     if (mut.isPending) return;
     const n = parseQty(left);
-    if (cap === null || cap < 1 || cap > 100_000) return setErrors({ initial: 'Целое число от 1 до 100 000' });
+    if (cap === null || cap < 1 || cap > MAX_QTY) return setErrors({ initial: 'Целое число от 1 до 100 000' });
     if (n === null || n < 1 || n > cap) return setErrors({ left: `От 1 до ${qtyText(cap, p.unit)}` });
     setErrors({});
     mut.mutate({ remaining_qty: n, initial_qty: cap });

@@ -1,18 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { canRevert, movementTitle, parseMoney, purchaseDay, suggestBrands, unitPriceText, validateProduct, type ProductFields } from './stockMoney';
+import { unitPriceText } from './money';
+import { canRevert, movementTitle } from './movements';
+import { suggestBrands, validateProduct, type ProductFields } from './product';
+import { purchaseDay } from './text';
 
 const norm = (s: string | null) => (s ?? '').replace(/\s/gu, ' ');
 
 describe('деньги', () => {
-  it('разбор суммы в копейки', () => {
-    expect(parseMoney('1 190')).toBe(119000);
-    expect(parseMoney('1190,5')).toBe(119050);
-    expect(parseMoney('1190.05 ₽')).toBe(119005);
-    expect(parseMoney('0')).toBe(0);
-    expect(parseMoney('')).toBeNull();
-    expect(parseMoney('12,345')).toBeNull();
-    expect(parseMoney('abc')).toBeNull();
-  });
   it('цена за 100 мл и за шт', () => {
     const row = { purchase_id: 1, date: '2026-10-02', store: null, packages: 2, price_per_package: 119000, price_per_100: 11900 };
     expect(norm(unitPriceText(row, 'ml'))).toBe('119 ₽ за 100 мл');

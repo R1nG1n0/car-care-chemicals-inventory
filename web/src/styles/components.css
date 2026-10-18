@@ -133,12 +133,13 @@ body {
 /* ---------- Ввод количества (ФТ-5.8) ---------- */
 .g-qty { display: grid; gap: var(--sp-2); }
 .g-qty__value {
-  display: flex; align-items: baseline; gap: 6px;
+  display: flex; align-items: center; gap: 6px; cursor: text;
   border: var(--bw) solid var(--field-line); border-radius: var(--r-control);
-  background: var(--bg); padding: 2px var(--sp-3);
+  background: var(--bg); padding: 0 var(--sp-3);
 }
+/* Поле — на всю высоту рамки: зона нажатия не меньше --tap */
 .g-qty__value input {
-  width: 100%; min-width: 0; border: 0; background: transparent; color: var(--text); padding: 0;
+  width: 100%; min-width: 0; height: var(--tap-lg); border: 0; background: transparent; color: var(--text); padding: 0;
   font: var(--fw-heavy) var(--fs-32) / 1.2 var(--font-display); font-variant-numeric: tabular-nums;
 }
 .g-qty__value input:focus { outline: none; }
@@ -222,6 +223,7 @@ body {
 .g-side .ti { font-size: 20px; }
 
 /* ---------- Нижняя шторка и уведомление ---------- */
+.g-scrim { background: var(--scrim); }
 .g-sheet {
   background: var(--surface); border: var(--bw) solid var(--line); border-bottom: 0;
   border-radius: var(--r-sheet) var(--r-sheet) 0 0; padding: var(--sp-2) var(--sp-4) var(--sp-4);
@@ -250,4 +252,34 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .g-press:active, .g-press:hover { transform: none; }
+}
+
+/* ---------- Цвет категории классом (refs.catClass) ----------
+   --cat — полоса, шапка, точка; --sw — образец цвета в выборе. */
+.cat--blue { --cat: var(--cat-blue); --sw: var(--cat-blue); }
+.cat--berry { --cat: var(--cat-berry); --sw: var(--cat-berry); }
+.cat--olive { --cat: var(--cat-olive); --sw: var(--cat-olive); }
+.cat--ochre { --cat: var(--cat-ochre); --sw: var(--cat-ochre); }
+.cat--petrol { --cat: var(--cat-petrol); --sw: var(--cat-petrol); }
+.cat--plum { --cat: var(--cat-plum); --sw: var(--cat-plum); }
+.cat--slate { --cat: var(--cat-slate); --sw: var(--cat-slate); }
+.cat--umber { --cat: var(--cat-umber); --sw: var(--cat-umber); }
+
+/* ---------- Выбор из списка (магазин, место, категория) — вид поля .g-input ---------- */
+select.g-input {
+  appearance: none; padding-right: 36px; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text) 50%), linear-gradient(135deg, var(--text) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
+  background-size: 6px 6px; background-repeat: no-repeat;
+}
+
+/* Компактный ввод количества (строка шаблона): число мельче, кнопки не ниже --tap */
+.app-qty--compact { gap: var(--sp-2); }
+.app-qty--compact .g-qty__value input { height: var(--tap); font-size: var(--fs-20); }
+.app-qty--compact .g-qty__steps .g-btn { min-height: var(--tap); font-size: var(--fs-14); }
+
+/* Только для экранного диктора: объявления aria-live */
+.g-sr {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap; border: 0;
 }

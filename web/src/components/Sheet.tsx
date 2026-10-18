@@ -4,7 +4,7 @@
 // Esc и фокус относятся к верхней. Рисуется в document.body.
 import { useEffect, useId, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { FLICK, REDUCED_MOTION, usePresence } from './StockHooks';
+import { FLICK, REDUCED_MOTION, usePresence } from './hooks';
 
 export type SheetProps = {
   open: boolean;
@@ -54,7 +54,7 @@ function SheetBody({ leaving, onClose, label, title, children, footer, className
     const me = Symbol('sheet');
     stack.push(me);
     locks += 1;
-    document.documentElement.classList.add('stock-sheet-open');
+    document.documentElement.classList.add('app-sheet-open');
     const back = document.activeElement as HTMLElement | null;
     const el = sheet.current;
     const first = el?.querySelector<HTMLElement>('[data-autofocus]') ?? el?.querySelector<HTMLElement>(FOCUSABLE) ?? el;
@@ -72,7 +72,7 @@ function SheetBody({ leaving, onClose, label, title, children, footer, className
       window.removeEventListener('keydown', onKey);
       stack.splice(stack.indexOf(me), 1);
       locks -= 1;
-      if (locks === 0) document.documentElement.classList.remove('stock-sheet-open');
+      if (locks === 0) document.documentElement.classList.remove('app-sheet-open');
       if (back?.isConnected) back.focus({ preventScroll: true });
     };
   }, []);
@@ -125,11 +125,11 @@ function SheetBody({ leaving, onClose, label, title, children, footer, className
   const cls = (base: string) => `${base}${leaving ? ' is-leaving' : ''}`;
 
   return (
-    <div className="stock-layer">
-      <div ref={scrim} className={cls('g-scrim stock-scrim')} onClick={() => close.current()} aria-hidden="true" />
+    <div className="app-layer">
+      <div ref={scrim} className={cls('g-scrim')} onClick={() => close.current()} aria-hidden="true" />
       <section
         ref={sheet}
-        className={cls(`g-sheet stock-sheet${className ? ` ${className}` : ''}`)}
+        className={cls(`g-sheet app-sheet${className ? ` ${className}` : ''}`)}
         role="dialog"
         aria-modal="true"
         aria-label={title ? undefined : label}
@@ -137,16 +137,16 @@ function SheetBody({ leaving, onClose, label, title, children, footer, className
         tabIndex={-1}
         inert={leaving || undefined}
       >
-        <div className="stock-sheet__grab" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onEnd} onPointerCancel={onEnd}>
+        <div className="app-sheet__grab" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onEnd} onPointerCancel={onEnd}>
           <div className="g-sheet__grab" />
         </div>
         {title && (
-          <h2 className="stock-sheet__title" id={titleId}>
+          <h2 className="app-sheet__title" id={titleId}>
             {title}
           </h2>
         )}
-        <div className="stock-sheet__body">{children}</div>
-        {footer && <div className="stock-sheet__foot">{footer}</div>}
+        <div className="app-sheet__body">{children}</div>
+        {footer && <div className="app-sheet__foot">{footer}</div>}
       </section>
     </div>
   );

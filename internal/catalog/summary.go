@@ -66,6 +66,8 @@ type Movement struct {
 	ToLocationID   *int64 `json:"to_location_id"`
 	Reason         string `json:"reason"`
 	RecipeRunID    *int64 `json:"recipe_run_id"`
+	// BatchID — группа запроса (id первого движения); одиночное — своё id.
+	BatchID int64 `json:"batch_id"`
 	// Cost — |qty_delta| × цена упаковки ÷ initial_qty, к ближайшему; null — нет цены.
 	Cost      *int64 `json:"cost"`
 	CreatedAt int64  `json:"created_at"`
@@ -294,7 +296,7 @@ func (s *Service) productUnits(ctx context.Context, userID, productID int64) ([]
 }
 
 const movementSelect = `SELECT m.id, m.unit_id, u.product_id, m.type, m.qty_delta,
-	m.from_location_id, m.to_location_id, m.reason, m.recipe_run_id, m.created_at,
+	m.from_location_id, m.to_location_id, m.reason, m.recipe_run_id, COALESCE(m.batch_id, m.id), m.created_at,
 	u.initial_qty, l.price_per_package
 	FROM movements m
 	JOIN units u ON u.user_id = m.user_id AND u.id = m.unit_id
@@ -312,7 +314,7 @@ func (s *Service) queryMovements(ctx context.Context, query string, args ...any)
 		var from, to, run, price sql.NullInt64
 		var initial int64
 		if err := rows.Scan(&m.ID, &m.UnitID, &m.ProductID, &m.Type, &m.QtyDelta, &from, &to,
-			&m.Reason, &run, &m.CreatedAt, &initial, &price); err != nil {
+			&m.Reason, &run, &m.BatchID, &m.CreatedAt, &initial, &price); err != nil {
 			return nil, fmt.Errorf("движения: %w", err)
 		}
 		m.FromLocationID, m.ToLocationID, m.RecipeRunID = nullInt(from), nullInt(to), nullInt(run)

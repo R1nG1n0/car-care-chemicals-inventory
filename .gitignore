@@ -28,3 +28,4 @@ web/dist/*
 # macOS и exFAT
 .DS_Store
 ._*
+*.tsbuildinfo

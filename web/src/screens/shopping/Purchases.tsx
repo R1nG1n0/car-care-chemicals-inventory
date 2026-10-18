@@ -4,15 +4,12 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
 import { inventory, isApiError, type PurchaseShort } from '../../api';
 import { keys } from '../../app/queries';
-import { ShopBack, ShopLoadError, ShopSkelList } from '../../components/ShopUi';
-import { busyProps, Empty, Ico } from '../../components/ui';
+import { busyProps, Empty, Ico, LoadError, SkelList } from '../../components/ui';
 import { formatMoney } from '../../lib/format';
-import { purchaseDay } from '../../lib/stockMoney';
-import { plural } from '../../lib/text';
+import { PACKAGES, plural, POSITIONS, purchaseDay } from '../../lib/text';
+import { BackLink } from '../../components/BackLink';
 
 const PAGE = 50;
-const POSITIONS = ['позиция', 'позиции', 'позиций'] as const;
-const PACKAGES = ['упаковка', 'упаковки', 'упаковок'] as const;
 
 export function PurchasesHistory() {
   const q = useInfiniteQuery({
@@ -27,11 +24,11 @@ export function PurchasesHistory() {
   return (
     <div className="app-stack app-stack--fill">
       <div className="app-stack">
-        <ShopBack to="/shopping" label="Купить" />
+        <BackLink to="/shopping" label="Назад" history />
         <h1 className="g-title">Покупки</h1>
       </div>
-      {q.isPending && <ShopSkelList label="Покупки загружаются" rows={5} />}
-      {q.isError && !q.data && <ShopLoadError id="pur-err" error={q.error} what="Покупки" onRetry={() => void q.refetch()} />}
+      {q.isPending && <SkelList label="Покупки загружаются" rows={5} />}
+      {q.isError && !q.data && <LoadError id="pur-err" error={q.error} what="Покупки" onRetry={() => void q.refetch()} />}
       {q.data && rows.length === 0 && (
         <Empty
           id="pur-empty"
@@ -86,12 +83,12 @@ export function PurchaseView() {
   return (
     <div className="app-stack app-stack--fill">
       <div className="app-stack">
-        <ShopBack to="/purchases" label="Покупки" />
+        <BackLink to="/purchases" label="Покупки" />
         <h1 className="g-title">{p ? `${purchaseDay(p.date)}${p.store ? ` · ${p.store}` : ''}` : 'Покупка'}</h1>
       </div>
-      {q.isPending && <ShopSkelList label="Покупка загружается" rows={3} />}
+      {q.isPending && <SkelList label="Покупка загружается" rows={3} />}
       {q.isError && isApiError(q.error, 404) && <Empty id="pv-404" icon={IconReceipt} title="Покупка не найдена" text="Возможно, ссылка устарела." />}
-      {q.isError && !isApiError(q.error, 404) && <ShopLoadError id="pv-err" error={q.error} what="Покупка" onRetry={() => void q.refetch()} />}
+      {q.isError && !isApiError(q.error, 404) && <LoadError id="pv-err" error={q.error} what="Покупка" onRetry={() => void q.refetch()} />}
       {p && (
         <div className="app-stack">
           <div className="g-list">

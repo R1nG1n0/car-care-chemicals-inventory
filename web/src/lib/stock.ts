@@ -69,8 +69,12 @@ const PACKS = ['пачка', 'пачки', 'пачек'] as const;
 /**
  * Подпись под шкалой (дизайн-система 1.1): «вскрыта: 320 из 1 000 · ещё 2 запечатаны»,
  * «в пачке 6 из 10», «нет в наличии».
+ *
+ * «запечатаны: 2 × 1 000» — только когда объём доказан: остаток ровно равен
+ * числу бутылок × размер упаковки позиции. Иначе (размер меняли между покупками,
+ * 1000 + 500) — без «× N», с суммой: по одной сумме равенство объёмов не проверить.
  */
-export function openLine(stock: Stock, unit: Unit): string {
+export function openLine(stock: Stock, unit: Unit, packageSize?: number): string {
   if (stock.total === 0) return 'нет в наличии';
   const n = stock.sealed_count;
   if (stock.open_qty !== null && stock.open_capacity !== null) {
@@ -84,10 +88,11 @@ export function openLine(stock: Stock, unit: Unit): string {
   }
   // Вскрытой нет: все запечатаны
   if (n === 1) return unit === 'pcs' ? 'пачка запечатана' : 'запечатана';
-  const each = stock.total / n;
+  // Штучное по одной в упаковке: «5 пачек × 1» — шум, пишем «5 шт»
+  if (unit === 'pcs' && packageSize === 1 && stock.total === n) return `запечатаны: ${n} шт`;
   const what = unit === 'pcs' ? `${n} ${plural(n, PACKS)}` : `${n}`;
-  if (Number.isInteger(each)) return `запечатаны: ${what} × ${formatQty(each)}`;
-  return `запечатаны: ${what}`;
+  if (packageSize !== undefined && packageSize > 0 && stock.total === n * packageSize) return `запечатаны: ${what} × ${formatQty(packageSize)}`;
+  return `запечатаны: ${what} · всего ${formatQty(stock.total)}`;
 }
 
 /** Доля вскрытой бутылки для --lv (0…1). Вскрытой нет — полная запечатанная или пусто. */
@@ -125,7 +130,7 @@ export function crossedMin(before: Pick<ProductSummary, 'low'> | undefined, afte
 
 /** Строка мета под крупным числом в карточке позиции: «… · мин. 500 мл». */
 export function productMeta(p: ProductSummary): string {
-  const parts = [openLine(p.stock, p.unit)];
+  const parts = [openLine(p.stock, p.unit, p.package_size)];
   if (p.min_stock !== null) parts.push(`мин. ${qtyText(p.min_stock, p.unit)}`);
   return parts.join(' · ');
 }

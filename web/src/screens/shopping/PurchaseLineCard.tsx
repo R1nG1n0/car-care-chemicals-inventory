@@ -3,11 +3,11 @@ import { IconMinus, IconPlus, IconX } from '@tabler/icons-react';
 import type { Category, Location, ProductSummary } from '../../api';
 import { ProductPicker } from '../../components/ProductPicker';
 import { ShopRefSelect } from '../../components/ShopRefSelect';
-import { catClass } from '../../components/ShopUi';
 import { Ico } from '../../components/ui';
 import { formatMoney } from '../../lib/format';
 import { clampPackages, lineTotal, MAX_PACKAGES, type LineDraft, type LineErrors } from '../../lib/shopPurchase';
 import { unitLabel } from '../../lib/stock';
+import { catClass } from '../../components/refs';
 
 type Props = {
   n: number;
@@ -29,6 +29,11 @@ export function PurchaseLineCard({ n, line, product, category, locations, exclud
   const set = (p: Partial<LineDraft>) => onChange({ ...line, ...p });
   const pkg = (d: number) => set({ packages: clampPackages(line.packages + d) });
   const sum = lineTotal(line);
+  // Без выбора место берётся у прошлого экземпляра позиции (docs/API.md, покупки).
+  // Нет экземпляров — нет и «прошлого раза»: экземпляр останется без места.
+  const lastPlace = product?.location_ids[0];
+  const lastName = lastPlace !== undefined ? locations.find((l) => l.id === lastPlace)?.name : undefined;
+  const noneLabel = lastPlace === undefined ? 'Без места' : lastName ? `Как в прошлый раз · ${lastName}` : 'Как в прошлый раз';
 
   return (
     <section className={`g-card shop-line ${catClass(category?.color)}`} aria-labelledby={`${id}-h`}>
@@ -111,7 +116,7 @@ export function PurchaseLineCard({ n, line, product, category, locations, exclud
           value={line.location_id}
           onChange={(location_id) => set({ location_id })}
           options={locations}
-          noneLabel="Как в прошлый раз"
+          noneLabel={noneLabel}
           newLabel="Новое место…"
           newPlaceholder="Полка 2"
           onCreate={onCreateLocation}

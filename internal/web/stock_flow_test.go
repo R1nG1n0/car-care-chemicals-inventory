@@ -30,7 +30,8 @@ func TestStockConsumeFlow(t *testing.T) {
 	if got.Cost == nil || *got.Cost != 142800 {
 		t.Fatalf("себестоимость: %v", got.Cost)
 	}
-	if got.Movements[0].Type != "consume" || got.Movements[0].QtyDelta != -500 {
+	if got.Movements[0].Type != "consume" || got.Movements[0].QtyDelta != -500 ||
+		got.Movements[1].BatchID != got.Movements[0].ID || got.Movements[0].BatchID != got.Movements[0].ID {
 		t.Fatalf("движение: %+v", got.Movements[0])
 	}
 
@@ -77,14 +78,21 @@ func TestStockConsumeFlow(t *testing.T) {
 	}
 	rec = c.do(http.MethodPost, stkPath("/api/units/", units[1], "/adjust"), map[string]any{"remaining_qty": 0})
 	expect(t, rec, http.StatusOK, "корректировка")
-	if u := decode[catalog.Unit](t, rec); u.Status != "finished" {
+	if u := decode[stkUnitMovement](t, rec); u.Status != "finished" || u.Movement == nil ||
+		u.Movement.Type != "adjust" || u.Movement.QtyDelta != -490 || u.Movement.BatchID != u.Movement.ID {
 		t.Fatalf("после корректировки: %+v", u)
+	}
+	rec = c.do(http.MethodPost, stkPath("/api/units/", units[1], "/adjust"), map[string]any{"remaining_qty": 0})
+	expect(t, rec, http.StatusOK, "корректировка без изменений")
+	if u := decode[stkUnitMovement](t, rec); u.Movement != nil {
+		t.Fatalf("тот же остаток — без движения: %+v", u.Movement)
 	}
 	expect(t, c.do(http.MethodPost, stkPath("/api/units/", units[0], "/writeoff"), map[string]any{}),
 		http.StatusBadRequest, "списание без причины")
 	rec = c.do(http.MethodPost, stkPath("/api/units/", units[0], "/writeoff"), map[string]any{"reason": "Испорчено"})
 	expect(t, rec, http.StatusOK, "списание")
-	if u := decode[catalog.Unit](t, rec); u.Status != "written_off" || u.RemainingQty != 0 {
+	if u := decode[stkUnitMovement](t, rec); u.Status != "written_off" || u.RemainingQty != 0 ||
+		u.Movement == nil || u.Movement.Type != "writeoff" || u.Movement.QtyDelta != -500 || u.Movement.Reason != "Испорчено" {
 		t.Fatalf("после списания: %+v", u)
 	}
 	rec = c.do(http.MethodPost, "/api/units", map[string]any{"product_id": p, "remaining_qty": 120})
@@ -105,6 +113,12 @@ func TestStockConsumeFlow(t *testing.T) {
 		t.Fatalf("список покупок: %+v", list)
 	}
 	expect(t, c.do(http.MethodGet, "/api/purchases?limit=0x", nil), http.StatusBadRequest, "неверный limit")
+}
+
+// stkUnitMovement — ответ корректировки и списания: экземпляр и его движение.
+type stkUnitMovement struct {
+	catalog.Unit
+	Movement *catalog.Movement `json:"movement"`
 }
 
 func TestStockRecipeFlow(t *testing.T) {

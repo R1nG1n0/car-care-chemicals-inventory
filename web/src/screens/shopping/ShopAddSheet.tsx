@@ -1,17 +1,27 @@
 // «Добавить в список» (ФТ-7.2): позиция из своих или просто текст («Глина для кузова»).
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { inventory, type ProductSummary } from '../../api';
+import { errorText, inventory, type ProductSummary } from '../../api';
 import { keys } from '../../app/queries';
 import { ProductPicker } from '../../components/ProductPicker';
 import { Sheet } from '../../components/Sheet';
 import { ShopNewProduct } from '../../components/ShopNewProduct';
-import { errorText } from '../../components/ShopUi';
 import { busyProps, Field } from '../../components/ui';
 
 type Props = { open: boolean; onClose: () => void; excludeIds: number[] };
 
 export function ShopAddSheet({ open, onClose, excludeIds }: Props) {
+  // Новое содержимое на каждое открытие: старая ошибка и режим не переживают закрытие
+  const [n, setN] = useState(0);
+  const [was, setWas] = useState(open);
+  if (open !== was) {
+    setWas(open);
+    if (open) setN((x) => x + 1);
+  }
+  return <AddBody key={n} open={open} onClose={onClose} excludeIds={excludeIds} />;
+}
+
+function AddBody({ open, onClose, excludeIds }: Props) {
   const qc = useQueryClient();
   const [mode, setMode] = useState<'product' | 'text'>('product');
   const [title, setTitle] = useState('');
@@ -29,6 +39,13 @@ export function ShopAddSheet({ open, onClose, excludeIds }: Props) {
     onError: (err) => setError(errorText(err)),
   });
 
+  // Смена режима: ошибка прежнего режима не нужна, фокус — в поле нового
+  const switchTo = (m: 'product' | 'text') => {
+    setMode(m);
+    setError('');
+    requestAnimationFrame(() => document.getElementById(m === 'product' ? 'shop-add-product' : 'shop-add-title')?.focus());
+  };
+
   const pick = (p: ProductSummary) => !add.isPending && add.mutate({ product_id: p.id });
   const addText = () => {
     const t = title.trim();
@@ -42,10 +59,10 @@ export function ShopAddSheet({ open, onClose, excludeIds }: Props) {
       <Sheet open={open} onClose={onClose} title="Добавить в список">
         <div className="app-stack">
           <div className="g-seg" role="group" aria-label="Что добавить">
-            <button type="button" aria-pressed={mode === 'product'} onClick={() => setMode('product')}>
+            <button type="button" aria-pressed={mode === 'product'} onClick={() => switchTo('product')}>
               Позиция
             </button>
-            <button type="button" aria-pressed={mode === 'text'} onClick={() => setMode('text')}>
+            <button type="button" aria-pressed={mode === 'text'} onClick={() => switchTo('text')}>
               Просто текст
             </button>
           </div>

@@ -1,11 +1,12 @@
 // Список карточек главной (motion.css): появление очередью при входе (.g-stagger),
 // перестроение при поиске и фильтрах (.g-flip): ушедшие гаснут на своём месте,
-// оставшиеся переезжают (WAAPI, 200 мс, --ease-in-out), новые проявляются.
+// оставшиеся переезжают (WAAPI, 200 мс, --ease-in-out — общие с useFlip), новые проявляются.
 // Положение карточек запоминается после каждой отрисовки — это «First» для следующей.
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import type { ProductSummary } from '../../api';
 import { ProductCard } from '../../components/ProductCard';
-import { REDUCED_MOTION } from '../../components/StockHooks';
+import { REDUCED_MOTION } from '../../components/hooks';
+import { easeInOut, FLIP_MS } from '../../components/useFlip';
 import { StockSwipe } from './StockSwipe';
 
 type Props = {
@@ -35,6 +36,10 @@ export function StockList({ items, selectedId, onSwipe, onCardClick }: Props) {
     const now = new Set(items.map((p) => p.id));
     const gone = prev.items.filter((p) => !now.has(p.id));
     setExiting((ex) => [...ex.filter((p) => !now.has(p.id) && !gone.some((g) => g.id === p.id)), ...gone]);
+    setPrev({ ids, items });
+  } else if (items !== prev.items) {
+    // Те же карточки со свежими числами (после расхода, шаблона): снимок обновляется,
+    // иначе уходящие при следующем поиске покажут старый остаток
     setPrev({ ids, items });
   }
   useEffect(() => {
@@ -70,7 +75,7 @@ export function StockList({ items, selectedId, onSwipe, onCardClick }: Props) {
     }
 
     const next = new Map<string, Box>();
-    const ease = getComputedStyle(document.documentElement).getPropertyValue('--ease-in-out').trim() || 'ease-in-out';
+    const ease = easeInOut();
     for (const el of kids.filter((k) => !k.dataset.exit)) {
       const key = el.dataset.key!;
       flips.current.get(key)?.cancel();
@@ -88,7 +93,7 @@ export function StockList({ items, selectedId, onSwipe, onCardClick }: Props) {
         const dx = was.left - box.left;
         const dy = was.top - box.top;
         if (Math.abs(dx) + Math.abs(dy) >= 0.5) {
-          flips.current.set(key, el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 200, easing: ease }));
+          flips.current.set(key, el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: FLIP_MS, easing: ease }));
         }
       }
     }

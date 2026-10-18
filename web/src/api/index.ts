@@ -3,6 +3,7 @@ import { request } from './client';
 import type { CreatedInvite, Health, Invite, InviteCheck, Session, Settings } from './types';
 
 export * from './client';
+export * from './errors';
 export * from './types';
 
 const tokenPath = (token: string) => `/api/invites/by-token/${encodeURIComponent(token)}`;

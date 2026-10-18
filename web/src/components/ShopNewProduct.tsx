@@ -2,13 +2,16 @@
 // шторка с главными полями, остальное правится потом в карточке позиции.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { isApiError, inventory, type ProductSummary, type Unit } from '../api';
-import { invalidateRefs } from '../app/queries';
-import { validateProduct, type ProductErrors } from '../lib/stockMoney';
+import { fieldErrors, inventory, type ProductSummary, type Unit } from '../api';
+import { invalidateRefs, invalidateStock } from '../app/queries';
+import { validateProduct, type ProductErrors } from '../lib/product';
+import { CategoryPick } from './ProductFields';
+import { useStockRefs } from './refs';
 import { Sheet } from './Sheet';
-import { errorText } from './ShopUi';
-import { useStockRefs } from './StockRefs';
 import { busyProps, Field } from './ui';
+
+/** Поля, которые есть в шторке: ошибка сервера по ним — под поле. */
+const SHOWN = ['name', 'category_id', 'package_size', 'min_stock'] as const;
 
 type Props = {
   /** Набранное в поиске имя; null — шторка закрыта. */
@@ -31,13 +34,12 @@ function Form({ initialName, onCreated }: { initialName: string; onCreated: (p: 
   const create = useMutation({
     mutationFn: inventory.createProduct,
     onSuccess: async (p) => {
-      await invalidateRefs(qc);
+      // Позиция с минимумом и нулевым остатком сразу попадает в «Ниже минимума»
+      await Promise.all([invalidateRefs(qc), invalidateStock(qc)]);
       onCreated(p);
     },
-    onError: (err) => {
-      if (isApiError(err) && err.field) setErrors({ [err.field]: err.message });
-      else setErrors({ form: errorText(err) });
-    },
+    // Поля, которых нет в шторке (бренд, штрихкод…), — в общий текст, а не в пустоту
+    onError: (err) => setErrors(fieldErrors(err, SHOWN)),
   });
 
   const submit = () => {
@@ -54,44 +56,20 @@ function Form({ initialName, onCreated }: { initialName: string; onCreated: (p: 
   const u = unit === 'ml' ? 'мл' : 'шт';
   return (
     <form
-      id="np-form"
+      id="snp-form"
       className="app-stack"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
       }}
     >
-      <Field id="np-name" label="Название" value={name} maxLength={80} error={errors.name} data-autofocus onChange={(e) => setName(e.target.value)} />
-      <div className={`g-field${errors.category_id ? ' g-field--error' : ''}`}>
-        <label className="g-label" htmlFor="np-cat">
-          Категория
-        </label>
-        <select
-          id="np-cat"
-          className="g-input"
-          value={categoryId ?? ''}
-          aria-invalid={errors.category_id ? true : undefined}
-          aria-describedby={errors.category_id ? 'np-cat-err' : undefined}
-          onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}
-        >
-          <option value="">Выберите…</option>
-          {cats.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        {errors.category_id && (
-          <span className="g-field__error" id="np-cat-err">
-            {errors.category_id}
-          </span>
-        )}
-      </div>
+      <Field id="snp-name" label="Название" value={name} maxLength={80} error={errors.name} data-autofocus onChange={(e) => setName(e.target.value)} />
+      <CategoryPick idPrefix="snp" categories={cats} value={categoryId} onChange={setCategoryId} error={errors.category_id} />
       <div className="g-field">
-        <span className="g-label" id="np-unit">
+        <span className="g-label" id="snp-unit">
           Единица
         </span>
-        <div className="g-seg" role="group" aria-labelledby="np-unit">
+        <div className="g-seg" role="group" aria-labelledby="snp-unit">
           <button type="button" aria-pressed={unit === 'ml'} onClick={() => setUnit('ml')}>
             мл
           </button>
@@ -101,8 +79,8 @@ function Form({ initialName, onCreated }: { initialName: string; onCreated: (p: 
         </div>
       </div>
       <div className="shop-two">
-        <Field id="np-size" label={`Упаковка, ${u}`} inputMode="numeric" value={size} error={errors.package_size} onChange={(e) => setSize(e.target.value)} />
-        <Field id="np-min" label={`Минимум, ${u}`} hint="Необязательно" inputMode="numeric" value={min} error={errors.min_stock} onChange={(e) => setMin(e.target.value)} />
+        <Field id="snp-size" label={`Упаковка, ${u}`} inputMode="numeric" value={size} error={errors.package_size} onChange={(e) => setSize(e.target.value)} />
+        <Field id="snp-min" label={`Минимум, ${u}`} hint="Необязательно" inputMode="numeric" value={min} error={errors.min_stock} onChange={(e) => setMin(e.target.value)} />
       </div>
       {errors.form && (
         <p className="g-field__error" role="alert">

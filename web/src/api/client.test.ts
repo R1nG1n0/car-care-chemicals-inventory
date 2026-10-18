@@ -119,6 +119,19 @@ describe('нет связи', () => {
     await expect(api.me()).rejects.toBeInstanceOf(NetworkError);
   });
 
+  it('вид: 502/503 и упавший fetch — не дошло, 504 — ответ не пришёл', async () => {
+    const kind = async (respond: () => Response | Promise<Response>) => {
+      stubFetch(respond);
+      return (await api.logout().catch((e: unknown) => e)) as NetworkError;
+    };
+    expect((await kind(() => new Response('', { status: 502 }))).kind).toBe('offline');
+    expect((await kind(() => new Response('', { status: 503 }))).maybeSaved).toBe(false);
+    expect((await kind(() => Promise.reject(new TypeError('Failed to fetch')))).kind).toBe('offline');
+    const gw = await kind(() => new Response('', { status: 504 }));
+    expect(gw.kind).toBe('timeout');
+    expect(gw.maybeSaved).toBe(true);
+  });
+
   it('500 без JSON-тела (прокси) — NetworkError', async () => {
     stubFetch(() => new Response('', { status: 500 }));
     await expect(api.me()).rejects.toBeInstanceOf(NetworkError);

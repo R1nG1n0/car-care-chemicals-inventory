@@ -4,10 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { inventory, type ProductSummary } from '../../api';
 import { keys } from '../../app/queries';
-import { catVar, useStockRefs } from '../../components/StockRefs';
+import { catClassOf, useStockRefs } from '../../components/refs';
 import { formatMoney, formatQty } from '../../lib/format';
 import { openLine, unitLabel } from '../../lib/stock';
-import { purchaseDay } from '../../lib/stockMoney';
+import { purchaseDay } from '../../lib/text';
 import { ConsumeForm } from './ConsumeForm';
 import { UnitRows } from './UnitRows';
 
@@ -29,9 +29,9 @@ export function StockPanel({ product: p }: { product: ProductSummary }) {
         <span className="g-num">{formatQty(p.stock.total)}</span>
         <b>{unitLabel(p.unit)}</b>
       </div>
-      <div className="g-row__sub">{openLine(p.stock, p.unit)}</div>
+      <div className="g-row__sub">{openLine(p.stock, p.unit, p.package_size)}</div>
       {detail.data && detail.data.units.length > 0 && (
-        <UnitRows units={detail.data.units} unit={p.unit} catColor={catVar(refs.categories, p)} locations={refs.locations} />
+        <UnitRows units={detail.data.units} unit={p.unit} catClass={catClassOf(refs.categories, p)} locations={refs.locations} />
       )}
       {last && (
         <div className="g-row__sub">

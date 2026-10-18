@@ -7,7 +7,7 @@ import { inventory } from '../../api';
 import { keys } from '../../app/queries';
 import { ProductPicker } from '../../components/ProductPicker';
 import { Sheet } from '../../components/Sheet';
-import { useProducts, useStockRefs } from '../../components/StockRefs';
+import { useProducts, useStockRefs } from '../../components/refs';
 import { locationChip } from '../../lib/stock';
 import { ConsumeForm } from './ConsumeForm';
 
@@ -51,9 +51,9 @@ function ConsumeBody({ initial, onClose }: { initial: number | null; onClose: ()
         <button type="button" aria-pressed="true">
           Одна позиция
         </button>
+        {/* Не переключатель, а переход к шаблонам: без aria-pressed */}
         <button
           type="button"
-          aria-pressed="false"
           onClick={() => {
             onClose();
             navigate('/templates');

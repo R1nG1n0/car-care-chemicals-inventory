@@ -171,6 +171,32 @@ func (s *Server) writeUnit(w http.ResponseWriter, r *http.Request, code int, uni
 	writeJSON(w, code, u)
 }
 
+// writeUnitMovement отвечает экземпляром и полем movement — движением
+// корректировки или списания (для «Отменить»); null — ничего не изменилось.
+func (s *Server) writeUnitMovement(w http.ResponseWriter, r *http.Request, unitID, movementID int64) {
+	user := currentFrom(r).user.ID
+	u, err := s.stockCatalog().UnitByID(r.Context(), user, unitID)
+	if err != nil {
+		s.writeStockError(w, r, err)
+		return
+	}
+	var mv *catalog.Movement
+	if movementID != 0 {
+		ms, err := s.stockCatalog().MovementsByIDs(r.Context(), user, []int64{movementID})
+		if err != nil {
+			s.writeStockError(w, r, err)
+			return
+		}
+		if len(ms) == 1 {
+			mv = &ms[0]
+		}
+	}
+	writeJSON(w, http.StatusOK, struct {
+		catalog.Unit
+		Movement *catalog.Movement `json:"movement"`
+	}{u, mv})
+}
+
 func (s *Server) handleAddUnit(w http.ResponseWriter, r *http.Request) {
 	var in stock.AddUnitInput
 	if !decodeJSON(w, r, &in) {
@@ -222,11 +248,12 @@ func (s *Server) handleAdjustUnit(w http.ResponseWriter, r *http.Request) {
 		writeFieldError(w, http.StatusBadRequest, "remaining_qty", "Укажите остаток")
 		return
 	}
-	if err := s.stockSvc().Adjust(r.Context(), currentFrom(r).user.ID, id, *in.RemainingQty, in.Reason); err != nil {
+	moved, err := s.stockSvc().Adjust(r.Context(), currentFrom(r).user.ID, id, *in.RemainingQty, in.Reason)
+	if err != nil {
 		s.writeStockError(w, r, err)
 		return
 	}
-	s.writeUnit(w, r, http.StatusOK, id)
+	s.writeUnitMovement(w, r, id, moved)
 }
 
 func (s *Server) handleWriteoffUnit(w http.ResponseWriter, r *http.Request) {
@@ -241,11 +268,12 @@ func (s *Server) handleWriteoffUnit(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	if err := s.stockSvc().Writeoff(r.Context(), currentFrom(r).user.ID, id, in.Qty, in.Reason); err != nil {
+	moved, err := s.stockSvc().Writeoff(r.Context(), currentFrom(r).user.ID, id, in.Qty, in.Reason)
+	if err != nil {
 		s.writeStockError(w, r, err)
 		return
 	}
-	s.writeUnit(w, r, http.StatusOK, id)
+	s.writeUnitMovement(w, r, id, moved)
 }
 
 // ---------- Расход и журнал ----------

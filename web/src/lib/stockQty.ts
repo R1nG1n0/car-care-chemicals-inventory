@@ -4,18 +4,10 @@ import type { ConsumeResult, ProductSummary, Settings, StockUnit, Unit } from '.
 import { formatQty } from './format';
 import { qtyText } from './stock';
 import { plural } from './text';
+import { clampQty, parseQty } from './qty';
 
-/** Целое из поля: пробелы-разряды допустимы; пусто или не число — null. */
-export function parseQty(s: string): number | null {
-  const t = s.replace(/[\s\u00a0]/gu, '');
-  if (!/^\d{1,9}$/u.test(t)) return null;
-  return Number(t);
-}
-
-export function clampQty(n: number, min: number, max: number | null | undefined): number {
-  const hi = max === null || max === undefined ? Infinity : Math.max(min, max);
-  return Math.min(hi, Math.max(min, Math.round(n)));
-}
+// Разбор поля и границы — общие (lib/qty.ts); отсюда — для старых импортов.
+export { clampQty, parseQty } from './qty';
 
 /** Кнопки шагов: для мл — −большой −малый +малый +большой, для шт — −1 +1 +5. */
 export function stepButtons(unit: Unit, settings: Settings | undefined): number[] {
@@ -83,6 +75,16 @@ export function bottleOptions(units: readonly StockUnit[], unit: Unit): BottleOp
 /** Бутылка по умолчанию — вскрытая, если есть. */
 export function defaultBottle(options: readonly BottleOption[]): number | undefined {
   return (options.find((o) => o.kind === 'open') ?? options[0])?.unitId;
+}
+
+/**
+ * unit_id для POST /api/consume: только когда было из чего выбирать (две бутылки).
+ * Иначе сервер сам берёт вскрытую, затем запечатанную. Выбор, которого уже нет
+ * среди вариантов, заменяется бутылкой по умолчанию.
+ */
+export function consumeUnitId(options: readonly BottleOption[], chosen: number | undefined): number | undefined {
+  if (options.length < 2) return undefined;
+  return options.some((o) => o.unitId === chosen) ? chosen : defaultBottle(options);
 }
 
 const BOTTLES = ['бутылка', 'бутылки', 'бутылок'] as const;

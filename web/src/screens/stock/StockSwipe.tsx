@@ -5,7 +5,7 @@
 import { IconDroplet } from '@tabler/icons-react';
 import { useRef, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
 import { Ico } from '../../components/ui';
-import { FLICK, SWIPE_AT } from '../../components/StockHooks';
+import { FLICK, SWIPE_AT } from '../../components/hooks';
 
 const offset = (dx: number) => (dx > 0 ? dx * 0.15 : dx < -SWIPE_AT ? -SWIPE_AT + (dx + SWIPE_AT) * 0.3 : dx);
 

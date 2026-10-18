@@ -1,9 +1,15 @@
 // Перестроение списка (motion.css, «FLIP-список»): строка, сменившая место,
-// переезжает к новому положению трансформацией, 200 мс, --ease-in-out.
-// При prefers-reduced-motion — сразу на месте.
+// переезжает к новому положению трансформацией, 200 мс, кривая --ease-in-out
+// из tokens.css. При prefers-reduced-motion — сразу на месте.
 import { useCallback, useLayoutEffect, useRef } from 'react';
+import { REDUCED_MOTION } from './hooks';
 
-const EASE_IN_OUT = 'cubic-bezier(0.77, 0, 0.175, 1)';
+/** Кривая перестроения из токена --ease-in-out (одна на все FLIP-списки). */
+export function easeInOut(): string {
+  return getComputedStyle(document.documentElement).getPropertyValue('--ease-in-out').trim() || 'ease-in-out';
+}
+
+export const FLIP_MS = 200;
 
 export function useFlip(order: readonly (string | number)[]) {
   const els = useRef(new Map<string | number, HTMLElement>());
@@ -11,7 +17,8 @@ export function useFlip(order: readonly (string | number)[]) {
   const sig = order.join(',');
 
   useLayoutEffect(() => {
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const reduce = window.matchMedia(REDUCED_MOTION).matches;
+    const ease = easeInOut();
     const next = new Map<string | number, number>();
     els.current.forEach((el, k) => {
       // offsetTop — относительно списка: прокрутка страницы не даёт ложного сдвига
@@ -19,7 +26,7 @@ export function useFlip(order: readonly (string | number)[]) {
       next.set(k, top);
       const was = prev.current.get(k);
       if (!reduce && was !== undefined && was !== top) {
-        el.animate([{ transform: `translateY(${was - top}px)` }, { transform: 'none' }], { duration: 200, easing: EASE_IN_OUT });
+        el.animate([{ transform: `translateY(${was - top}px)` }, { transform: 'none' }], { duration: FLIP_MS, easing: ease });
       }
     });
     prev.current = next;

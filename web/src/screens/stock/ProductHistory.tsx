@@ -3,12 +3,13 @@
 import { useState } from 'react';
 import type { Movement, ProductDetail } from '../../api';
 import { Sheet } from '../../components/Sheet';
-import { useStockRefs } from '../../components/StockRefs';
+import { useStockRefs } from '../../components/refs';
 import { busyProps } from '../../components/ui';
 import { formatMoney } from '../../lib/format';
-import { canRevert, movementTitle, purchaseDay, revertQuestion, unitPriceText } from '../../lib/stockMoney';
-import { formatDay, formatTime } from '../../lib/text';
-import { useRevert } from './useConsume';
+import { unitPriceText } from '../../lib/money';
+import { canRevert, movementTitle, revertQuestion } from '../../lib/movements';
+import { formatDay, formatTime, purchaseDay } from '../../lib/text';
+import { useRevert } from '../../app/useRevert';
 
 export function ProductHistory({ detail }: { detail: ProductDetail }) {
   const { product: p, purchases, movements } = detail;

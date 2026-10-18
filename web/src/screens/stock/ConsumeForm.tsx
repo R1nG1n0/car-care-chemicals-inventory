@@ -4,13 +4,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
-import { inventory, isApiError, isNetworkError, type ProductSummary } from '../../api';
+import { errorText, inventory, type ProductSummary } from '../../api';
 import { keys } from '../../app/queries';
 import { useSession } from '../../app/session';
 import { QtyInput } from '../../components/QtyInput';
 import { busyProps } from '../../components/ui';
 import { qtyText } from '../../lib/stock';
-import { bottleOptions, consumeHint, defaultBottle, defaultConsumeQty, parseQty } from '../../lib/stockQty';
+import { parseQty, validateConsume } from '../../lib/qty';
+import { bottleOptions, consumeHint, consumeUnitId, defaultConsumeQty } from '../../lib/stockQty';
 import { useConsume } from './useConsume';
 
 type Props = { product: ProductSummary; idPrefix: string; onDone?: () => void; autoFocus?: boolean };
@@ -29,7 +30,7 @@ export function ConsumeForm({ product: p, idPrefix, onDone, autoFocus }: Props) 
   }, [autoFocus]);
 
   const options = bottleOptions(detail.data?.units ?? [], p.unit);
-  const unitId = options.some((o) => o.unitId === chosen) ? chosen : defaultBottle(options);
+  const unitId = consumeUnitId(options, chosen);
   const n = parseQty(qty) ?? 0;
   const total = p.stock.total;
 
@@ -47,19 +48,11 @@ export function ConsumeForm({ product: p, idPrefix, onDone, autoFocus }: Props) 
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
     if (consume.isPending) return;
-    if (n <= 0) return setError('Введите количество');
-    if (n > total) return setError(`Не хватает: есть ${qtyText(total, p.unit)}`);
+    const invalid = validateConsume(parseQty(qty), total, p.unit);
+    if (invalid) return setError(invalid);
     setError(undefined);
-    consume.mutate(
-      { product: p, qty: n, unitId: options.length > 1 ? unitId : undefined },
-      {
-        onError: (error) => {
-          const err: unknown = error;
-          if (isNetworkError(err)) setError('Нет связи — ничего не списано');
-          else setError(isApiError(err) ? err.message : 'Не получилось списать');
-        },
-      },
-    );
+    // «Нет связи» — ничего не списано; ответ не пришёл — неизвестно, данные перечитываются
+    consume.mutate({ product: p, qty: n, unitId }, { onError: (err) => setError(errorText(err)) });
   };
 
   const edit = (v: string) => {

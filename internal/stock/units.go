@@ -139,14 +139,15 @@ func (s *Service) Move(ctx context.Context, userID, unitID, locationID int64) er
 
 // Adjust задаёт фактический остаток (ФТ-5.5): движение adjust на разницу.
 // 0 → finished; больше 0 → open (у sealed, finished и written_off).
-// Тот же остаток — ничего не меняется.
-func (s *Service) Adjust(ctx context.Context, userID, unitID, remaining int64, reason string) error {
+// Тот же остаток — ничего не меняется. Возвращает id движения; 0 — его нет.
+func (s *Service) Adjust(ctx context.Context, userID, unitID, remaining int64, reason string) (int64, error) {
 	reason, err := cleanText(reason, 0, maxReasonLen, "reason", "Причина — не длиннее 80 символов")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	now := s.now().Unix()
-	return s.inTx(ctx, func(tx *sql.Tx) error {
+	var moved int64
+	err = s.inTx(ctx, func(tx *sql.Tx) error {
 		u, err := loadUnit(ctx, tx, userID, unitID)
 		if err != nil {
 			return err
@@ -170,24 +171,26 @@ func (s *Service) Adjust(ctx context.Context, userID, unitID, remaining int64, r
 		if err != nil {
 			return fmt.Errorf("корректировка экземпляра: %w", err)
 		}
-		_, err = insertMovement(ctx, tx, movementRow{
+		moved, err = insertMovement(ctx, tx, movementRow{
 			userID: userID, unitID: unitID, typ: "adjust", delta: remaining - u.Remaining,
 			reason: reason, at: now,
 		})
 		return err
 	})
+	return moved, err
 }
 
 // Writeoff списывает часть или весь остаток с причиной (ФТ-5.3). qty nil —
 // весь остаток. Дошедший до 0 — written_off, частично списанный
-// запечатанный становится open.
-func (s *Service) Writeoff(ctx context.Context, userID, unitID int64, qty *int64, reason string) error {
+// запечатанный становится open. Возвращает id движения.
+func (s *Service) Writeoff(ctx context.Context, userID, unitID int64, qty *int64, reason string) (int64, error) {
 	reason, err := cleanText(reason, 1, maxReasonLen, "reason", "Укажите причину — до 80 символов")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	now := s.now().Unix()
-	return s.inTx(ctx, func(tx *sql.Tx) error {
+	var moved int64
+	err = s.inTx(ctx, func(tx *sql.Tx) error {
 		u, err := loadUnit(ctx, tx, userID, unitID)
 		if err != nil {
 			return err
@@ -218,9 +221,10 @@ func (s *Service) Writeoff(ctx context.Context, userID, unitID int64, qty *int64
 		if err != nil {
 			return fmt.Errorf("списание экземпляра: %w", err)
 		}
-		_, err = insertMovement(ctx, tx, movementRow{
+		moved, err = insertMovement(ctx, tx, movementRow{
 			userID: userID, unitID: unitID, typ: "writeoff", delta: -n, reason: reason, at: now,
 		})
 		return err
 	})
+	return moved, err
 }

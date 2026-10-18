@@ -10,9 +10,9 @@ import { useState, type CSSProperties, type MouseEvent, type Ref } from 'react';
 import { Link } from 'react-router';
 import type { ProductSummary } from '../api';
 import { formatQty } from '../lib/format';
-import { locationChip, meterLevel, meterValues, openLine, stickerText, unitLabel } from '../lib/stock';
-import { usePresence } from './StockHooks';
-import { catVar, useStockRefs } from './StockRefs';
+import { locationChip, meterLevel, meterValues, openLine, qtyText, stickerText, unitLabel } from '../lib/stock';
+import { usePresence } from './hooks';
+import { catClassOf, useStockRefs } from './refs';
 
 export type ProductCardProps = {
   product: ProductSummary;
@@ -30,15 +30,17 @@ export function ProductCard({ product: p, to, current, onClick, ref, className }
   const cat = refs.categories.get(p.category_id);
   const place = locationChip(p.location_ids, refs.locations);
   const meter = meterValues(p.stock);
-  const style = { '--cat': catVar(refs.categories, p) } as CSSProperties;
-  const label = [p.name, cat?.name, p.low ? 'мало' : ''].filter(Boolean).join(', ');
+  const open = openLine(p.stock, p.unit, p.package_size);
+  const sticker = stickerText(p);
+  // Метка ссылки заменяет содержимое для диктора — поэтому в ней всё главное:
+  // остаток, подпись вскрытой и текст наклейки («мало!», «нет»)
+  const label = [p.name, cat?.name, place, qtyText(p.stock.total, p.unit), open, sticker].filter(Boolean).join(', ');
 
   return (
     <Link
       ref={ref}
       to={to ?? `/items/${p.id}`}
-      className={`g-card g-press stock-card${className ? ` ${className}` : ''}`}
-      style={style}
+      className={`g-card g-press stock-card ${catClassOf(refs.categories, p)}${className ? ` ${className}` : ''}`}
       aria-current={current ? 'true' : undefined}
       aria-label={label}
       onClick={onClick}
@@ -55,25 +57,37 @@ export function ProductCard({ product: p, to, current, onClick, ref, className }
           <b>{unitLabel(p.unit)}</b>
         </div>
         <Meter level={meterLevel(p.stock)} low={p.low} now={meter.now} max={meter.max} />
-        <div className="g-card__open">{openLine(p.stock, p.unit)}</div>
+        <div className="g-card__open">{open}</div>
       </div>
-      <Sticker text={stickerText(p)} />
+      <Sticker text={sticker} />
     </Link>
   );
 }
 
-/** Шкала вскрытой бутылки: доля задаётся --lv, меняется трансформацией. */
-export function Meter({ level, low, now, max, label = 'Во вскрытой', className }: { level: number; low: boolean; now: number; max: number; label?: string; className?: string }) {
+/**
+ * Шкала вскрытой бутылки: доля задаётся --lv, меняется трансформацией.
+ * decorative — внутри кнопки: span без роли (числа уже в метке кнопки).
+ */
+export function Meter({ level, low, now, max, label = 'Во вскрытой', className, decorative }: { level: number; low: boolean; now: number; max: number; label?: string; className?: string; decorative?: boolean }) {
+  const cls = `g-meter${low ? ' g-meter--low' : ''}${className ? ` ${className}` : ''}`;
+  const fill = { '--lv': level.toFixed(3) } as CSSProperties;
+  if (decorative) {
+    return (
+      <span className={cls} aria-hidden="true">
+        <span className="g-meter__fill" style={fill} />
+      </span>
+    );
+  }
   return (
     <div
-      className={`g-meter${low ? ' g-meter--low' : ''}${className ? ` ${className}` : ''}`}
+      className={cls}
       role="meter"
       aria-label={label}
       aria-valuemin={0}
       aria-valuenow={now}
       aria-valuemax={max}
     >
-      <div className="g-meter__fill" style={{ '--lv': level.toFixed(3) } as CSSProperties} />
+      <div className="g-meter__fill" style={fill} />
     </div>
   );
 }

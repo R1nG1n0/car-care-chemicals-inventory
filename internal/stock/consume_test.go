@@ -138,7 +138,7 @@ func TestRevert(t *testing.T) {
 	stkWant(t, e.stkUnit(units[0]), 400, "open")
 
 	// Списание всего и отмена — written_off → open.
-	if err := e.svc.Writeoff(e.ctx, uid, units[0], nil, "Испорчено"); err != nil {
+	if _, err := e.svc.Writeoff(e.ctx, uid, units[0], nil, "Испорчено"); err != nil {
 		t.Fatal(err)
 	}
 	var wo int64
@@ -196,7 +196,7 @@ func TestRevertAdjustAndInitialStock(t *testing.T) {
 	stkWant(t, e.stkUnit(u), 500, "sealed")
 
 	// Корректировка до 0 и её отмена: finished → sealed (других движений нет).
-	if err := e.svc.Adjust(e.ctx, uid, u, 0, ""); err != nil {
+	if _, err := e.svc.Adjust(e.ctx, uid, u, 0, ""); err != nil {
 		t.Fatal(err)
 	}
 	adj := e.stkCount(`SELECT MAX(id) FROM movements WHERE type = 'adjust'`)

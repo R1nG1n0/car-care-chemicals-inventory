@@ -1,5 +1,7 @@
-// Деньги в формах покупки (ФТ-4.4): человек вводит рубли с копейками,
-// сервер хранит копейки целым числом.
+// Деньги (ФТ-4.4): человек вводит рубли с копейками, сервер хранит копейки
+// целым числом. Здесь же — цена за 100 мл / за шт в истории покупок.
+import type { PurchaseRow, Unit } from '../api';
+import { formatMoney } from './format';
 
 /** Наибольшая цена упаковки по договору API: 1 000 000 ₽ в копейках. */
 export const MAX_PRICE_KOPECKS = 100_000_000;
@@ -24,4 +26,10 @@ export function kopecksToInput(kopecks: number): string {
   const rub = Math.trunc(kopecks / 100);
   const kop = Math.abs(kopecks % 100);
   return kop === 0 ? String(rub) : `${rub},${String(kop).padStart(2, '0')}`;
+}
+
+/** «119 ₽ за 100 мл» / «90 ₽ за шт»; цены нет — null. */
+export function unitPriceText(row: PurchaseRow, unit: Unit): string | null {
+  if (unit === 'pcs') return row.price_per_unit !== undefined ? `${formatMoney(row.price_per_unit)} за шт` : null;
+  return row.price_per_100 !== undefined ? `${formatMoney(row.price_per_100)} за 100 мл` : null;
 }

@@ -3,8 +3,8 @@
 import { IconCheck, IconX } from '@tabler/icons-react';
 import { useState } from 'react';
 import { refNameError } from '../lib/refsValidate';
-import { errorText } from './ShopUi';
 import { busyProps, Ico } from './ui';
+import { errorText } from '../api';
 
 const NEW = '__new';
 
@@ -47,7 +47,8 @@ export function ShopRefSelect({ id, label, value, onChange, options, noneLabel, 
   };
 
   return (
-    <div className={`g-field${error ? ' g-field--error' : ''}`}>
+    // При вводе нового имени поле занимает всю ширину формы (.shop-ref--adding)
+    <div className={`g-field${adding ? ' shop-ref--adding' : ''}${error ? ' g-field--error' : ''}`}>
       <label className="g-label" htmlFor={id}>
         {label}
       </label>
@@ -70,7 +71,7 @@ export function ShopRefSelect({ id, label, value, onChange, options, noneLabel, 
               } else if (e.key === 'Escape') setAdding(false);
             }}
           />
-          <button type="button" className="g-btn g-btn--icon g-btn--accent g-press" aria-label={`Добавить: ${name || newLabel}`} onClick={() => !busy && void create()} {...busyProps(busy)}>
+          <button type="button" className="g-btn g-btn--icon g-btn--accent g-press" aria-label={name.trim() ? `Добавить «${name.trim()}»` : `${label}: добавить новое`} onClick={() => !busy && void create()} {...busyProps(busy)}>
             <Ico icon={IconCheck} />
           </button>
           <button

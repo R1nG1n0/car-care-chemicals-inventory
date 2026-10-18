@@ -2,25 +2,16 @@
 // применение; «+ Новый», «Из последнего расхода» (ФТ-8.5), порядок.
 import { IconArrowsSort, IconCheck, IconChevronRight, IconHistory, IconPlus, IconStack2 } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { inventory, type Recipe } from '../../api';
+import { errorText, inventory, type Recipe } from '../../api';
 import { keys } from '../../app/queries';
-import { errorText, ShopHead, ShopLoadError, ShopSkelList } from '../../components/ShopUi';
-import { busyProps, Empty, Ico } from '../../components/ui';
-import { formatMoney } from '../../lib/format';
-import { lastManualConsume, type ApplyRow } from '../../lib/recipeApply';
+import { busyProps, Empty, HeadRow, Ico, LoadError, SkelList } from '../../components/ui';
+import { lastManualConsume, recipeSub, type ApplyRow } from '../../lib/recipeApply';
 import { moveItem } from '../../lib/refsOrder';
-import { plural } from '../../lib/text';
 import { SortableList } from '../more/SortableList';
 
-const POSITIONS = ['позиция', 'позиции', 'позиций'] as const;
 const LOG_PAGES = 4; // до 200 последних движений — дальше «последний расход» уже не последний
-
-export function recipeSub(r: Recipe): string {
-  const n = r.items.length;
-  return [`${n} ${plural(n, POSITIONS)}`, r.cost !== null ? `≈ ${formatMoney(r.cost)}` : ''].filter(Boolean).join(' · ');
-}
 
 /** Ищет последний ручной расход по журналу, листая назад. */
 async function findLastConsume(): Promise<ApplyRow[] | null> {
@@ -55,12 +46,20 @@ export function TemplatesList() {
     onError: (err) => setError(errorText(err)),
   });
 
+  // Несколько быстрых перестановок подряд: порядок сервера берём, только когда
+  // закончилась последняя — иначе список мигнёт к старому порядку
+  const pending = useRef(0);
   const reorder = useMutation({
     mutationFn: inventory.reorderRecipes,
+    onMutate: () => {
+      pending.current += 1;
+    },
     onError: (err) => setError(`Порядок не сохранился: ${errorText(err)}`),
     onSettled: async () => {
+      pending.current -= 1;
+      if (pending.current > 0) return;
       await qc.invalidateQueries({ queryKey: keys.recipes });
-      setOrder(null);
+      if (pending.current === 0) setOrder(null);
     },
   });
 
@@ -85,26 +84,26 @@ export function TemplatesList() {
     </p>
   );
   const head = (
-    <ShopHead>
+    <HeadRow>
       <h1 className="g-title">Шаблоны</h1>
       <Link to="/templates/new" className="g-btn g-btn--sm g-press">
         <Ico icon={IconPlus} /> Новый
       </Link>
-    </ShopHead>
+    </HeadRow>
   );
 
   if (list.isPending)
     return (
       <div className="app-stack">
         {head}
-        <ShopSkelList label="Шаблоны загружаются" />
+        <SkelList label="Шаблоны загружаются" />
       </div>
     );
   if (list.isError && !list.data)
     return (
       <div className="app-stack app-stack--fill">
         {head}
-        <ShopLoadError id="tpl-err" error={list.error} what="Шаблоны" onRetry={() => void list.refetch()} />
+        <LoadError id="tpl-err" error={list.error} what="Шаблоны" onRetry={() => void list.refetch()} />
       </div>
     );
   if (recipes.length === 0)

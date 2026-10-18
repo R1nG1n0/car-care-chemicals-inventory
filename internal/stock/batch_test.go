@@ -78,10 +78,10 @@ func TestMovementBatches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := e.svc.Adjust(e.ctx, uid, unit, 4, ""); err != nil {
+	if _, err := e.svc.Adjust(e.ctx, uid, unit, 4, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.svc.Writeoff(e.ctx, uid, unit, nil, "Пролил"); err != nil {
+	if _, err := e.svc.Writeoff(e.ctx, uid, unit, nil, "Пролил"); err != nil {
 		t.Fatal(err)
 	}
 	active := e.stkCount(`SELECT id FROM units WHERE product_id = ? AND status IN ('sealed', 'open') LIMIT 1`, q)

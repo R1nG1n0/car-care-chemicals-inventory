@@ -4,26 +4,25 @@ import { IconPlus, IconStack2, IconTrash, IconX } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
-import { inventory, isApiError, type ProductSummary, type Recipe } from '../../api';
+import { errorText, fieldErrors, inventory, isApiError, type ProductSummary, type Recipe } from '../../api';
 import { keys } from '../../app/queries';
-import { useSession } from '../../app/session';
 import { useToast } from '../../app/toast';
 import { ProductPicker } from '../../components/ProductPicker';
 import { ShopNewProduct } from '../../components/ShopNewProduct';
-import { errorText, ShopBack, ShopHead, ShopLoadError, ShopSkelList } from '../../components/ShopUi';
-import { useProducts } from '../../components/StockRefs';
-import { busyProps, Empty, Field, Ico } from '../../components/ui';
-import { rowStep, validateRecipe, type ApplyRow, type RecipeErrors, type RecipeRowDraft } from '../../lib/recipeApply';
+import { useProducts } from '../../components/refs';
+import { busyProps, Empty, Field, HeadRow, Ico, LoadError, SkelList } from '../../components/ui';
+import { validateRecipe, type ApplyRow, type RecipeErrors, type RecipeRowDraft } from '../../lib/recipeApply';
 import { RecipeQty } from './RecipeQty';
+import { BackLink } from '../../components/BackLink';
 
 function Editor({ recipe, preset }: { recipe: Recipe | null; preset: ApplyRow[] | null }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
-  const step = useSession().data?.settings.step_small ?? 10;
   const products = useProducts();
   const byId = new Map((products.data ?? []).map((p) => [p.id, p]));
   const seq = useRef(100);
+  const form = useRef<HTMLFormElement>(null);
   const start = recipe ? recipe.items.map((i) => ({ product_id: i.product_id, qty: i.qty })) : (preset ?? []);
   const [name, setName] = useState(recipe?.name ?? '');
   const [rows, setRows] = useState<RecipeRowDraft[]>(() =>
@@ -45,8 +44,9 @@ function Editor({ recipe, preset }: { recipe: Recipe | null; preset: ApplyRow[] 
     mutationFn: (b: Parameters<typeof inventory.createRecipe>[0]) => (recipe ? inventory.updateRecipe(recipe.id, b) : inventory.createRecipe(b)),
     onSuccess: (r) => done(`/templates/${r.id}`, recipe ? 'Шаблон сохранён' : `Шаблон «${r.name}» создан`),
     onError: (err) => {
-      if (isApiError(err) && err.field === 'name') setErrors({ byRow: {}, name: err.message });
-      else setFormError(errorText(err));
+      const f = fieldErrors(err, ['name'] as const);
+      if (f.name) setErrors({ byRow: {}, name: f.name });
+      else setFormError(f.form ?? errorText(err));
     },
   });
   const remove = useMutation({
@@ -61,7 +61,8 @@ function Editor({ recipe, preset }: { recipe: Recipe | null; preset: ApplyRow[] 
     setFormError('');
     if (!r.ok) {
       setErrors(r.errors);
-      requestAnimationFrame(() => document.querySelector<HTMLElement>('.app-views [aria-invalid="true"]')?.focus());
+      // Фокус на первую ошибку — внутри этой формы, а не уходящего экрана
+      requestAnimationFrame(() => form.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
       return;
     }
     setErrors({ byRow: {} });
@@ -73,6 +74,7 @@ function Editor({ recipe, preset }: { recipe: Recipe | null; preset: ApplyRow[] 
   return (
     <>
       <form
+        ref={form}
         className="app-stack"
         noValidate
         onSubmit={(e) => {
@@ -80,10 +82,10 @@ function Editor({ recipe, preset }: { recipe: Recipe | null; preset: ApplyRow[] 
           submit();
         }}
       >
-        <ShopHead>
-          <ShopBack to={recipe ? `/templates/${recipe.id}` : '/templates'} label="Отмена" />
+        <HeadRow>
+          <BackLink to={recipe ? `/templates/${recipe.id}` : '/templates'} label="Отмена" />
           <h1 className="g-label">{recipe ? 'Правка шаблона' : 'Новый шаблон'}</h1>
-        </ShopHead>
+        </HeadRow>
         {preset && !recipe && <p className="shop-hint">Строки взяты из последнего расхода — проверьте и дайте название.</p>}
         <Field id="te-name" label="Название" placeholder="Мойка кузова" maxLength={60} value={name} error={errors.name} onChange={(e) => setName(e.target.value)} />
 
@@ -106,20 +108,19 @@ function Editor({ recipe, preset }: { recipe: Recipe | null; preset: ApplyRow[] 
                       limit={8}
                     />
                   </div>
-                  <div className="shop-between">
+                  <div className="shop-tpl-qty">
                     {p ? (
                       <RecipeQty
                         id={`te-q-${r.key}`}
                         name={p.name}
                         unit={p.unit}
-                        step={rowStep(p.unit, step)}
                         value={r.qty}
                         invalid={Boolean(e?.qty)}
                         describedBy={e ? errId : undefined}
                         onChange={(qty) => setRow(r.key, { qty })}
                       />
                     ) : (
-                      <span className="g-row__sub">Количество — после выбора позиции</span>
+                      <span className="g-row__sub shop-tpl-later">Количество — после выбора позиции</span>
                     )}
                     {rows.length > 1 && (
                       <button type="button" className="g-btn g-btn--icon g-btn--ghost" aria-label={`Удалить строку ${i + 1}`} onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}>
@@ -168,7 +169,7 @@ function Editor({ recipe, preset }: { recipe: Recipe | null; preset: ApplyRow[] 
             </button>
           ))}
 
-        <div className="shop-sticky shop-foot">
+        <div className="shop-sticky shop-foot" data-toast-anchor>
           {formError && (
             <p className="g-field__error" role="alert">
               {formError}
@@ -209,10 +210,10 @@ export function TemplateEditScreen() {
   if (q.data) return <Editor key={q.data.id} recipe={q.data} preset={null} />;
   return (
     <div className="app-stack app-stack--fill">
-      <ShopBack to="/templates" label="Шаблоны" />
-      {q.isPending && <ShopSkelList label="Шаблон загружается" rows={3} />}
+      <BackLink to="/templates" label="Шаблоны" />
+      {q.isPending && <SkelList label="Шаблон загружается" rows={3} />}
       {q.isError && isApiError(q.error, 404) && <Empty id="te-404" icon={IconStack2} title="Шаблон не найден" text="Возможно, его удалили." />}
-      {q.isError && !isApiError(q.error, 404) && <ShopLoadError id="te-err" error={q.error} what="Шаблон" onRetry={() => void q.refetch()} />}
+      {q.isError && !isApiError(q.error, 404) && <LoadError id="te-err" error={q.error} what="Шаблон" onRetry={() => void q.refetch()} />}
     </div>
   );
 }

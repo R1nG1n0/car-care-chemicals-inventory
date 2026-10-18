@@ -1,14 +1,15 @@
 // Купить (ФТ-7) — по макетам «Список покупок» и «Пустой список покупок»:
 // позиции ниже минимума приходят сами, остальное добавляется вручную и вычёркивается.
+// Удаление пункта — сразу, с «Отменить» в уведомлении (как расход и архив позиции).
 import { IconCheck, IconPlus, IconReceipt, IconShoppingCartCheck, IconTrash } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { inventory, type ShoppingItem } from '../../api';
+import { errorText, inventory, type ShoppingItem } from '../../api';
 import { keys } from '../../app/queries';
-import { useFlip } from '../../components/ShopFlip';
-import { errorText, ShopHead, ShopLoadError, ShopSkelList } from '../../components/ShopUi';
-import { Empty, Ico } from '../../components/ui';
+import { useToast } from '../../app/toast';
+import { useFlip } from '../../components/useFlip';
+import { Empty, HeadRow, Ico, LoadError, SkelList } from '../../components/ui';
 import { lowSub, manualSub, manualTitle, sortManual, toggleDone } from '../../lib/shopList';
 import { qtyText } from '../../lib/stock';
 import { ShopAddSheet } from './ShopAddSheet';
@@ -19,6 +20,7 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 
 export function ShoppingScreen() {
   const qc = useQueryClient();
+  const toast = useToast();
   const list = useQuery({ queryKey: keys.shopping, queryFn: ({ signal }) => inventory.shopping(signal) });
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
@@ -26,37 +28,55 @@ export function ShoppingScreen() {
   const patch = (fn: (items: ShoppingItem[]) => ShoppingItem[]) =>
     qc.setQueryData<ShoppingData>(keys.shopping, (d) => (d ? { ...d, manual: fn(d.manual) } : d));
 
-  // Отметка и удаление — сразу на экране, откат при ошибке
+  // Отметка и удаление — сразу на экране, откат при ошибке. Изменений может быть
+  // несколько подряд: снимок «до» верен, только если других в работе нет, иначе
+  // откат затёр бы соседнее — тогда правду вернёт перезапрос после последнего.
+  const pending = useRef(0);
+  const begin = async (fn: (items: ShoppingItem[]) => ShoppingItem[]) => {
+    setError('');
+    pending.current += 1;
+    await qc.cancelQueries({ queryKey: keys.shopping });
+    const before = pending.current === 1 ? qc.getQueryData<ShoppingData>(keys.shopping) : undefined;
+    patch(fn);
+    return { before };
+  };
+  const fail = (err: unknown, ctx: { before: ShoppingData | undefined } | undefined) => {
+    if (ctx?.before && pending.current === 1) qc.setQueryData(keys.shopping, ctx.before);
+    setError(errorText(err));
+  };
+  const settle = async () => {
+    pending.current -= 1;
+    if (pending.current === 0) await qc.invalidateQueries({ queryKey: keys.shopping });
+  };
+
   const done = useMutation({
     mutationFn: ({ id, done }: { id: number; done: boolean }) => inventory.setShoppingDone(id, done),
-    onMutate: async ({ id, done }) => {
-      setError('');
-      await qc.cancelQueries({ queryKey: keys.shopping });
-      const before = qc.getQueryData<ShoppingData>(keys.shopping);
-      patch((items) => toggleDone(items, id, done, nowSec()));
-      return { before };
-    },
-    onError: (err, _v, ctx) => {
-      if (ctx?.before) qc.setQueryData(keys.shopping, ctx.before);
-      setError(errorText(err));
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: keys.shopping }),
+    onMutate: ({ id, done }) => begin((items) => toggleDone(items, id, done, nowSec())),
+    onError: (err, _v, ctx) => fail(err, ctx),
+    onSettled: settle,
   });
 
+  // «Отменить» удаление: пункт добавляется заново (тот же product_id или текст),
+  // отметка «куплено» возвращается
+  const restore = async (item: ShoppingItem) => {
+    try {
+      const again = await inventory.addShopping(item.product_id !== null ? { product_id: item.product_id } : { title: item.title });
+      if (item.done_at !== null) await inventory.setShoppingDone(again.id, true);
+      toast.show({ text: 'Пункт возвращён' });
+    } catch (err) {
+      toast.show({ text: `Не вернулось: ${errorText(err)}` });
+    } finally {
+      await qc.invalidateQueries({ queryKey: keys.shopping });
+    }
+  };
+
   const remove = useMutation({
-    mutationFn: (id: number) => inventory.deleteShopping(id),
-    onMutate: async (id) => {
-      setError('');
-      await qc.cancelQueries({ queryKey: keys.shopping });
-      const before = qc.getQueryData<ShoppingData>(keys.shopping);
-      patch((items) => items.filter((i) => i.id !== id));
-      return { before };
-    },
-    onError: (err, _v, ctx) => {
-      if (ctx?.before) qc.setQueryData(keys.shopping, ctx.before);
-      setError(errorText(err));
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: keys.shopping }),
+    mutationFn: (item: ShoppingItem) => inventory.deleteShopping(item.id),
+    onMutate: (item) => begin((items) => items.filter((i) => i.id !== item.id)),
+    onSuccess: (_r, item) =>
+      toast.show({ text: `Удалено: ${manualTitle(item)}`, action: { label: 'Отменить', onClick: () => void restore(item) } }),
+    onError: (err, _v, ctx) => fail(err, ctx),
+    onSettled: settle,
   });
 
   const manual = sortManual(list.data?.manual ?? []);
@@ -65,12 +85,12 @@ export function ShoppingScreen() {
   const listed = manual.filter((i) => i.done_at === null && i.product_id !== null).map((i) => i.product_id!);
 
   const head = (
-    <ShopHead>
+    <HeadRow>
       <h1 className="g-title">Купить</h1>
       <Link to="/purchases" className="g-btn g-btn--sm g-btn--ghost">
         <Ico icon={IconReceipt} /> История
       </Link>
-    </ShopHead>
+    </HeadRow>
   );
   const addBtn = (
     <button type="button" className="g-btn g-btn--block g-press" onClick={() => setAdding(true)}>
@@ -83,7 +103,7 @@ export function ShoppingScreen() {
     return (
       <div className="app-stack">
         {head}
-        <ShopSkelList label="Список покупок загружается" />
+        <SkelList label="Список покупок загружается" />
       </div>
     );
   }
@@ -91,7 +111,7 @@ export function ShoppingScreen() {
     return (
       <div className="app-stack app-stack--fill">
         {head}
-        <ShopLoadError id="shop-err" error={list.error} what="Список покупок" onRetry={() => void list.refetch()} />
+        <LoadError id="shop-err" error={list.error} what="Список покупок" onRetry={() => void list.refetch()} />
       </div>
     );
   }
@@ -169,7 +189,7 @@ export function ShoppingScreen() {
                       <div className="g-row__sub">{manualSub(i)}</div>
                     </div>
                   )}
-                  <button type="button" className="g-btn g-btn--icon g-btn--ghost shop-del" aria-label={`Удалить из списка: ${title}`} onClick={() => remove.mutate(i.id)}>
+                  <button type="button" className="g-btn g-btn--icon g-btn--ghost shop-del" aria-label={`Удалить из списка: ${title}`} onClick={() => remove.mutate(i)}>
                     <Ico icon={IconTrash} />
                   </button>
                 </div>

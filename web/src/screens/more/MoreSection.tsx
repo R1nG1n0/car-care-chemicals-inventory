@@ -2,11 +2,11 @@
 // Адреса раздела разбирает вложенный <Routes>.
 import { IconBox, IconBuildingStore, IconChevronRight, IconReceipt, IconTags, IconUser, type TablerIcon } from '@tabler/icons-react';
 import { Link, Route, Routes, type Location } from 'react-router';
-import { ShopBack } from '../../components/ShopUi';
 import { Ico } from '../../components/ui';
 import { ProfileScreen } from '../profile/ProfileScreen';
 import { RefsScreen } from './RefsScreen';
 import { StoresScreen } from './StoresScreen';
+import { BackLink } from '../../components/BackLink';
 
 const MENU: { to: string; icon: TablerIcon; title: string; sub: string }[] = [
   { to: '/profile', icon: IconUser, title: 'Профиль', sub: 'Пароль, шаги кнопок, приглашения, выход' },
@@ -46,7 +46,7 @@ export function MoreSection({ location }: { location: Location }) {
         path="/profile"
         element={
           <div className="app-stack">
-            <ShopBack to="/more" label="Ещё" />
+            <BackLink to="/more" label="Ещё" />
             <ProfileScreen />
           </div>
         }

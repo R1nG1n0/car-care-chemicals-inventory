@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react';
 import { MutationCache, QueryCache, QueryClient, queryOptions, useQuery } from '@tanstack/react-query';
 import { api, isApiError, isNetworkError, type Session } from '../api';
 import { isOnline, subscribeConnection } from '../api/connection';
+import { invalidateStock } from './queries';
 
 export const meKey = ['me'] as const;
 
@@ -25,9 +26,15 @@ export function createQueryClient(): QueryClient {
     if (!isApiError(err, 401)) return;
     if (client.getQueryData(meKey) !== null) clearSession(client);
   };
+  // Ответ на изменение не пришёл (тайм-аут): на сервере оно могло выполниться.
+  // Повторно не отправляем, а перечитываем данные — экран покажет, что сохранилось.
+  const onMutationError = (err: unknown) => {
+    onError(err);
+    if (isNetworkError(err) && err.maybeSaved) void invalidateStock(client);
+  };
   const client: QueryClient = new QueryClient({
     queryCache: new QueryCache({ onError }),
-    mutationCache: new MutationCache({ onError }),
+    mutationCache: new MutationCache({ onError: onMutationError }),
     defaultOptions: {
       queries: {
         // Не ждать navigator.onLine: связь определяется ответом сервера через VPN.

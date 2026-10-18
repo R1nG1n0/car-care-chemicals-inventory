@@ -2,11 +2,11 @@
 // строки-кнопки с цветом категории и остатком, внизу — «Создать позицию «…»».
 // С value — показывает выбранную позицию и «Сменить».
 import { IconCirclePlus, IconSearch, IconX } from '@tabler/icons-react';
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import type { ProductSummary } from '../api';
 import { matchProduct, normalize, qtyText } from '../lib/stock';
 import { Ico } from './ui';
-import { catVar, useProducts, useStockRefs } from './StockRefs';
+import { catClassOf, useProducts, useStockRefs } from './refs';
 
 export type ProductPickerProps = {
   /** id поля поиска — для связи с подписью снаружи (htmlFor). */
@@ -48,7 +48,7 @@ export function ProductPicker({
     return (
       <div className="g-field">
         {label && <span className="g-label">{label}</span>}
-        <div className="stock-picked" style={{ '--cat': catVar(refs.categories, selected) } as CSSProperties}>
+        <div className={`stock-picked ${catClassOf(refs.categories, selected)}`}>
           <span className="g-cat-sq" />
           <div className="g-row__main">
             <div className="g-row__title">{selected.name}</div>
@@ -113,7 +113,7 @@ export function ProductPicker({
       <div className="g-list stock-picker__list" id={listId} aria-busy={products.isPending || undefined}>
         {products.isPending && <div className="g-row g-row__sub">Загружаю позиции…</div>}
         {shown.map((p) => (
-          <button key={p.id} type="button" className="g-row g-row--link app-row-btn" style={{ '--cat': catVar(refs.categories, p) } as CSSProperties} onClick={() => pick(p)}>
+          <button key={p.id} type="button" className={`g-row g-row--link app-row-btn ${catClassOf(refs.categories, p)}`} onClick={() => pick(p)}>
             <span className="g-cat-sq" />
             <span className="g-row__main">
               <span className="g-row__title stock-block">{p.name}</span>

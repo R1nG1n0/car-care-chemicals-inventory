@@ -3,8 +3,8 @@
 import { IconCheck } from '@tabler/icons-react';
 import { useRef, type KeyboardEvent } from 'react';
 import { CAT_COLORS, type CatColor } from '../api';
-import { catClass } from './ShopUi';
 import { Ico } from './ui';
+import { catClass } from './refs';
 
 export const CAT_COLOR_NAMES: Record<CatColor, string> = {
   blue: 'синий',

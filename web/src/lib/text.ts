@@ -11,6 +11,10 @@ export function plural(n: number, forms: readonly [string, string, string]): str
 }
 
 const MINUTES = ['минуту', 'минуты', 'минут'] as const;
+
+/** Формы для plural: «2 упаковки», «5 позиций». */
+export const PACKAGES = ['упаковка', 'упаковки', 'упаковок'] as const;
+export const POSITIONS = ['позиция', 'позиции', 'позиций'] as const;
 const DAYS = ['день', 'дня', 'дней'] as const;
 
 /** «через 12 минут» по числу секунд из retry_after; меньше минуты округляется до минуты. */
@@ -31,6 +35,14 @@ const timeFmt = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-d
 /** «14.10» из секунд Unix. */
 export function formatDay(unix: number): string {
   return dayFmt.format(new Date(unix * 1000));
+}
+
+/** Дата покупки «2026-10-02» → «02.10»; другой год — «02.10.2025». */
+export function purchaseDay(date: string, nowYear = new Date().getFullYear()): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(date);
+  if (!m) return date;
+  const dm = `${m[3]}.${m[2]}`;
+  return Number(m[1]) === nowYear ? dm : `${dm}.${m[1]}`;
 }
 
 /** «12:04» из миллисекунд (Date.now()). */

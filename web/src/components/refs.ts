@@ -1,8 +1,9 @@
-// Справочники для карточек и выбора позиции: категории и места по id.
-// Запросы общие с остальными экранами (ключи app/queries.ts).
+// Справочники для карточек, форм и выбора позиции: категории и места по id,
+// общий список позиций, цвет категории классом. Запросы общие со всеми экранами
+// (ключи app/queries.ts).
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { inventory, type Category, type Location, type ProductSummary } from '../api';
+import { inventory, type CatColor, type Category, type Location, type ProductSummary } from '../api';
 import { keys } from '../app/queries';
 
 export type StockRefs = {
@@ -33,7 +34,13 @@ export function useProducts() {
   return useQuery({ queryKey: keys.products(), queryFn: ({ signal }) => inventory.products({}, signal) });
 }
 
-/** Цвет категории для --cat: «var(--cat-blue)». */
-export function catVar(categories: ReadonlyMap<number, Category>, p: Pick<ProductSummary, 'category_id'>): string {
-  return `var(--cat-${categories.get(p.category_id)?.color ?? 'slate'})`;
+/**
+ * Цвет категории — один способ на весь сайт: класс .cat--{color} (components.css)
+ * задаёт --cat (полоса, шапка, точка) и --sw (образец цвета).
+ */
+export const catClass = (c: CatColor | undefined): string => `cat--${c ?? 'slate'}`;
+
+/** Класс цвета категории позиции; категории нет в справочнике — сланцевый. */
+export function catClassOf(categories: ReadonlyMap<number, Category>, p: Pick<ProductSummary, 'category_id'>): string {
+  return catClass(categories.get(p.category_id)?.color);
 }

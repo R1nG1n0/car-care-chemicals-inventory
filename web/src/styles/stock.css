@@ -1,33 +1,9 @@
 /* Экраны раздела «Остатки»: список, карточка позиции, форма, расход. Только токены.
-   Здесь же — общие компоненты components/{Sheet,ProductPicker,QtyInput,ProductCard}. */
+   Здесь же — общие компоненты components/{ProductPicker,QtyInput,ProductCard}. Шторка — в app.css. */
 
 .stock-block { display: block; }
 .stock-between { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2); }
 .stock-gap { display: grid; gap: var(--sp-3); }
-
-/* ---------- Шторка (components/Sheet) ---------- */
-/* Страница под открытой шторкой не прокручивается */
-.stock-sheet-open, .stock-sheet-open body { overflow: hidden; }
-.stock-layer {
-  position: fixed; inset: 0; z-index: 40;
-  display: flex; flex-direction: column; justify-content: flex-end;
-}
-.stock-scrim { position: absolute; inset: 0; background: color-mix(in srgb, #0E0E10 55%, transparent); }
-.stock-sheet {
-  position: relative; width: 100%; max-width: 560px; margin: 0 auto;
-  display: flex; flex-direction: column; max-height: 92dvh;
-  padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom));
-}
-.stock-sheet:focus { outline: none; }
-/* Ручка: зона захвата шире полоски */
-.stock-sheet__grab { margin: calc(-1 * var(--sp-2)) calc(-1 * var(--sp-4)) 0; padding: var(--sp-2) 0 2px; cursor: grab; touch-action: none; }
-.stock-sheet__title { margin: 0 0 var(--sp-3); font: var(--fw-heavy) 16px / var(--lh-tight) var(--font-display); }
-.stock-sheet__body {
-  display: grid; gap: var(--sp-3); align-content: start;
-  min-height: 0; overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain;
-  margin: 0 calc(-1 * var(--sp-2)); padding: 2px var(--sp-2) var(--sp-2);
-}
-.stock-sheet__foot { padding-top: var(--sp-3); }
 
 /* ---------- Ввод количества: три кнопки для штук ---------- */
 .g-qty__steps.stock-qty__steps--3 { grid-template-columns: repeat(3, 1fr); }
@@ -78,14 +54,17 @@
 .stock-big .g-num { font-size: var(--fs-40); line-height: 1; }
 .stock-big--md .g-num { font-size: var(--fs-32); }
 .stock-meta { font-size: var(--fs-12); font-weight: var(--fw-semibold); color: var(--text-muted); }
-.stock-name-lg { font-size: 16px; overflow-wrap: anywhere; }
+.stock-name-lg { font-size: var(--fs-16); overflow-wrap: anywhere; }
 .stock-qty-sm { font-size: var(--fs-14); white-space: nowrap; }
 
 /* ---------- Карточка позиции (экран) ---------- */
 .stock-item { display: grid; gap: var(--sp-4); align-content: start; }
 .stock-item__bar { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2); margin-bottom: calc(-1 * var(--sp-2)); }
-.stock-back { padding-left: 0; }
-.stock-unit { width: 100%; }
+.stock-unit { display: block; width: 100%; }
+/* Строка экземпляра — кнопка: внутри только span (phrasing), раскладка — здесь */
+.stock-unit > span, .stock-unit .g-row__title { display: block; }
+.stock-unit > .stock-between, .stock-unit > .stock-unit__line { display: flex; }
+span.g-meter, span.g-meter__fill { display: block; }
 .stock-unit .g-meter { height: 10px; margin-top: 6px; }
 .stock-unit__line { display: flex; justify-content: space-between; gap: var(--sp-2); margin-top: 2px; }
 .stock-move__right { display: grid; justify-items: end; gap: 2px; }

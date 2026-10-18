@@ -3,12 +3,12 @@
 import { IconArchive, IconCheck, IconChevronDown, IconChevronRight, IconExternalLink, IconPencil, IconPlus, IconRestore, IconX } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { isApiError, inventory, type Store } from '../../api';
+import { errorText, fieldErrors, inventory, type Store } from '../../api';
 import { invalidateRefs, keys } from '../../app/queries';
-import { errorText, ShopBack, ShopHead, ShopLoadError, ShopSkelList } from '../../components/ShopUi';
-import { busyProps, Field, Ico } from '../../components/ui';
+import { busyProps, Field, HeadRow, Ico, LoadError, SkelList } from '../../components/ui';
 import { refNameError, storeUrlError } from '../../lib/refsValidate';
 import { plural } from '../../lib/text';
+import { BackLink } from '../../components/BackLink';
 
 type Edit = { id: number | 'new'; name: string; url: string };
 type Errors = { name?: string; url?: string; form?: string };
@@ -80,10 +80,7 @@ export function StoresScreen() {
       setEdit(null);
       await invalidateRefs(qc);
     },
-    onError: (err) => {
-      if (isApiError(err) && (err.field === 'name' || err.field === 'url')) setErrors({ [err.field]: err.message });
-      else setErrors({ form: errorText(err) });
-    },
+    onError: (err) => setErrors(fieldErrors(err, ['name', 'url'] as const)),
   });
 
   const archive = useMutation({
@@ -117,7 +114,9 @@ export function StoresScreen() {
       <div className="g-row shop-row--wrap" key={s.id}>
         <div className="g-row__main">
           <div className="g-row__title">{s.name}</div>
-          {s.url && (
+          {/* Ссылка — только http(s): сервер это проверяет, а здесь — на случай старых данных */}
+          {s.url && storeUrlError(s.url) && <div className="g-row__sub">{s.url}</div>}
+          {s.url && !storeUrlError(s.url) && (
             <a className="g-row__sub shop-link" href={s.url} target="_blank" rel="noopener noreferrer">
               {s.url.replace(/^https?:\/\//i, '')} <Ico icon={IconExternalLink} size={14} />
             </a>
@@ -145,21 +144,21 @@ export function StoresScreen() {
 
   return (
     <div className="app-stack">
-      <ShopBack to="/more" label="Ещё" />
-      <ShopHead>
+      <BackLink to="/more" label="Ещё" />
+      <HeadRow>
         <h1 className="g-title">Магазины</h1>
         <button type="button" className="g-btn g-btn--sm g-press" onClick={() => open({ id: 'new', name: '', url: '' })}>
           <Ico icon={IconPlus} /> Магазин
         </button>
-      </ShopHead>
+      </HeadRow>
       <p className="shop-hint">Магазин выбирается в покупке; по нему видно, где дешевле. Ссылка — для интернет-магазина.</p>
       {edit?.id === 'new' && (
         <div className="g-list">
           <StoreForm edit={edit} setEdit={setEdit} onSave={doSave} saving={save.isPending} errors={errors} />
         </div>
       )}
-      {list.isPending && <ShopSkelList label="Магазины загружаются" />}
-      {list.isError && !list.data && <ShopLoadError id="stores-err" error={list.error} what="Магазины" onRetry={() => void list.refetch()} />}
+      {list.isPending && <SkelList label="Магазины загружаются" />}
+      {list.isError && !list.data && <LoadError id="stores-err" error={list.error} what="Магазины" onRetry={() => void list.refetch()} />}
       {list.data && active.length === 0 && edit?.id !== 'new' && <p className="shop-hint">Магазинов пока нет. Их можно добавить и прямо в покупке.</p>}
       {active.length > 0 && <div className="g-list">{active.map(row)}</div>}
       {archived.length > 0 && (

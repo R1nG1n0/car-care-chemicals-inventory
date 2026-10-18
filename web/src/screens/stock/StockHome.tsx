@@ -3,13 +3,12 @@
 // Свайп влево — расход, нажатие — карточка позиции. На ширине от 1024 px нажатие
 // выбирает карточку, справа панель позиции с расходом. /?consume=1 — расход с выбором
 // позиции (меню «+»), /?location=ID и /?filter=low|out — начальный фильтр.
-import { IconPackage, IconPlus, IconSearch, IconSearchOff, IconWifiOff, IconX } from '@tabler/icons-react';
-import { useMemo, useState, type CSSProperties } from 'react';
+import { IconPackage, IconPlus, IconSearch, IconSearchOff, IconX } from '@tabler/icons-react';
+import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { isNetworkError } from '../../api';
-import { DESKTOP, useMedia } from '../../components/StockHooks';
-import { useProducts, useStockRefs } from '../../components/StockRefs';
-import { Empty, Ico } from '../../components/ui';
+import { DESKTOP, useMedia } from '../../components/hooks';
+import { catClass, useProducts, useStockRefs } from '../../components/refs';
+import { Empty, Ico, LoadError } from '../../components/ui';
 import { parseFilter, stockCounts, visibleProducts, type StockFilter } from '../../lib/stock';
 import { ConsumeSheet } from './ConsumeSheet';
 import { StockList } from './StockList';
@@ -45,32 +44,18 @@ export function StockHome() {
 
   const places = refs.locationList.filter((l) => !l.archived && all.some((p) => p.location_ids.includes(l.id)));
   const cats = refs.categoryList.filter((c) => all.some((p) => p.category_id === c.id));
-  const chip = (f: StockFilter, label: string, style?: CSSProperties, dot?: boolean) => (
-    <button key={f} type="button" className="g-filter" aria-pressed={filter === f} style={style} onClick={() => setFilter(f)}>
+  const chip = (f: StockFilter, label: string, cls?: string, dot?: boolean) => (
+    <button key={f} type="button" className={`g-filter${cls ? ` ${cls}` : ''}`} aria-pressed={filter === f} onClick={() => setFilter(f)}>
       {dot && <span className="g-catpick__dot stock-filters__dot" />}
       {label}
     </button>
   );
 
-  const fail: unknown = products.error;
   let body;
   if (products.isPending) {
     body = <Skeleton />;
   } else if (products.isError && !products.data) {
-    body = (
-      <Empty
-        id="stock-err"
-        icon={IconWifiOff}
-        error
-        title={isNetworkError(fail) ? 'Сервер недоступен' : 'Не загрузилось'}
-        text={isNetworkError(fail) ? 'Сайт работает только через VPN. Проверьте, что AmneziaWG включён.' : String(products.error?.message)}
-        actions={
-          <button type="button" className="g-btn g-btn--block g-press" onClick={() => void products.refetch()}>
-            Повторить
-          </button>
-        }
-      />
-    );
+    body = <LoadError id="stock-err" error={products.error} what="Остатки" onRetry={() => void products.refetch()} />;
   } else if (all.length === 0) {
     body = (
       <Empty
@@ -118,7 +103,7 @@ export function StockHome() {
           {chip('low', `Мало\u00a0${counts.low}`)}
           {chip('out', 'Нет в наличии')}
           {places.map((l) => chip(`loc:${l.id}`, l.name))}
-          {cats.map((c) => chip(`cat:${c.id}`, c.name, { '--cat': `var(--cat-${c.color})` } as CSSProperties, true))}
+          {cats.map((c) => chip(`cat:${c.id}`, c.name, catClass(c.color), true))}
         </div>
         {items.length === 0 && <NotFound q={q.trim()} onAll={() => setFilter('all')} />}
         <StockList

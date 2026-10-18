@@ -3,17 +3,18 @@
 // переименование прямо в строке, число экземпляров / позиций, архив.
 import { IconArrowDown, IconArrowUp, IconArchive, IconCheck, IconChevronDown, IconChevronRight, IconDotsVertical, IconPencil, IconPlus, IconRestore, IconX } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { inventory, type CatColor, type Category, type Location } from '../../api';
+import { type CatColor, type Category, errorText, inventory, type Location } from '../../api';
 import { invalidateRefs, keys } from '../../app/queries';
 import { ShopSwatches } from '../../components/ShopSwatches';
-import { catClass, errorText, ShopBack, ShopHead, ShopLoadError, ShopSkelList } from '../../components/ShopUi';
-import { busyProps, Ico } from '../../components/ui';
+import { busyProps, HeadRow, Ico, LoadError, SkelList } from '../../components/ui';
 import { moveItem } from '../../lib/refsOrder';
 import { refNameError } from '../../lib/refsValidate';
 import { plural } from '../../lib/text';
 import { SortableList } from './SortableList';
+import { BackLink } from '../../components/BackLink';
+import { catClass } from '../../components/refs';
 
 export type RefKind = 'places' | 'categories';
 
@@ -169,12 +170,19 @@ export function RefsScreen({ kind }: { kind: RefKind }) {
     onError: (err, v) => setRowError({ id: v.id, text: errorText(err) }),
   });
 
+  // Быстрые перестановки подряд: порядок сервера — только после последней
+  const pending = useRef(0);
   const reorder = useMutation({
     mutationFn: (ids: number[]) => a.reorder(ids),
+    onMutate: () => {
+      pending.current += 1;
+    },
     onError: (err) => setRowError({ id: 'order', text: `Порядок не сохранился: ${errorText(err)}` }),
     onSettled: async () => {
+      pending.current -= 1;
+      if (pending.current > 0) return;
       await invalidateRefs(qc);
-      setOrder(null);
+      if (pending.current === 0) setOrder(null);
     },
   });
 
@@ -254,8 +262,8 @@ export function RefsScreen({ kind }: { kind: RefKind }) {
 
   return (
     <div className="app-stack">
-      <ShopBack to="/more" label="Ещё" />
-      <ShopHead>
+      <BackLink to="/more" label="Ещё" />
+      <HeadRow>
         <h1 className="g-title">{t.title}</h1>
         <button
           type="button"
@@ -268,7 +276,7 @@ export function RefsScreen({ kind }: { kind: RefKind }) {
         >
           <Ico icon={IconPlus} /> {t.add}
         </button>
-      </ShopHead>
+      </HeadRow>
       <p className="shop-hint">{t.hint}</p>
 
       {edit?.id === 'new' && (
@@ -279,8 +287,8 @@ export function RefsScreen({ kind }: { kind: RefKind }) {
         </div>
       )}
 
-      {list.isPending && <ShopSkelList label={`${t.title} загружаются`} />}
-      {list.isError && !list.data && <ShopLoadError id="refs-err" error={list.error} what={t.title} onRetry={() => void list.refetch()} />}
+      {list.isPending && <SkelList label={`${t.title} загружаются`} />}
+      {list.isError && !list.data && <LoadError id="refs-err" error={list.error} what={t.title} onRetry={() => void list.refetch()} />}
       {list.data && active.length === 0 && edit?.id !== 'new' && (
         <p className="shop-hint">Пока пусто. Нажмите «+ {t.add}», чтобы добавить первое.</p>
       )}

@@ -1,7 +1,7 @@
 // Ввод количества (ФТ-5.8, .g-qty): поле с цифровой клавиатурой и кнопки шагов.
 // Для мл — −большой −малый +малый +большой из настроек профиля, для шт — −1 +1 +5.
 // Значение не уходит ниже min и выше max. Кнопки и ввод — без анимации.
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import type { Settings, Unit } from '../api';
 import { useSession } from '../app/session';
 import { unitLabel } from '../lib/stock';
@@ -24,29 +24,38 @@ export type QtyInputProps = {
   error?: string | undefined;
   autoFocus?: boolean;
   onEnter?: () => void;
+  /** Компактный вид для строки шаблона: число мельче, подпись только для диктора. */
+  compact?: boolean;
+  /** Ошибка показывается снаружи (строка шаблона): только aria-invalid и связь с текстом. */
+  invalid?: boolean;
+  describedBy?: string | undefined;
 };
 
-export function QtyInput({ id, value, onChange, unit, label = 'Количество', min = 0, max, steps, hint, error, autoFocus, onEnter }: QtyInputProps) {
+export function QtyInput({ id, value, onChange, unit, label = 'Количество', min = 0, max, steps, hint, error, autoFocus, onEnter, compact, invalid, describedBy }: QtyInputProps) {
   const session = useSession();
+  const input = useRef<HTMLInputElement>(null);
   const buttons = stepButtons(unit, steps ?? session.data?.settings);
   const u = unitLabel(unit);
   const hintId = `${id}-hint`;
   const errId = `${id}-err`;
-  const described = [hint ? hintId : '', error ? errId : ''].filter(Boolean).join(' ') || undefined;
+  const described = [hint ? hintId : '', error ? errId : '', describedBy ?? ''].filter(Boolean).join(' ') || undefined;
+  const bad = Boolean(error) || Boolean(invalid);
 
   return (
-    <div className={`g-qty${error ? ' g-field--error' : ''}`}>
-      <label className="g-label" htmlFor={id}>
+    <div className={`g-qty${compact ? ' app-qty--compact' : ''}${bad ? ' g-field--error' : ''}`}>
+      <label className={compact ? 'g-sr' : 'g-label'} htmlFor={id}>
         {label}
       </label>
-      <div className="g-qty__value">
+      {/* Нажатие по рамке (например, по «мл») ставит фокус в поле */}
+      <div className="g-qty__value" onClick={(e) => e.target !== input.current && input.current?.focus()}>
         <input
+          ref={input}
           id={id}
           inputMode="numeric"
           autoComplete="off"
           enterKeyHint="done"
           value={value}
-          aria-invalid={error ? true : undefined}
+          aria-invalid={bad || undefined}
           aria-describedby={described}
           data-autofocus={autoFocus || undefined}
           onChange={(e) => onChange(e.target.value.replace(/[^\d\s]/gu, ''))}
@@ -61,7 +70,13 @@ export function QtyInput({ id, value, onChange, unit, label = 'Количест�
       </div>
       <div className={`g-qty__steps${buttons.length === 3 ? ' stock-qty__steps--3' : ''}`}>
         {buttons.map((d) => (
-          <button key={d} type="button" className="g-btn g-press" aria-label={stepLabel(d, unit)} onClick={() => onChange(String(applyStep(value, d, min, max)))}>
+          <button
+            key={d}
+            type="button"
+            className="g-btn g-press"
+            aria-label={compact ? `${stepLabel(d, unit)}: ${label}` : stepLabel(d, unit)}
+            onClick={() => onChange(String(applyStep(value, d, min, max)))}
+          >
             {stepText(d)}
           </button>
         ))}

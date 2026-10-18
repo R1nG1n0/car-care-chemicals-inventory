@@ -2,8 +2,10 @@
 // строка приподнимается и следует за пальцем, соседи расступаются.
 // Pointer events — одинаково для мыши, пальца и пера. Без жеста порядок
 // меняется стрелками на ручке и кнопками «Выше/Ниже» в меню строки.
+// После перестановки стрелкой фокус возвращается на ручку той же строки
+// (React переносит узел, и фокус иначе теряется), новое место объявляется вслух.
 import { IconGripVertical } from '@tabler/icons-react';
-import { useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { Ico } from '../../components/ui';
 import { dropIndex, neighbourShift } from '../../lib/refsOrder';
 
@@ -22,6 +24,22 @@ export function SortableList<T extends { id: number }>({ items, label, nameOf, r
   const rows = useRef<(HTMLDivElement | null)[]>([]);
   const drag = useRef<Drag | null>(null);
   const [lifted, setLifted] = useState<number | null>(null);
+  const handles = useRef(new Map<number, HTMLButtonElement>());
+  const refocus = useRef<number | null>(null);
+  const [said, setSaid] = useState('');
+
+  // Строка, переставленная с клавиатуры, — снова в фокусе на новом месте
+  useLayoutEffect(() => {
+    const id = refocus.current;
+    if (id === null) return;
+    const el = handles.current.get(id);
+    if (el && document.activeElement !== el) el.focus({ preventScroll: false });
+    const at = items.findIndex((x) => x.id === id);
+    if (at >= 0) {
+      refocus.current = null;
+      setSaid(`${nameOf(items[at]!)}: место ${at + 1} из ${items.length}`);
+    }
+  }, [items, nameOf]);
 
   const paint = (d: Drag, dy: number) => {
     rows.current.forEach((el, i) => {
@@ -74,13 +92,15 @@ export function SortableList<T extends { id: number }>({ items, label, nameOf, r
   };
 
   const key = (e: KeyboardEvent, index: number) => {
-    if (e.key === 'ArrowUp' && index > 0) onMove(index, index - 1);
-    else if (e.key === 'ArrowDown' && index < items.length - 1) onMove(index, index + 1);
-    else return;
+    const to = e.key === 'ArrowUp' ? index - 1 : e.key === 'ArrowDown' ? index + 1 : -1;
+    if (to < 0 || to >= items.length) return;
     e.preventDefault();
+    refocus.current = items[index]!.id;
+    onMove(index, to);
   };
 
   return (
+    <>
     <div className="g-list" aria-label={label} role="list">
       {items.map((item, i) => (
         <div
@@ -92,6 +112,10 @@ export function SortableList<T extends { id: number }>({ items, label, nameOf, r
           className={`g-row${rowClass ? ` ${rowClass(item)}` : ''}${lifted === i ? ' is-lifted' : ''}`}
         >
           <button
+            ref={(el) => {
+              if (el) handles.current.set(item.id, el);
+              else handles.current.delete(item.id);
+            }}
             type="button"
             className="g-handle"
             aria-label={`Перетащить ${nameOf(item)}. Стрелки вверх и вниз меняют порядок`}
@@ -107,5 +131,9 @@ export function SortableList<T extends { id: number }>({ items, label, nameOf, r
         </div>
       ))}
     </div>
+    <span className="g-sr" aria-live="polite">
+      {said}
+    </span>
+    </>
   );
 }

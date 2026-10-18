@@ -29,9 +29,10 @@ export function invalidateStock(qc: QueryClient): Promise<void> {
   });
 }
 
-/** После изменения справочников (имя, цвет, архив, порядок). */
+/** После изменения справочников (имя, цвет, архив, порядок): имена магазинов и мест видны и в покупках. */
 export function invalidateRefs(qc: QueryClient): Promise<void> {
   return qc.invalidateQueries({
-    predicate: (q) => ['categories', 'locations', 'stores', 'products', 'product'].includes(q.queryKey[0] as string),
+    predicate: (q) =>
+      ['categories', 'locations', 'stores', 'products', 'product', 'shopping', 'purchases', 'purchase'].includes(q.queryKey[0] as string),
   });
 }

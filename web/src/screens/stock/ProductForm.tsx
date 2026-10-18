@@ -2,17 +2,18 @@
 // название (?name= подставляется), бренд с подсказкой, категория чипами,
 // мл/шт, размер упаковки, минимум, штрихкод (сканер — в 1.1), заметка.
 // Ошибки сервера — под полями по field. После создания — на карточку позиции.
-import { IconBarcode, IconChevronLeft } from '@tabler/icons-react';
+import { IconBarcode } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { inventory, isApiError, isNetworkError, type ProductInput, type ProductSummary } from '../../api';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { fieldErrors, inventory, type ProductInput, type ProductSummary } from '../../api';
 import { invalidateRefs, invalidateStock, keys } from '../../app/queries';
-import { useStockRefs } from '../../components/StockRefs';
-import { busyProps, Field, Ico } from '../../components/ui';
+import { BackLink } from '../../components/BackLink';
+import { BrandField, CategoryPick } from '../../components/ProductFields';
+import { useStockRefs } from '../../components/refs';
+import { busyProps, Field, Ico, LoadError } from '../../components/ui';
+import { PRODUCT_FIELDS, validateProduct, type ProductErrors, type ProductFields } from '../../lib/product';
 import { unitLabel } from '../../lib/stock';
-import { validateProduct, type ProductErrors, type ProductFields } from '../../lib/stockMoney';
-import { BrandField, CategoryPick } from './ProductFormParts';
 
 export function ProductForm() {
   const params = useParams();
@@ -25,9 +26,16 @@ export function ProductForm() {
   if (id !== null && !detail.data) {
     return (
       <div className="stock-item">
-        <p className="g-muted" aria-busy={detail.isPending}>
-          {detail.isPending ? 'Загружаю позицию…' : (detail.error?.message ?? 'Не загрузилось')}
-        </p>
+        <div className="stock-item__bar">
+          <BackLink to={`/items/${id}`} label="Отмена" />
+        </div>
+        {detail.isError ? (
+          <LoadError id="pf-err" error={detail.error} what="Позиция" onRetry={() => void detail.refetch()} />
+        ) : (
+          <p className="g-muted" aria-busy="true">
+            Загружаю позицию…
+          </p>
+        )}
       </div>
     );
   }
@@ -65,14 +73,7 @@ function FormBody({ product, hasUnits }: { product: ProductSummary | undefined; 
       await Promise.all([invalidateRefs(qc), invalidateStock(qc), qc.invalidateQueries({ queryKey: keys.brands })]);
       navigate(`/items/${r.id}`, { replace: true });
     },
-    onError: (error) => {
-      const err: unknown = error;
-      if (isNetworkError(err)) return setErrors({ form: 'Нет связи — позиция не сохранена' });
-      if (!isApiError(err)) return setErrors({ form: 'Не получилось сохранить' });
-      const known: (keyof ProductFields)[] = ['name', 'brand', 'category_id', 'unit', 'package_size', 'min_stock', 'barcode', 'note'];
-      if (err.field && known.includes(err.field as keyof ProductFields)) setErrors({ [err.field]: err.message });
-      else setErrors({ form: err.message });
-    },
+    onError: (err) => setErrors(fieldErrors(err, PRODUCT_FIELDS)),
   });
 
   const submit = (e: FormEvent) => {
@@ -92,10 +93,7 @@ function FormBody({ product, hasUnits }: { product: ProductSummary | undefined; 
   return (
     <div className="stock-item">
       <div className="stock-item__bar">
-        <Link className="g-btn g-btn--ghost g-btn--sm stock-back" to={backTo}>
-          <Ico icon={IconChevronLeft} />
-          Отмена
-        </Link>
+        <BackLink to={backTo} label="Отмена" />
         <h1 className="g-label">{product ? 'Изменить позицию' : 'Новая позиция'}</h1>
       </div>
       <form className="g-form stock-form" onSubmit={submit} noValidate>

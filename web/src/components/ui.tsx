@@ -1,6 +1,7 @@
 // Общие куски экранов на классах дизайн-системы «Сумерки».
-import type { TablerIcon } from '@tabler/icons-react';
+import { IconWifiOff, type TablerIcon } from '@tabler/icons-react';
 import type { InputHTMLAttributes, ReactNode, Ref } from 'react';
+import { isNetworkError, OFFLINE_TEXT, OFFLINE_TITLE } from '../api';
 
 /** Иконка Tabler: контурная, обводка 2, 20 px, декоративная. */
 export function Ico({ icon: I, size = 20 }: { icon: TablerIcon; size?: number }) {
@@ -78,4 +79,42 @@ export function Empty({ id, icon, title, text, error, actions, meta }: EmptyProp
 /** Свойства кнопки в состоянии отправки: неактивна, но остаётся в фокусе. */
 export function busyProps(busy: boolean) {
   return busy ? ({ 'aria-busy': true, 'aria-disabled': true } as const) : {};
+}
+
+/** Строка заголовка: слева «Назад» или заголовок, справа действие. */
+export function HeadRow({ children }: { children: ReactNode }) {
+  return <div className="app-between">{children}</div>;
+}
+
+/** Подложки загрузки в форме списка строк (И-3а). */
+export function SkelList({ rows = 4, label }: { rows?: number; label: string }) {
+  return (
+    <div className="g-skel app-skel" aria-busy="true" aria-label={label}>
+      {Array.from({ length: rows }, (_, i) => (
+        <div className="g-skel__body" key={i}>
+          <div className="g-skel__line" />
+          <div className="g-skel__line g-skel__line--short" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Данные не загрузились: «нет связи» или ошибка сервера, с «Повторить». Один текст на весь сайт. */
+export function LoadError({ id, error, onRetry, what }: { id: string; error: unknown; onRetry: () => void; what: string }) {
+  const offline = isNetworkError(error);
+  return (
+    <Empty
+      id={id}
+      icon={IconWifiOff}
+      error
+      title={offline ? OFFLINE_TITLE : `${what}: не загрузилось`}
+      text={offline ? OFFLINE_TEXT : error instanceof Error ? error.message : 'Попробуйте ещё раз.'}
+      actions={
+        <button type="button" className="g-btn g-btn--block g-press" onClick={onRetry}>
+          Повторить
+        </button>
+      }
+    />
+  );
 }

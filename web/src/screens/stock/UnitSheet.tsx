@@ -1,18 +1,19 @@
 // Действия с экземпляром во второй шторке: переместить (ФТ-5.4), скорректировать
 // остаток с причиной (ФТ-5.5), списать с причиной (ФТ-5.3). После корректировки и
-// списания — уведомление с «Отменить» (ФТ-5.6).
+// списания — уведомление с «Отменить» (ФТ-5.6): движение приходит в ответе
+// (UnitChange.movement), отмена — POST /api/movements/revert по его id.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
-import { inventory, isApiError, isNetworkError, type MovementType, type ProductSummary, type StockUnit } from '../../api';
+import { errorText, inventory, type Movement, type ProductSummary, type StockUnit } from '../../api';
 import { invalidateStock } from '../../app/queries';
 import { useToast } from '../../app/toast';
 import { QtyInput } from '../../components/QtyInput';
 import { Sheet } from '../../components/Sheet';
-import { useStockRefs } from '../../components/StockRefs';
+import { useStockRefs } from '../../components/refs';
 import { busyProps, Field } from '../../components/ui';
 import { qtyText } from '../../lib/stock';
-import { parseQty } from '../../lib/stockQty';
-import { useRevert } from './useConsume';
+import { parseQty } from '../../lib/qty';
+import { useRevert } from '../../app/useRevert';
 import { unitState } from './UnitRows';
 
 type Mode = 'move' | 'adjust' | 'writeoff';
@@ -36,19 +37,17 @@ function UnitBody({ u, product: p, onClose }: { u: StockUnit; product: ProductSu
   const toast = useToast();
   const revert = useRevert();
   const refs = useStockRefs();
-  const [mode, setMode] = useState<Mode>('move');
+  const places = refs.locationList.filter((l) => !l.archived);
+  // Мест нет — перемещать некуда: сразу «Остаток»
+  const [mode, setMode] = useState<Mode>(places.length > 0 ? 'move' : 'adjust');
   const [place, setPlace] = useState<number | null>(u.location_id);
   const [qty, setQty] = useState(String(u.remaining_qty));
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string>();
-  const places = refs.locationList.filter((l) => !l.archived);
 
-  // Движение для «Отменить»: сервер возвращает экземпляр, id берём из журнала
-  const offerUndo = async (type: MovementType, text: string) => {
-    const list = await inventory.movements({ product_id: p.id }).catch(() => []);
-    const m = list.find((x) => x.unit_id === u.id && x.type === type);
-    toast.show(m ? { text, action: { label: 'Отменить', onClick: () => void revert([m.id]).catch(() => undefined) } } : { text });
-  };
+  /** Уведомление с «Отменить», если сервер вернул движение (null — ничего не изменилось). */
+  const offerUndo = (m: Movement | null, text: string, undone: string) =>
+    toast.show(m ? { text, action: { label: 'Отменить', onClick: () => void revert([m.id], undone).catch(() => undefined) } } : { text });
 
   const mut = useMutation({
     mutationFn: async (): Promise<() => void> => {
@@ -59,22 +58,18 @@ function UnitBody({ u, product: p, onClose }: { u: StockUnit; product: ProductSu
       }
       const n = parseQty(qty)!;
       if (mode === 'adjust') {
-        await inventory.adjustUnit(u.id, n, reason.trim());
-        return () => void offerUndo('adjust', `Остаток исправлен: ${qtyText(n, p.unit)}`);
+        const r = await inventory.adjustUnit(u.id, n, reason.trim());
+        return () => offerUndo(r.movement, `Остаток исправлен: ${qtyText(n, p.unit)}`, 'Корректировка отменена');
       }
-      await inventory.writeoffUnit(u.id, reason.trim(), n);
-      return () => void offerUndo('writeoff', `Списано ${qtyText(n, p.unit)} · ${reason.trim()}`);
+      const r = await inventory.writeoffUnit(u.id, reason.trim(), n);
+      return () => offerUndo(r.movement, `Списано ${qtyText(n, p.unit)} · ${reason.trim()}`, 'Списание отменено');
     },
     onSuccess: async (after) => {
       onClose();
       await invalidateStock(qc);
       after();
     },
-    onError: (error) => {
-      const err: unknown = error;
-      if (isNetworkError(err)) setError('Нет связи — изменения не сохранены');
-      else setError(isApiError(err) ? err.message : 'Не получилось');
-    },
+    onError: (err) => setError(errorText(err)),
   });
 
   const submit = (e: FormEvent) => {
@@ -108,7 +103,12 @@ function UnitBody({ u, product: p, onClose }: { u: StockUnit; product: ProductSu
   return (
     <form className="stock-gap" onSubmit={submit} noValidate>
       <div className="g-seg" role="group" aria-label="Действие">
-        <button type="button" aria-pressed={mode === 'move'} onClick={() => switchTo('move')}>
+        <button
+          type="button"
+          aria-pressed={mode === 'move'}
+          aria-disabled={places.length === 0 || undefined}
+          onClick={() => places.length > 0 && switchTo('move')}
+        >
           Переместить
         </button>
         <button type="button" aria-pressed={mode === 'adjust'} onClick={() => switchTo('adjust')}>
@@ -135,9 +135,13 @@ function UnitBody({ u, product: p, onClose }: { u: StockUnit; product: ProductSu
                 </button>
               ))}
             </div>
-            {error && <span className="g-field__error" role="alert">{error}</span>}
           </div>
         ))}
+      {mode === 'move' && error && (
+        <span className="g-field__error" role="alert">
+          {error}
+        </span>
+      )}
 
       {mode !== 'move' && (
         <>

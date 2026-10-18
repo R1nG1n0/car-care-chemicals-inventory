@@ -24,11 +24,26 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Как пропала связь:
+ * - offline — запрос не дошёл (fetch упал сразу, nginx не достучался до garage: 502/503);
+ * - timeout — ответ не пришёл (истёк срок ожидания, 504): запрос мог уже выполниться.
+ */
+export type NetworkErrorKind = 'offline' | 'timeout';
+
 /** Сервер недоступен: VPN выключен, сеть пропала или nginx не достучался до garage. */
 export class NetworkError extends Error {
-  constructor(message = 'Сервер недоступен') {
+  readonly kind: NetworkErrorKind;
+
+  constructor(kind: NetworkErrorKind = 'offline', message = 'Сервер недоступен') {
     super(message);
     this.name = 'NetworkError';
+    this.kind = kind;
+  }
+
+  /** Изменение могло сохраниться на сервере, хотя ответа нет. */
+  get maybeSaved(): boolean {
+    return this.kind === 'timeout';
   }
 }
 
@@ -70,12 +85,12 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     // Отмену вызывающим (React Query при уходе с экрана) пробрасываем как есть.
     if (opts.signal?.aborted) throw err;
     reportConnection(false);
-    throw new NetworkError();
+    throw new NetworkError(timeout.aborted ? 'timeout' : 'offline');
   }
 
   if (GATEWAY_STATUSES.has(res.status)) {
     reportConnection(false);
-    throw new NetworkError();
+    throw new NetworkError(res.status === 504 ? 'timeout' : 'offline');
   }
 
   const data = await readJson(res);

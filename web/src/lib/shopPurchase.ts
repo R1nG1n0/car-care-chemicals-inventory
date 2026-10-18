@@ -1,6 +1,6 @@
 // Форма новой покупки (ФТ-4): строки, итог, проверка перед отправкой.
 import type { PurchaseInput } from '../api';
-import { MAX_PRICE_KOPECKS, parseRubles } from './shopMoney';
+import { MAX_PRICE_KOPECKS, parseRubles } from './money';
 
 export const MAX_LINES = 30;
 export const MAX_PACKAGES = 100;
@@ -51,9 +51,18 @@ export function packagesTotal(lines: LineDraft[]): number {
   return lines.reduce((s, l) => s + l.packages, 0);
 }
 
+/** «ГГГГ-ММ-ДД» и такой день есть в календаре: «2026-02-30» — нет (Date.parse его принимает). */
+export function isCalendarDate(s: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(s);
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const t = new Date(Date.UTC(y, mo - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d;
+}
+
 export function validatePurchase(d: PurchaseDraft): PurchaseErrors {
   const errors: PurchaseErrors = { byLine: {} };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date) || Number.isNaN(Date.parse(d.date))) errors.date = 'Укажите дату покупки';
+  if (!isCalendarDate(d.date)) errors.date = 'Укажите дату покупки';
   if (d.lines.length === 0) errors.lines = 'Добавьте хотя бы одну позицию';
   if (d.lines.length > MAX_LINES) errors.lines = `В покупке — не больше ${MAX_LINES} строк`;
   const seen = new Set<number>();

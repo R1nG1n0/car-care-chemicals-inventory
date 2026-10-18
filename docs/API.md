@@ -178,7 +178,7 @@
   "price_per_package": 119000, "price_per_100": 11900 }   // для шт — "price_per_unit"
 // Movement
 { "id": 91, "unit_id": 40, "product_id": 12, "type": "consume", "qty_delta": -40,
-  "from_location_id": null, "to_location_id": null, "reason": "", "recipe_run_id": null,
+  "from_location_id": null, "to_location_id": null, "reason": "", "recipe_run_id": null, "batch_id": 91,
   "cost": 4760, "created_at": 1792140000 }   // cost — копейки, по цене экземпляра; null — нет цены
 ```
 
@@ -210,8 +210,8 @@
 | `GET /api/purchases/{id}` | `{purchase: Purchase}` |
 | `POST /api/units` | **Ввод имеющегося остатка** — то, что уже лежит дома без покупки: `{product_id, remaining_qty, initial_qty?, location_id?}`. `initial_qty` по умолчанию — `package_size`; `remaining_qty` 1…initial. Статус `sealed`, если остаток равен объёму, иначе `open`. Движение `adjust` (+remaining, причина «Начальный остаток»). `201 Unit` |
 | `POST /api/units/{id}/move` `{location_id}` | Перемещение: движение `move` (0, from/to). `200 Unit`. Только sealed/open |
-| `POST /api/units/{id}/adjust` `{remaining_qty, reason?}` | Корректировка (ФТ-5.5): движение `adjust` на разницу; 0 → `finished`; > 0 у `finished` → `open`; у `sealed` при изменении → `open`. `200 Unit` |
-| `POST /api/units/{id}/writeoff` `{qty?, reason}` | Списание (ФТ-5.3): `qty` по умолчанию — весь остаток; `reason` 1–80 обязателен («Испорчено», «Ошибка ввода»…). Движение `writeoff`; при 0 — `written_off`. `200 Unit` |
+| `POST /api/units/{id}/adjust` `{remaining_qty, reason?}` | Корректировка (ФТ-5.5): движение `adjust` на разницу; 0 → `finished`; > 0 у `finished` → `open`; у `sealed` при изменении → `open`. `200 Unit` + поле `movement` — созданное движение (`Movement`, для «Отменить»); `null`, если остаток не изменился |
+| `POST /api/units/{id}/writeoff` `{qty?, reason}` | Списание (ФТ-5.3): `qty` по умолчанию — весь остаток; `reason` 1–80 обязателен («Испорчено», «Ошибка ввода»…). Движение `writeoff`; при 0 — `written_off`. `200 Unit` + поле `movement` — движение списания |
 
 ```json
 // Purchase
@@ -248,7 +248,7 @@
 
 Уточнения к отмене: движение «Начальный остаток» (ввод имеющегося) вскрытием не считается — полный экземпляр после отмены расхода снова `sealed`. Отмена `purchase` и `move` — `409`.
 
-**Группы движений** (миграция 002, `movements.batch_id`): все движения одного запроса — покупки, расхода, применения шаблона — получают общий `batch_id` (id первого движения); одиночные движения — сами себе группа. В JSON пока не отдаётся.
+**Группы движений** (миграция 002, `movements.batch_id`): все движения одного запроса — покупки, расхода, применения шаблона — получают общий `batch_id` (id первого движения); одиночные движения — сами себе группа. В JSON — поле `batch_id` у `Movement` (у старых записей без группы — собственный `id`).
 
 ### Шаблоны расхода (ФТ-8)
 

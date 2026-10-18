@@ -3,15 +3,14 @@
 import { IconPlus } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
-import { inventory, isApiError, type ProductSummary } from '../../api';
+import { useSearchParams } from 'react-router';
+import { errorText, fieldErrors, inventory, type ProductSummary } from '../../api';
 import { invalidateRefs, invalidateStock, keys } from '../../app/queries';
 import { useToast } from '../../app/toast';
 import { ShopNewProduct } from '../../components/ShopNewProduct';
 import { ShopRefSelect } from '../../components/ShopRefSelect';
-import { errorText, ShopBack, ShopHead } from '../../components/ShopUi';
-import { useProducts, useStockRefs } from '../../components/StockRefs';
-import { busyProps, Ico } from '../../components/ui';
+import { useProducts, useStockRefs } from '../../components/refs';
+import { busyProps, HeadRow, Ico } from '../../components/ui';
 import { formatMoney } from '../../lib/format';
 import {
   emptyLine,
@@ -25,25 +24,16 @@ import {
   type LineDraft,
   type PurchaseErrors,
 } from '../../lib/shopPurchase';
-import { plural } from '../../lib/text';
+import { PACKAGES, plural } from '../../lib/text';
 import { PurchaseLineCard } from './PurchaseLineCard';
-
-const PACKAGES = ['упаковка', 'упаковки', 'упаковок'] as const;
-
-/** Назад, если пришли из приложения, иначе — в «Купить». */
-function useGoBack() {
-  const navigate = useNavigate();
-  return () => {
-    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
-    if (idx > 0) navigate(-1);
-    else navigate('/shopping', { replace: true });
-  };
-}
+import { BackLink, useGoBack } from '../../components/BackLink';
 
 export function PurchaseNew() {
   const qc = useQueryClient();
   const toast = useToast();
-  const goBack = useGoBack();
+  // Назад, если пришли из приложения, иначе — в «Купить». «Отмена» — так же.
+  const goBack = useGoBack('/shopping');
+  const form = useRef<HTMLFormElement>(null);
   const [params] = useSearchParams();
   const preset = Number(params.get('product')) || null;
   const seq = useRef(1);
@@ -84,8 +74,11 @@ export function PurchaseNew() {
       goBack();
     },
     onError: (err) => {
-      if (isApiError(err) && err.field === 'date') setErrors({ byLine: {}, date: err.message });
-      else setFormError(errorText(err));
+      const f = fieldErrors(err, ['date', 'location_id'] as const);
+      if (f.date) setErrors({ byLine: {}, date: f.date });
+      // Место из строки ушло в архив на другом устройстве — подсказываем, где искать
+      else if (f.location_id) setFormError(`${f.location_id} — проверьте поле «Место» в строках`);
+      else setFormError(f.form ?? errorText(err));
     },
   });
 
@@ -97,7 +90,7 @@ export function PurchaseNew() {
     setFormError('');
     if (purchaseHasErrors(e)) {
       // Фокус на первое поле с ошибкой — экранный диктор прочитает её
-      requestAnimationFrame(() => document.querySelector<HTMLElement>('.app-views .g-field--error input, .app-views .g-field--error select')?.focus());
+      requestAnimationFrame(() => form.current?.querySelector<HTMLElement>('.g-field--error input, .g-field--error select')?.focus());
       return;
     }
     save.mutate(toPurchaseInput(draft));
@@ -109,6 +102,7 @@ export function PurchaseNew() {
   return (
     <>
       <form
+        ref={form}
         className="app-stack"
         noValidate
         onSubmit={(e) => {
@@ -116,10 +110,10 @@ export function PurchaseNew() {
           submit();
         }}
       >
-        <ShopHead>
-          <ShopBack to="/shopping" label="Отмена" />
+        <HeadRow>
+          <BackLink to="/shopping" label="Отмена" history />
           <h1 className="g-label">Новая покупка</h1>
-        </ShopHead>
+        </HeadRow>
 
         <div className="shop-two">
           <div className={`g-field${errors.date ? ' g-field--error' : ''}`}>
@@ -184,7 +178,7 @@ export function PurchaseNew() {
           </p>
         )}
 
-        <div className="shop-sticky shop-foot">
+        <div className="shop-sticky shop-foot" data-toast-anchor>
           <div className="shop-between">
             <span className="g-muted">
               Итого · {count} {plural(count, PACKAGES)}

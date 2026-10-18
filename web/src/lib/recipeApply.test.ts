@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { Movement } from '../api';
-import { applyItems, clampQty, lastManualConsume, parseQty, qtyChanged, rowStep, shortageText, validateRecipe } from './recipeApply';
+import type { Movement, ProductSummary } from '../api';
+import { clampQty } from './qty';
+import { applyItems, lastManualConsume, MAX_QTY, parseRowQty, qtyChanged, recipeSub, shortageReport, shortageText, validateRecipe } from './recipeApply';
 
 let seq = 1;
+// Группа нажатия по умолчанию — по времени: одно время — одно нажатие
 const mv = (p: Partial<Movement>): Movement => ({
   id: seq++,
   unit_id: 1,
@@ -16,6 +18,7 @@ const mv = (p: Partial<Movement>): Movement => ({
   cost: null,
   created_at: 100,
   ...p,
+  batch_id: p.batch_id ?? p.created_at ?? 100,
 });
 
 describe('lastManualConsume', () => {
@@ -49,16 +52,16 @@ describe('нехватка', () => {
 });
 
 describe('количество', () => {
-  it('parseQty', () => {
-    expect(parseQty('')).toBe(0);
-    expect(parseQty('1 200')).toBe(1200);
-    expect(parseQty('12a')).toBeNull();
-    expect(parseQty('999999')).toBe(100_000);
+  it('parseRowQty', () => {
+    expect(parseRowQty('')).toBe(0);
+    expect(parseRowQty('1 200')).toBe(1200);
+    expect(parseRowQty('12a')).toBeNull();
+    // Без тихой обрезки: больше предела — ошибка формы, а не подмена числа
+    expect(parseRowQty('999999')).toBe(999_999);
   });
-  it('clampQty и шаг', () => {
-    expect(clampQty(-5)).toBe(0);
-    expect(rowStep('ml', 10)).toBe(10);
-    expect(rowStep('pcs', 10)).toBe(1);
+  it('clampQty', () => {
+    expect(clampQty(-5, 0, MAX_QTY)).toBe(0);
+    expect(clampQty(250_000, 0, MAX_QTY)).toBe(MAX_QTY);
   });
   it('applyItems пропускает нули', () => {
     expect(applyItems([{ product_id: 1, qty: 0 }, { product_id: 2, qty: 5 }])).toEqual([{ product_id: 2, qty: 5 }]);
@@ -92,5 +95,29 @@ describe('validateRecipe', () => {
   it('пустой шаблон', () => {
     const r = validateRecipe('А', []);
     expect(!r.ok && r.errors.rows).toBeTruthy();
+  });
+});
+
+describe('отчёт и подпись шаблона', () => {
+  const product = (name: string, unit: 'ml' | 'pcs') => ({ name, unit }) as ProductSummary;
+  const items = [
+    { product_id: 1, product: product('Koch Gsf', 'ml') },
+    { product_id: 2, product: product('Салфетка', 'pcs') },
+  ];
+  const sp = (s: string) => s.replace(/[\u00a0\u202f]/gu, ' ');
+  it('shortageReport: имена и количества, неизвестная позиция — «Позиция»', () => {
+    const r = shortageReport(
+      [
+        { product_id: 1, requested: 600, consumed: 400 },
+        { product_id: 2, requested: 3, consumed: 0 },
+        { product_id: 9, requested: 1, consumed: 0 },
+      ],
+      items,
+    );
+    expect(sp(r)).toBe('Koch Gsf — списано 400 мл из 600 мл; Салфетка — списано 0 шт из 3 шт; Позиция');
+  });
+  it('recipeSub: число позиций и себестоимость', () => {
+    expect(sp(recipeSub({ items: items as never, cost: 127_220 }))).toBe('2 позиции · ≈ 1 272,20 ₽');
+    expect(recipeSub({ items: [items[0]!] as never, cost: null })).toBe('1 позиция');
   });
 });

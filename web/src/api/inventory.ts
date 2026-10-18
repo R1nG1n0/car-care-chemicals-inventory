@@ -50,6 +50,9 @@ export type StockUnit = {
   unit_price: number | null;
 };
 
+/** Ответ корректировки и списания: экземпляр и созданное движение (null — без изменений). */
+export type UnitChange = StockUnit & { movement: Movement | null };
+
 export type PurchaseRow = {
   purchase_id: number;
   date: string;
@@ -72,6 +75,8 @@ export type Movement = {
   to_location_id: number | null;
   reason: string;
   recipe_run_id: number | null;
+  /** Группа запроса: id первого движения; одиночное — своё id. */
+  batch_id: number;
   cost: number | null;
   created_at: number;
 };
@@ -213,9 +218,9 @@ export const inventory = {
     send<StockUnit>('POST', '/api/units', b),
   moveUnit: (id: number, location_id: number) => send<StockUnit>('POST', `/api/units/${id}/move`, { location_id }),
   adjustUnit: (id: number, remaining_qty: number, reason = '') =>
-    send<StockUnit>('POST', `/api/units/${id}/adjust`, { remaining_qty, reason }),
+    send<UnitChange>('POST', `/api/units/${id}/adjust`, { remaining_qty, reason }),
   writeoffUnit: (id: number, reason: string, qty?: number) =>
-    send<StockUnit>('POST', `/api/units/${id}/writeoff`, { qty, reason }),
+    send<UnitChange>('POST', `/api/units/${id}/writeoff`, { qty, reason }),
 
   // Расход и журнал
   consume: (b: { product_id: number; qty: number; unit_id?: number }) => send<ConsumeResult>('POST', '/api/consume', b),
