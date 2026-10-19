@@ -33,7 +33,7 @@
 | Скрипт снимка | `/usr/local/sbin/garage-snapshot` | `deploy/garage-snapshot` |
 | Таймер снимка | `garage-snapshot.service`, `garage-snapshot.timer` | `deploy/garage-snapshot.*` |
 
-Служба работает от системного пользователя `garage` без входа в систему, с ограничениями systemd (`ProtectSystem=strict`, `NoNewPrivileges` и др.).
+Служба работает от системного пользователя `garage` без входа в систему, с ограничениями systemd (`ProtectSystem=strict`, `NoNewPrivileges` и др.) и потолком памяти 512 МБ (`MemoryMax`).
 
 ## Обновление
 
@@ -81,6 +81,25 @@ curl -s https://garage.north-flow.online/api/health
 4. AdGuard Home (https://dns.north-flow.online): «Фильтры → Перезапись DNS-запросов» → домен `garage.north-flow.online`, ответ `10.211.7.1`. Добавлять через веб-интерфейс: правка `AdGuardHome.yaml` требует перезапуска AdGuard, а это прерывает DNS для всех клиентов VPN.
 5. Ночная копия: в `/usr/local/sbin/node-backup`, в список `PATHS` роли `relay`, добавлены `etc/garage var/lib/garage/backup`.
 6. Учётная запись владельца — см. «Учётные записи».
+
+## Telegram-бот
+
+Бот работает внутри службы garage и сам опрашивает Telegram, входящих подключений нет. С relay api.telegram.org напрямую недоступен, поэтому соединения бота привязаны к туннелю `awg1` (`telegram.interface`), как у ночной копии. Прав сверх обычных службе не нужно.
+
+Настройки — блок `telegram` в `/etc/garage/config.json`:
+
+```json
+"telegram": {"token": "", "interface": "awg1", "site_url": "https://garage.north-flow.online"}
+```
+
+Токен от @BotFather владелец вписывает сам, в журнал он не попадает:
+
+```bash
+ssh -t relay "nano /etc/garage/config.json"
+ssh relay "systemctl restart garage && sleep 3 && journalctl -u garage -n 5 --no-pager"
+```
+
+В журнале должно появиться «telegram: бот подключён». Пустой токен отключает бота, сайт работает как обычно. Если Telegram недоступен, бот повторяет попытки с паузой до минуты.
 
 ## Учётные записи
 
@@ -147,6 +166,7 @@ ssh relay "runuser -u garage -- /usr/local/sbin/garage-snapshot && ls -l /var/li
 | Имя не находится | Перезапись в AdGuard; на Mac после её добавления сбросить кэш DNS: `sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder` |
 | «Слишком много попыток» | После 5 неверных паролей вход по логину и адресу закрыт на 15 минут. Счётчик хранится в памяти службы, `systemctl restart garage` сбрасывает его сразу |
 | Ошибки службы | `journalctl -u garage -n 50 --no-pager` |
+| Бот молчит | `journalctl -u garage -g telegram -n 20 --no-pager`; туннель: `ip -br addr show awg1` |
 | Запросы к сайту | `/var/log/nginx/access.log` |
 
 Перед обновлением с новыми миграциями полезно снять снимок вручную (см. «Резервное копирование») и скопировать его под другим именем — ротация удаляет только `garage-*.db`.

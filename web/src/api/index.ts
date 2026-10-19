@@ -30,3 +30,4 @@ export const api = {
 };
 export * from './inventory';
 export * from './transfer';
+export * from './telegram';

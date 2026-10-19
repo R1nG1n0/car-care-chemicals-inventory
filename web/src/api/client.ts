@@ -100,12 +100,13 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     throw new NetworkError(timeout.aborted ? 'timeout' : 'offline');
   }
 
-  if (GATEWAY_STATUSES.has(res.status)) {
+  // 502–504 от nginx — без JSON; 503 с {error} — ответ самого garage («Бот не настроен»).
+  const gateway = GATEWAY_STATUSES.has(res.status);
+  const data = gateway ? await readJson(res.clone()) : await readJson(res);
+  if (gateway && !(res.status === 503 && hasErrorText(data))) {
     reportConnection(false);
     throw new NetworkError(res.status === 504 ? 'timeout' : 'offline');
   }
-
-  const data = await readJson(res);
 
   // Ответ без JSON-тела ошибки при 5xx — это не garage, а прокси перед ним
   // (например, Vite при остановленном сервере): тоже «нет связи».

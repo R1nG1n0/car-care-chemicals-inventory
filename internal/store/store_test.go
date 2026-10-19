@@ -107,3 +107,34 @@ func TestConstraints(t *testing.T) {
 		})
 	}
 }
+
+// Таблицы бота (006): один Telegram-аккаунт — один пользователь, каскад при удалении.
+func TestTelegramTables(t *testing.T) {
+	db := openTest(t)
+	mustExec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := db.Exec(q, args...); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	mustExec(`INSERT INTO users (id, login, password_hash) VALUES (1, 'owner', 'h'), (2, 'friend', 'h')`)
+	mustExec(`INSERT INTO categories (id, user_id, name, color) VALUES (10, 1, 'Шампуни', 'blue')`)
+	mustExec(`INSERT INTO products (id, user_id, category_id, name, unit, package_size) VALUES (31, 1, 10, 'Gsf', 'ml', 500)`)
+	mustExec(`INSERT INTO telegram_links (user_id, tg_user_id, chat_id, linked_at) VALUES (1, 555, 555, 1)`)
+	if _, err := db.Exec(`INSERT INTO telegram_links (user_id, tg_user_id, chat_id, linked_at) VALUES (2, 555, 555, 1)`); err == nil {
+		t.Fatal("один Telegram-аккаунт привязан к двум пользователям")
+	}
+	mustExec(`INSERT INTO telegram_link_codes (hash, user_id, expires_at) VALUES ('h', 1, 100)`)
+	mustExec(`INSERT INTO bot_low_state (user_id, product_id) VALUES (1, 31)`)
+	// Состояние нельзя привязать к чужой позиции.
+	if _, err := db.Exec(`INSERT INTO bot_low_state (user_id, product_id) VALUES (2, 31)`); err == nil {
+		t.Fatal("состояние второго пользователя сослалось на позицию первого")
+	}
+	mustExec(`DELETE FROM users WHERE id = 1`)
+	for _, table := range []string{"telegram_links", "telegram_link_codes", "bot_low_state"} {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil || n != 0 {
+			t.Fatalf("%s после удаления пользователя: %d, %v", table, n, err)
+		}
+	}
+}

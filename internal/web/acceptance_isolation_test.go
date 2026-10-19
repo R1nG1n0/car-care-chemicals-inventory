@@ -65,6 +65,7 @@ func TestAccIsolationAllStage2(t *testing.T) {
 		"/api/recipes", stkPath("/api/recipes/", recipeA, ""),
 		"/api/reports/spending?from=2026-01-01&to=2026-12-31", "/api/reports/consumption?from=2026-01-01&to=2026-12-31",
 		"/api/export.json", "/api/export/products.csv", "/api/export/purchases.csv", "/api/export/movements.csv",
+		"/api/telegram",
 	}
 	before := accSnapshot(t, a, ownerGets)
 
@@ -206,6 +207,7 @@ func TestAccIsolationAllStage2(t *testing.T) {
 		"/api/brands", "/api/shopping", "/api/purchases", "/api/movements", "/api/recipes",
 		"/api/reports/spending?from=2026-01-01&to=2026-12-31", "/api/reports/consumption?from=2026-01-01&to=2026-12-31",
 		"/api/export.json", "/api/export/products.csv", "/api/export/purchases.csv", "/api/export/movements.csv",
+		"/api/telegram",
 	}
 	for _, target := range lists {
 		rec := b.do(http.MethodGet, target, nil)

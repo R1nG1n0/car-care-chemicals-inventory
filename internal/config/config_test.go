@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -73,5 +75,42 @@ func TestInsecureCookies(t *testing.T) {
 	}
 	if _, err := Load(writeConfig(t, `{"insecure_cookies": "yes"}`)); err == nil {
 		t.Fatal("строка вместо bool принята")
+	}
+}
+
+func TestLoadTelegram(t *testing.T) {
+	cfg, err := Load(writeConfig(t, `{"telegram": {"token": "123:secret", "interface": "awg1"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Telegram.Enabled() || cfg.Telegram.Token != "123:secret" || cfg.Telegram.Interface != "awg1" {
+		t.Fatalf("telegram = %+v", cfg.Telegram)
+	}
+	// Токен не выводится при печати конфигурации.
+	for _, f := range []string{"%v", "%+v", "%#v", "%s"} {
+		if out := fmt.Sprintf(f, cfg); strings.Contains(out, "secret") {
+			t.Fatalf("%s печатает токен: %s", f, out)
+		}
+	}
+}
+
+func TestLoadTelegramDisabledByDefault(t *testing.T) {
+	cfg, err := Load(writeConfig(t, `{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Telegram.Enabled() {
+		t.Fatal("без токена бот должен быть выключен")
+	}
+}
+
+func TestLoadTelegramBadInterface(t *testing.T) {
+	for _, body := range []string{
+		`{"telegram": {"interface": "очень-длинное-имя-интерфейса"}}`,
+		`{"telegram": {"interface": "a b"}}`,
+	} {
+		if _, err := Load(writeConfig(t, body)); err == nil {
+			t.Fatalf("ожидалась ошибка для %s", body)
+		}
 	}
 }

@@ -11,6 +11,7 @@ import { clearUserStates } from '../../lib/inventory';
 import { Invites } from './Invites';
 import { PasswordForm } from './PasswordForm';
 import { StepsForm } from './StepsForm';
+import { Telegram } from './Telegram';
 
 function InstallSection() {
   const mode = useInstallMode();
@@ -124,6 +125,7 @@ export function ProfileScreen() {
       </div>
       <StepsForm settings={session.settings} />
       <InstallSection />
+      <Telegram />
       {session.user.is_owner && <Invites />}
       <LogoutButtons />
     </div>

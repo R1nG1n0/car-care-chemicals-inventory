@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -43,9 +44,13 @@ type env struct {
 	h     http.Handler
 	svc   *auth.Service
 	clock *testClock
+	db    *sql.DB
 }
 
-func newEnv(t *testing.T, insecure bool) *env {
+func newEnv(t *testing.T, insecure bool) *env { return newEnvWith(t, insecure, nil) }
+
+// newEnvWith — newEnv с ботом Telegram (nil — бот выключен).
+func newEnvWith(t *testing.T, insecure bool, tg TelegramBot) *env {
 	t.Helper()
 	db, err := store.Open(filepath.Join(t.TempDir(), "garage.db"))
 	if err != nil {
@@ -65,8 +70,9 @@ func newEnv(t *testing.T, insecure bool) *env {
 		InsecureCookies: insecure,
 		DB:              db.DB,
 		Now:             c.Now,
+		Telegram:        tg,
 	})
-	return &env{t: t, h: srv.Handler(), svc: svc, clock: c}
+	return &env{t: t, h: srv.Handler(), svc: svc, clock: c, db: db.DB}
 }
 
 func (e *env) createUser(login, password string, owner bool) auth.User {

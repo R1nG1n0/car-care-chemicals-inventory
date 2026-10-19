@@ -28,6 +28,8 @@ type Options struct {
 	DB *sql.DB
 	// Now — часы для отметок времени; nil — time.Now. В тестах подменяется.
 	Now func() time.Time
+	// Telegram — состояние бота для привязки аккаунта (ФТ-11.2); nil — бот выключен.
+	Telegram TelegramBot
 }
 
 // Server обслуживает /api/ и одностраничный интерфейс.
@@ -40,6 +42,7 @@ type Server struct {
 	insecureCookies bool
 	db              *sql.DB
 	now             func() time.Time
+	telegram        TelegramBot
 	mux             *http.ServeMux
 }
 
@@ -54,6 +57,7 @@ func New(opt Options) *Server {
 		insecureCookies: opt.InsecureCookies,
 		db:              opt.DB,
 		now:             opt.Now,
+		telegram:        opt.Telegram,
 		mux:             http.NewServeMux(),
 	}
 	if s.now == nil {
@@ -94,6 +98,7 @@ func (s *Server) routes() {
 		s.stockRoutes()
 		s.reportRoutes()
 		s.transferRoutes()
+		s.telegramRoutes()
 	}
 
 	s.mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

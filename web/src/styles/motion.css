@@ -33,6 +33,9 @@
 .g-stagger > :nth-child(8) { animation-delay: calc(var(--stagger) * 7); }
 /* После восьмой карточки — без задержки: длинная очередь только мешает */
 
+/* Появление блока при смене состояния (раздел Telegram в профиле) */
+.g-enter { animation: g-rise var(--dur-enter) var(--ease-out) backwards; }
+
 @keyframes g-rise {
   from { opacity: 0; transform: translateY(8px); }
 }
@@ -210,6 +213,7 @@
 @media (prefers-reduced-motion: reduce) {
   .g-meter__fill { transition: background-color var(--dur-fast) ease; }
   .g-stagger > * { animation-name: g-fade; }
+  .g-enter { animation-name: g-fade; }
 
   .g-view { transition: opacity var(--dur-route) var(--ease-out); }
   .g-view.is-leaving { filter: none; transition: opacity var(--dur-fast) var(--ease-out); }

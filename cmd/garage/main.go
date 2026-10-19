@@ -15,8 +15,10 @@ import (
 	"time"
 
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/auth"
+	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/bot"
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/config"
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/store"
+	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/telegram"
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/web"
 	webui "github.com/R1nG1n0/car-care-chemicals-inventory/web"
 )
@@ -111,16 +113,33 @@ func serve(log *slog.Logger, cfg config.Config, cfgPath string, svc *auth.Servic
 		log.Warn("insecure_cookies: cookie сессии без Secure — только для локальной разработки")
 	}
 
+	// Бот (ФТ-11) живёт рядом с сервером: пустой токен — бота нет. Недоступный
+	// Telegram сайт не затрагивает: бот сам повторяет попытки.
+	var tgBot *bot.Bot
+	if cfg.Telegram.Enabled() {
+		tgBot = bot.New(bot.Options{
+			DB:      db.DB,
+			API:     telegram.New(cfg.Telegram.Token, telegram.Options{Interface: cfg.Telegram.Interface}),
+			Log:     log,
+			SiteURL: cfg.Telegram.SiteURL,
+		})
+		log.Info("Telegram-бот включён", "interface", cfg.Telegram.Interface)
+	}
+	opts := web.Options{
+		Log:             log,
+		Version:         version,
+		UI:              webui.Dist(),
+		Auth:            svc,
+		InsecureCookies: cfg.InsecureCookies,
+		DB:              db.DB,
+	}
+	if tgBot != nil {
+		opts.Telegram = tgBot // не присваивать nil-указатель: интерфейс стал бы непустым
+	}
+
 	srv := &http.Server{
-		Addr: cfg.Listen,
-		Handler: web.New(web.Options{
-			Log:             log,
-			Version:         version,
-			UI:              webui.Dist(),
-			Auth:            svc,
-			InsecureCookies: cfg.InsecureCookies,
-			DB:              db.DB,
-		}).Handler(),
+		Addr:              cfg.Listen,
+		Handler:           web.New(opts).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -131,6 +150,16 @@ func serve(log *slog.Logger, cfg config.Config, cfgPath string, svc *auth.Servic
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	botDone := make(chan struct{})
+	if tgBot != nil {
+		go func() {
+			defer close(botDone)
+			tgBot.Run(ctx)
+		}()
+	} else {
+		close(botDone)
+	}
+
 	errc := make(chan error, 1)
 	go func() {
 		log.Info("сервер слушает", "addr", cfg.Listen)
@@ -139,6 +168,8 @@ func serve(log *slog.Logger, cfg config.Config, cfgPath string, svc *auth.Servic
 
 	select {
 	case err := <-errc:
+		stop() // бот останавливается вместе с сервером
+		<-botDone
 		return fmt.Errorf("сервер: %w", err)
 	case <-ctx.Done():
 	}
@@ -148,6 +179,11 @@ func serve(log *slog.Logger, cfg config.Config, cfgPath string, svc *auth.Servic
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("остановка сервера: %w", err)
+	}
+	// Бот получил ту же отмену ctx; ждём недолго, getUpdates прерывается сразу.
+	select {
+	case <-botDone:
+	case <-shutdownCtx.Done():
 	}
 	return nil
 }

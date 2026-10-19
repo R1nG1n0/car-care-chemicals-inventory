@@ -13,6 +13,9 @@ ExecStart=/usr/local/bin/garage -config /etc/garage/config.json
 Restart=on-failure
 RestartSec=5s
 
+# Потолок памяти: распознавание фото штрихкода в боте не должно съесть сервер
+MemoryMax=512M
+
 # Каталог базы создаёт systemd, доступ только владельцу
 StateDirectory=garage
 StateDirectoryMode=0700

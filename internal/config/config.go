@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // Config — параметры запуска.
@@ -27,7 +28,39 @@ type Config struct {
 	// InsecureCookies убирает у cookie сессии флаг Secure. Только для
 	// локальной разработки по http: на relay сайт работает через HTTPS.
 	InsecureCookies bool `json:"insecure_cookies"`
+
+	// Telegram — бот (ФТ-11). Пустой токен отключает бота.
+	Telegram TelegramConfig `json:"telegram"`
 }
+
+// TelegramConfig — настройки Telegram-бота.
+type TelegramConfig struct {
+	// Token — токен бота. Хранится только в файле конфигурации и никогда не
+	// попадает в журнал и в тексты ошибок (ФТ-11.1.3).
+	Token string `json:"token"`
+
+	// Interface — сетевой интерфейс, к которому привязываются соединения
+	// бота (SO_BINDTODEVICE, на relay — туннель awg1). Пусто — без привязки.
+	Interface string `json:"interface"`
+
+	// SiteURL — необязательный адрес сайта: бот даёт на него ссылку, когда
+	// штрихкод не найден (ФТ-11.4.3). Должен начинаться с https://.
+	SiteURL string `json:"site_url"`
+}
+
+// Enabled — бот включён (токен задан).
+func (t TelegramConfig) Enabled() bool { return t.Token != "" }
+
+// String не выдаёт токен, даже если конфигурацию случайно напечатают (%v, %+v).
+func (t TelegramConfig) String() string {
+	if t.Token == "" {
+		return "telegram{выключен}"
+	}
+	return "telegram{токен скрыт, interface=" + t.Interface + "}"
+}
+
+// GoString — то же для %#v.
+func (t TelegramConfig) GoString() string { return t.String() }
 
 // Default — значения для полей, которых нет в файле.
 func Default() Config {
@@ -75,6 +108,12 @@ func (c Config) Validate() error {
 	}
 	if _, err := c.SlogLevel(); err != nil {
 		return err
+	}
+	if len(c.Telegram.Interface) > 15 || strings.ContainsAny(c.Telegram.Interface, " /\x00") {
+		return fmt.Errorf("telegram.interface %q: неверное имя интерфейса", c.Telegram.Interface)
+	}
+	if u := c.Telegram.SiteURL; u != "" && !strings.HasPrefix(u, "https://") {
+		return fmt.Errorf("telegram.site_url %q: нужен адрес https://…", u)
 	}
 	return nil
 }
