@@ -6,6 +6,8 @@
 // по user_id (ТБ-5); пакет не знает про HTTP.
 package transfer
 
+import "github.com/R1nG1n0/car-care-chemicals-inventory/internal/photo"
+
 // Признаки формата файла.
 const (
 	FormatName    = "garage-export"
@@ -71,9 +73,8 @@ type Store struct {
 	Archived bool   `json:"archived"`
 }
 
-// Product — позиция каталога. Photo — необязательное фото (base64),
-// появится вместе с фото позиций (ФТ-10.4); при отсутствии поля импорт
-// работает как раньше.
+// Product — позиция каталога. Photo — необязательное фото (ФТ-10.4):
+// без поля (или null) позиция остаётся без фото.
 type Product struct {
 	ID          int64  `json:"id"`
 	CategoryID  int64  `json:"category_id"`
@@ -86,7 +87,18 @@ type Product struct {
 	Note        string `json:"note"`
 	Archived    bool   `json:"archived"`
 	CreatedAt   int64  `json:"created_at"`
-	Photo       string `json:"photo,omitempty"`
+	Photo       *Photo `json:"photo,omitempty"`
+}
+
+// Photo — фото позиции в файле: тип и байты в base64. Тип при импорте
+// не принимается на веру: сервер определяет его по содержимому.
+type Photo struct {
+	Mime string `json:"mime"`
+	Data string `json:"data"`
+
+	// Заполняется проверкой файла (Validate): декодированные байты и сведения о них.
+	raw  []byte
+	info photo.Info
 }
 
 // Unit — экземпляр (бутылка, пачка).

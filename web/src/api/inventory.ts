@@ -42,6 +42,8 @@ export type ProductSummary = {
   low: boolean;
   location_ids: number[];
   last_consume_qty: number | null;
+  /** Метка фото (секунды Unix) для адреса ?v=; null — фото нет (ФТ-10.4). */
+  photo_updated_at: number | null;
 };
 
 export type UnitStatus = 'sealed' | 'open' | 'finished' | 'written_off';
@@ -198,6 +200,9 @@ function qs(params: Record<string, string | number | boolean | undefined>): stri
   return s ? `?${s}` : '';
 }
 
+/** Фото до 300 КБ по мобильной сети грузится дольше обычного запроса. */
+const PHOTO_TIMEOUT_MS = 60_000;
+
 const get = <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal });
 const send = <T>(method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown) =>
   request<T>(path, { method, body });
@@ -234,6 +239,10 @@ export const inventory = {
   createProduct: (b: ProductInput) => send<ProductSummary>('POST', '/api/products', b),
   updateProduct: (id: number, b: Partial<ProductInput & { archived: boolean }>) =>
     send<ProductSummary>('PATCH', `/api/products/${id}`, b),
+  /** Фото позиции (ФТ-10.4): тело — сырые байты JPEG; ответ — сводка с новым photo_updated_at. */
+  setPhoto: (id: number, photo: Blob) =>
+    request<ProductSummary>(`/api/products/${id}/photo`, { method: 'PUT', binary: photo, timeoutMs: PHOTO_TIMEOUT_MS }),
+  deletePhoto: (id: number) => send<ProductSummary>('DELETE', `/api/products/${id}/photo`),
   brands: async (signal?: AbortSignal) => (await get<{ brands: string[] }>('/api/brands', signal)).brands,
 
   // Список покупок

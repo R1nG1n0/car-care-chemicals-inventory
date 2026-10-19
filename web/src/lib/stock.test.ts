@@ -35,6 +35,7 @@ const prod = (over: Partial<ProductSummary>): ProductSummary => ({
   low: false,
   location_ids: [5],
   last_consume_qty: null,
+  photo_updated_at: null,
   ...over,
 });
 

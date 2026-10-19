@@ -20,6 +20,7 @@ import './styles/states.css';
 import './styles/motion.css';
 import './styles/app.css';
 import './styles/stock.css';
+import './styles/photo.css';
 import './styles/shopping.css';
 import './styles/scanner.css';
 import './styles/inventory.css';

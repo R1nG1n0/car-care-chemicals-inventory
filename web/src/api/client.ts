@@ -62,6 +62,8 @@ export type RequestOptions = {
   body?: unknown;
   /** Готовое JSON-тело (файл импорта): уходит как есть, без повторной сериализации. */
   rawBody?: string;
+  /** Двоичное тело (фото позиции): уходит как есть, Content-Type — тип самого Blob. */
+  binary?: Blob;
   signal?: AbortSignal;
   /** Сколько ждать ответа, мс; по умолчанию REQUEST_TIMEOUT_MS (большая загрузка ждёт дольше). */
   timeoutMs?: number;
@@ -73,8 +75,11 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   const method = opts.method ?? 'GET';
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (method !== 'GET') headers['X-Requested-With'] = 'garage';
-  let body: string | undefined;
-  if (opts.rawBody !== undefined) {
+  let body: string | Blob | undefined;
+  if (opts.binary !== undefined) {
+    headers['Content-Type'] = opts.binary.type || 'application/octet-stream';
+    body = opts.binary;
+  } else if (opts.rawBody !== undefined) {
     headers['Content-Type'] = 'application/json';
     body = opts.rawBody;
   } else if (opts.body !== undefined) {

@@ -73,13 +73,15 @@
 На всех ответах (API и интерфейс):
 
 ```
-Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'
+Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'
 X-Content-Type-Options: nosniff
 Referrer-Policy: same-origin
 Cross-Origin-Opener-Policy: same-origin
 ```
 
 `'wasm-unsafe-eval'` (с версии 1.1) разрешает только компиляцию WebAssembly — модуля сканера штрихкодов `zxing-wasm` (ФТ-9.6); `eval` и `new Function` для скриптов по-прежнему запрещены. Файл модуля лежит в `assets/` рядом с остальной сборкой и отдаётся с `Content-Type: application/wasm`, внешних адресов нет.
+
+`img-src` включает `blob:` (с версии 1.2): без `createImageBitmap` браузер читает снимок перед сжатием через `<img>` по blob-адресу, созданному самой страницей (ФТ-10.4.2). Внешних картинок и `data:` политика по-прежнему не разрешает.
 
 Всё, что вне `/api/`, — файлы интерфейса; неизвестный путь без расширения отдаёт `index.html` (экранами управляет роутер в браузере), отсутствующий файл с расширением — `404`.
 
@@ -96,6 +98,7 @@ Cross-Origin-Opener-Policy: same-origin
 | `GET`/`POST /api/locations`, `PATCH /api/locations/{id}`, `POST /api/locations/reorder`, `GET /api/locations/{id}/units`, `POST /api/locations/{id}/checked` | с входом |
 | `GET`/`POST /api/stores`, `PATCH /api/stores/{id}` | с входом |
 | `GET`/`POST /api/products`, `GET`/`PATCH /api/products/{id}`, `GET /api/brands` | с входом |
+| `GET`/`PUT`/`DELETE /api/products/{id}/photo` | с входом |
 | `GET`/`POST /api/shopping`, `PATCH`/`DELETE /api/shopping/{id}` | с входом |
 | `GET`/`POST /api/purchases`, `GET /api/purchases/{id}` | с входом |
 | `POST /api/units`, `POST /api/units/{id}/move`, `/adjust`, `/writeoff` | с входом |
@@ -253,7 +256,8 @@ Cross-Origin-Opener-Policy: same-origin
   },
   "low": false,             // min_stock задан и total < min_stock
   "location_ids": [5],      // места sealed/open экземпляров, без повторов, по возрастанию
-  "last_consume_qty": 40    // сколько списали последним нажатием «Списать» (ФТ-5.8), см. ниже
+  "last_consume_qty": 40,   // сколько списали последним нажатием «Списать» (ФТ-5.8), см. ниже
+  "photo_updated_at": 1792100000   // метка фото (секунды Unix) для адреса ?v=; null — фото нет (ФТ-10.4)
 }
 ```
 
@@ -279,6 +283,20 @@ Cross-Origin-Opener-Policy: same-origin
 | `barcode` | 0–32 цифры | `400`, `field: "barcode"` |
 | `min_stock` | `null` или 0–1000000 | `400`, `field: "min_stock"` |
 | `note` | 0–500 символов | `400`, `field: "note"` |
+
+### Фото позиции (ФТ-10.4)
+
+Одно фото на позицию. Хранится в базе (таблица `product_photos`, миграция 005), поэтому входит в ежедневный снимок и ночную копию. Браузер сжимает снимок до 1024 px по длинной стороне, JPEG не больше 300 КБ; сервер принимает с запасом.
+
+| Адрес | Что делает |
+|---|---|
+| `PUT /api/products/{id}/photo` | Тело — **сырые байты** изображения (не JSON), `Content-Type` не проверяется. `200 ProductSummary` с новым `photo_updated_at`. Замена в ту же секунду всё равно увеличивает метку |
+| `GET /api/products/{id}/photo` | Байты фото с `Content-Type` из содержимого (`image/jpeg`, `image/png`, `image/webp`), `Content-Length`, `Cache-Control: private, max-age=31536000, immutable`, `Vary: Cookie`. Клиент строит адрес `…/photo?v=<photo_updated_at>`: при замене адрес меняется и кэш сбрасывается. `HEAD` работает |
+| `DELETE /api/products/{id}/photo` | `200 ProductSummary` с `photo_updated_at: null`. Позиция без фото — тоже `200` |
+
+Проверка при `PUT` (и при импорте): тело не пустое; **не больше 400 КБ**; тип определяется по сигнатуре байтов (JPEG `FF D8 FF`, PNG, WebP `RIFF…WEBP`), заголовок запроса не учитывается; размеры берутся из заголовка файла (`VP8`/`VP8L`/`VP8X` у WebP), не больше 4096 × 4096 px.
+
+Ошибки: `400 {"error": "Нужно фото JPEG, PNG или WebP", "field": "photo"}` (другой тип, битый заголовок, пустое тело — «Фото не передано»); `400 {"error": "Фото больше 4096 × 4096 px", "field": "photo"}`; `413 {"error": "Фото больше 400 КБ", "field": "photo"}`; чужая и несуществующая позиция, а для `GET` ещё и позиция без фото — одинаковый `404`. Предел тела 400 КБ действует только на этом адресе (на остальных — 64 КБ). Через nginx проходит без настройки (предел nginx по умолчанию — 1 МБ).
 
 Архив позиции только скрывает её из списка позиций, из «мало» в списке покупок и из подсказок брендов. Архивную позицию по-прежнему можно купить, израсходовать, списать, добавить в шаблон и в список покупок — сервер её не отклоняет.
 
@@ -535,7 +553,7 @@ Cross-Origin-Opener-Policy: same-origin
   "products": [ {
     "id": 1, "category_id": 1, "name": "Шампунь", "brand": "Grass", "unit": "ml", "package_size": 1000,
     "barcode": "4600000000011", "min_stock": 500, "note": "", "archived": false, "created_at": 1792000000,
-    "photo": "…"                   // необязательно: фото в base64 (ФТ-10.4); поля может не быть
+    "photo": { "mime": "image/jpeg", "data": "/9j/4AAQ…" }   // необязательно (ФТ-10.4): фото, байты в base64; нет фото — поля нет
   } ],
   "units": [ {                     // экземпляры
     "id": 1, "product_id": 1, "purchase_line_id": 1, "location_id": 1,   // две последние ссылки — null, если нет
@@ -590,7 +608,7 @@ Cross-Origin-Opener-Policy: same-origin
 - каждая ссылка (`category_id`, `store_id`, `product_id`, `unit_id`, `purchase_line_id`, `location_id`, `recipe_run_id`, `batch_id`) указывает на `id` **внутри файла**; `id` в пределах вида уникальны и положительны; названия категорий, мест, магазинов и шаблонов не повторяются без учёта регистра;
 - экземпляр: `0 ≤ remaining_qty ≤ initial_qty`, статус `sealed`/`open`/`finished`/`written_off`, строка покупки относится к той же позиции; знак `qty_delta` соответствует типу (приход > 0, расход и списание < 0, перемещение 0).
 
-Запись — одна транзакция: при любой ошибке в складе ничего не меняется. Категории, места и магазины, чьё имя совпадает (без учёта регистра) с уже имеющимся, **сливаются** (цвет, порядок, архивность берутся из файла); остальные создаются. Все прочие записи получают новые `id`, связи и группы движений (`batch_id`) переносятся. Шаги кнопок из `settings` заменяют текущие. Поле `products[].photo` пока не сохраняется.
+Запись — одна транзакция: при любой ошибке в складе ничего не меняется. Категории, места и магазины, чьё имя совпадает (без учёта регистра) с уже имеющимся, **сливаются** (цвет, порядок, архивность берутся из файла); остальные создаются. Все прочие записи получают новые `id`, связи и группы движений (`batch_id`) переносятся. Шаги кнопок из `settings` заменяют текущие. Фото из `products[].photo` сохраняется с той же проверкой, что у `PUT /api/products/{id}/photo`: base64, не больше 400 КБ, тип по содержимому (поле `mime` не принимается на веру), не больше 4096 × 4096 px. Ошибка — `400` с `field: "products[3].photo"` (или `…photo.data`, если это не base64). Файлы с фото крупнее: каждое до 400 КБ + треть на base64; общий предел 25 МБ остаётся.
 
 ## Служебное
 

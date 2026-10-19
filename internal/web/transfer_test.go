@@ -328,8 +328,9 @@ func TestImportOptionalPhoto(t *testing.T) {
 	a := stkSignIn(e, "owner")
 	trSeed(t, a)
 	file := trExport(t, a)
-	file.Products[0].Photo = "/9j/4AAQSkZJRgABAQ=="
-	expect(t, stkSignIn(e, "friend").do(http.MethodPost, "/api/import", file), http.StatusOK, "импорт с фото")
+	expect(t, stkSignIn(e, "friend").do(http.MethodPost, "/api/import", file), http.StatusOK, "импорт без фото")
+	file.Products[0].Photo = nil
+	expect(t, stkSignIn(e, "friend2").do(http.MethodPost, "/api/import", file), http.StatusOK, "импорт без поля photo")
 }
 
 func TestImportSizeLimitOnlyOnImport(t *testing.T) {

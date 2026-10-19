@@ -39,6 +39,8 @@ type ProductSummary struct {
 	LocationIDs []int64 `json:"location_ids"`
 	// LastConsumeQty — сколько списали последним ручным расходом; null — не списывали.
 	LastConsumeQty *int64 `json:"last_consume_qty"`
+	// PhotoUpdatedAt — метка фото (секунды Unix) для адреса ?v=; null — фото нет (ФТ-10.4).
+	PhotoUpdatedAt *int64 `json:"photo_updated_at"`
 }
 
 // Unit — экземпляр (бутылка или пачка).
@@ -85,14 +87,15 @@ type PurchaseRow struct {
 	PricePerUnit *int64 `json:"price_per_unit,omitempty"`
 }
 
-const productColumns = `id, category_id, name, brand, unit, package_size, barcode, min_stock, note, archived`
+const productColumns = `id, category_id, name, brand, unit, package_size, barcode, min_stock, note, archived,
+	(SELECT ph.updated_at FROM product_photos ph WHERE ph.user_id = products.user_id AND ph.product_id = products.id)`
 
 func scanProduct(sc interface{ Scan(...any) error }) (ProductSummary, error) {
 	var p ProductSummary
-	var minStock sql.NullInt64
+	var minStock, photoAt sql.NullInt64
 	err := sc.Scan(&p.ID, &p.CategoryID, &p.Name, &p.Brand, &p.Unit, &p.PackageSize,
-		&p.Barcode, &minStock, &p.Note, &p.Archived)
-	p.MinStock = nullInt(minStock)
+		&p.Barcode, &minStock, &p.Note, &p.Archived, &photoAt)
+	p.MinStock, p.PhotoUpdatedAt = nullInt(minStock), nullInt(photoAt)
 	p.LocationIDs = []int64{}
 	return p, err
 }

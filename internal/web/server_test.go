@@ -87,6 +87,11 @@ func TestSecurityHeaders(t *testing.T) {
 		strings.Count(contentSecurityPolicy, "unsafe") != 1 {
 		t.Fatal("политика не должна разрешать unsafe-* кроме 'wasm-unsafe-eval' в script-src")
 	}
+	// Картинки — только свои и blob: страницы (сжатие фото, ФТ-10.4.2): ни внешних адресов, ни data:
+	if !strings.Contains(contentSecurityPolicy, "img-src 'self' blob:;") || strings.Contains(contentSecurityPolicy, "data:") ||
+		strings.Contains(contentSecurityPolicy, "https:") || strings.Contains(contentSecurityPolicy, "*") {
+		t.Fatal("img-src должен быть ровно 'self' blob:")
+	}
 }
 
 func TestSPA(t *testing.T) {

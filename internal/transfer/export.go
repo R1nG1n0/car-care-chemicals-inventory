@@ -3,6 +3,7 @@ package transfer
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
 	"time"
 )
@@ -73,7 +74,7 @@ func (s *Service) Export(ctx context.Context, userID int64) (*File, error) {
 		return nil, fmt.Errorf("экспорт, пользователь: %w", err)
 	}
 	steps := []func(context.Context, querier, int64, *File) error{
-		exportSettings, exportRefs, exportProducts, exportPurchases, exportUnits,
+		exportSettings, exportRefs, exportProducts, exportPhotos, exportPurchases, exportUnits,
 		exportMovements, exportRecipes, exportShopping,
 	}
 	for _, step := range steps {
@@ -151,6 +152,28 @@ func exportProducts(ctx context.Context, q querier, uid int64, f *File) error {
 			f.Products = append(f.Products, p)
 			return nil
 		})
+}
+
+// exportPhotos кладёт фото в позиции файла (ФТ-10.4): отдельным запросом,
+// чтобы не тянуть байты в основной список.
+func exportPhotos(ctx context.Context, q querier, uid int64, f *File) error {
+	byID := make(map[int64]*Product, len(f.Products))
+	for i := range f.Products {
+		byID[f.Products[i].ID] = &f.Products[i]
+	}
+	return each(ctx, q, "фото позиций", `SELECT product_id, mime, data FROM product_photos
+		WHERE user_id = ? ORDER BY product_id`, []any{uid}, func(r *sql.Rows) error {
+		var id int64
+		var mime string
+		var data []byte
+		if err := r.Scan(&id, &mime, &data); err != nil {
+			return err
+		}
+		if p := byID[id]; p != nil {
+			p.Photo = &Photo{Mime: mime, Data: base64.StdEncoding.EncodeToString(data)}
+		}
+		return nil
+	})
 }
 
 func exportPurchases(ctx context.Context, q querier, uid int64, f *File) error {

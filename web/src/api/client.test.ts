@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, NetworkError, request } from './client';
 import { isOnline, reportConnection } from './connection';
-import { api } from './index';
+import { api, inventory } from './index';
 
 type Call = { url: string; init: RequestInit };
 
@@ -166,5 +166,28 @@ describe('ответы', () => {
   it('список приглашений разворачивается из {invites}', async () => {
     stubFetch(() => json(200, { invites: [{ id: 1, created_at: 1, expires_at: 2, status: 'active' }] }));
     await expect(api.invites()).resolves.toEqual([{ id: 1, created_at: 1, expires_at: 2, status: 'active' }]);
+  });
+});
+
+describe('двоичное тело (фото позиции)', () => {
+  it('PUT отправляет Blob как есть, Content-Type — тип Blob, с X-Requested-With', async () => {
+    const calls = stubFetch(() => json(200, { id: 7, photo_updated_at: 1792000001 }));
+    const photo = new Blob([Uint8Array.from([0xff, 0xd8, 0xff])], { type: 'image/jpeg' });
+    const r = await inventory.setPhoto(7, photo);
+    expect(r.photo_updated_at).toBe(1792000001);
+    const c = calls[0]!;
+    expect(c.url).toBe('/api/products/7/photo');
+    expect(c.init.method).toBe('PUT');
+    expect(c.init.body).toBe(photo);
+    expect(header(c, 'Content-Type')).toBe('image/jpeg');
+    expect(header(c, 'X-Requested-With')).toBe('garage');
+  });
+
+  it('DELETE без тела', async () => {
+    const calls = stubFetch(() => json(200, { id: 7, photo_updated_at: null }));
+    await inventory.deletePhoto(7);
+    expect(calls[0]!.init.method).toBe('DELETE');
+    expect(calls[0]!.url).toBe('/api/products/7/photo');
+    expect(calls[0]!.init.body).toBeUndefined();
   });
 });

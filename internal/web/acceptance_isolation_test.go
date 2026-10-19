@@ -52,7 +52,12 @@ func TestAccIsolationAllStage2(t *testing.T) {
 	recipeB := stkCreate(b, "/api/recipes", map[string]any{"name": "Свой рецепт",
 		"items": []any{map[string]any{"product_id": prodB, "qty": 1}}})
 
+	// Фото владельца (ФТ-10.4): чужой не может ни прочитать, ни заменить, ни удалить.
+	photoA := phJPEG(t, 33, 22)
+	phPut(t, a, prodA, photoA)
+
 	ownerGets := []string{
+		stkPath("/api/products/", prodA, "/photo"),
 		"/api/categories?archived=1", "/api/locations?archived=1", "/api/stores?archived=1",
 		"/api/products", "/api/products?archived=1", stkPath("/api/products/", prodA, ""), "/api/brands",
 		"/api/shopping", "/api/purchases", stkPath("/api/purchases/", purchaseA.ID, ""),
@@ -151,6 +156,25 @@ func TestAccIsolationAllStage2(t *testing.T) {
 			}
 		})
 	}
+	// Фото: байты настоящие, поэтому отказ именно по владельцу (404), а не по содержимому (400).
+	b64Photo := transferB64(photoA)
+	for _, tc := range []struct{ name, method string }{
+		{"фото чужой позиции: чтение", http.MethodGet}, {"фото чужой позиции: замена", http.MethodPut},
+		{"фото чужой позиции: удаление", http.MethodDelete},
+	} {
+		rec := phSend(b, tc.method, stkPath("/api/products/", prodA, "/photo"), photoA, "image/jpeg")
+		expect(t, rec, http.StatusNotFound, tc.name)
+		if msg := decode[errBody](t, rec).Error; !strings.Contains(msg, "не найден") {
+			t.Fatalf("%s: текст %q", tc.name, msg)
+		}
+	}
+	// У своей позиции второго фото нет — 404, а не фото владельца.
+	expect(t, b.do(http.MethodGet, stkPath("/api/products/", prodB, "/photo"), nil), http.StatusNotFound, "своя позиция без фото")
+	// Импорт не может подсунуть чужое фото: в файле только собственные байты, id из базы не читаются.
+	if strings.Contains(b.do(http.MethodGet, "/api/export.json", nil).Body.String(), b64Photo[:24]) {
+		t.Fatal("в экспорте второго фото владельца")
+	}
+
 	// Порядок категорий: все свои действующие плюс чужая — тоже 400.
 	own := decode[catCategories](t, b.do(http.MethodGet, "/api/categories", nil)).Categories
 	ids := []int64{catA}

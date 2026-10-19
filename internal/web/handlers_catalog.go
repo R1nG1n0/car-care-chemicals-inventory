@@ -46,6 +46,7 @@ func (s *Server) catalogRoutes() {
 		http.MethodGet:   h.getProduct,
 		http.MethodPatch: h.updateProduct,
 	})
+	h.photoRoutes()
 	s.api("/api/brands", signedIn, methods{http.MethodGet: h.listBrands})
 
 	s.api("/api/shopping", signedIn, methods{

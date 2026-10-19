@@ -17,6 +17,7 @@ const product = (p: Partial<ProductSummary> = {}): ProductSummary => ({
   low: true,
   location_ids: [],
   last_consume_qty: null,
+  photo_updated_at: null,
   ...p,
 });
 

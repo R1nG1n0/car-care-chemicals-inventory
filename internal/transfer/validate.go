@@ -1,6 +1,7 @@
 package transfer
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/auth"
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/catalog"
+	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/photo"
 )
 
 // Пределы те же, что у обычного API (docs/API.md, ТБ-7).
@@ -238,7 +240,36 @@ func validateProducts(f *File, st *sets) error {
 		if err := checkTime(at("products", i, "created_at"), p.CreatedAt); err != nil {
 			return err
 		}
+		if err := validatePhoto(at("products", i, "photo"), p.Photo); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+// validatePhoto проверяет фото позиции так же, как PUT /api/products/{id}/photo:
+// base64, не больше 400 КБ, тип по содержимому, размеры не больше 4096 px.
+func validatePhoto(path string, p *Photo) error {
+	if p == nil {
+		return nil
+	}
+	// Предел на строку до декодирования: base64 раздувает размер на треть.
+	if len(p.Data) > base64.StdEncoding.EncodedLen(photo.MaxBytes) {
+		return bad(path, "Фото больше 400 КБ")
+	}
+	raw, err := base64.StdEncoding.DecodeString(p.Data)
+	if err != nil {
+		return bad(path+".data", "Фото — не base64")
+	}
+	info, err := photo.Inspect(raw)
+	if err != nil {
+		var ce *catalog.Error
+		if errors.As(catalog.PhotoError(err), &ce) {
+			return bad(path, ce.Message)
+		}
+		return bad(path, "Неверное фото")
+	}
+	p.raw, p.info = raw, info
 	return nil
 }
 

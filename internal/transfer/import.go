@@ -44,6 +44,7 @@ type importer struct {
 	ctx context.Context
 	tx  *sql.Tx
 	uid int64
+	now int64
 
 	categories, locations, stores, products, lines, units, runs, movements, recipes map[int64]int64
 }
@@ -65,7 +66,7 @@ func (s *Service) Import(ctx context.Context, userID int64, f *File) (Counts, er
 	if err := checkEmpty(ctx, tx, userID); err != nil {
 		return Counts{}, err
 	}
-	im := &importer{ctx: ctx, tx: tx, uid: userID,
+	im := &importer{ctx: ctx, tx: tx, uid: userID, now: s.now().Unix(),
 		categories: map[int64]int64{}, locations: map[int64]int64{}, stores: map[int64]int64{},
 		products: map[int64]int64{}, lines: map[int64]int64{}, units: map[int64]int64{},
 		runs: map[int64]int64{}, movements: map[int64]int64{}, recipes: map[int64]int64{},
@@ -213,6 +214,13 @@ func (im *importer) productsStep(f *File) error {
 			return err
 		}
 		im.products[p.ID] = id
+		if p.Photo != nil {
+			if _, err := im.exec("фото позиции", `INSERT INTO product_photos
+				(user_id, product_id, mime, data, width, height, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+				im.uid, id, p.Photo.info.Mime, p.Photo.raw, p.Photo.info.Width, p.Photo.info.Height, im.now); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

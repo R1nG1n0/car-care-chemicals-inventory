@@ -17,6 +17,7 @@ import { productMeta, stickerText, unitLabel } from '../../lib/stock';
 import { AddUnitSheet } from './AddUnitSheet';
 import { ConsumeSheet } from './ConsumeSheet';
 import { ProductHistory } from './ProductHistory';
+import { ProductPhoto } from './ProductPhoto';
 import { UnitRows } from './UnitRows';
 import { UnitSheet } from './UnitSheet';
 
@@ -121,6 +122,8 @@ function ProductView({ detail, back }: { detail: ProductDetail; back: ReactNode 
         </p>
       )}
       {p.note && <p className="g-muted">{p.note}</p>}
+
+      <ProductPhoto product={p} />
 
       <h2 className="g-label">Экземпляры</h2>
       {units.length > 0 ? (

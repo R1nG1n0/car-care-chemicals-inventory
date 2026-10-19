@@ -12,6 +12,7 @@ import type { ProductSummary } from '../api';
 import { formatQty } from '../lib/format';
 import { locationChip, meterLevel, meterValues, openLine, qtyText, stickerText, unitLabel } from '../lib/stock';
 import { usePresence } from './hooks';
+import { ProductThumb } from './ProductThumb';
 import { catClassOf, useStockRefs } from './refs';
 
 export type ProductCardProps = {
@@ -49,7 +50,10 @@ export function ProductCard({ product: p, to, current, onClick, ref, className }
       <div className="g-card__strip" />
       <div className="g-card__body">
         <div className="g-card__top">
-          <span className="g-card__name">{p.name}</span>
+          <span className="stock-card__lead">
+            <ProductThumb id={p.id} updatedAt={p.photo_updated_at} />
+            <span className="g-card__name">{p.name}</span>
+          </span>
           {place && <span className="g-chip">{place}</span>}
         </div>
         <div className="g-card__qty">
