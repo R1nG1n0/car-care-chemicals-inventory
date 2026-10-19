@@ -59,6 +59,7 @@ func TestAccIsolationAllStage2(t *testing.T) {
 		"/api/movements", stkPath("/api/movements?product_id=", prodA, ""),
 		"/api/recipes", stkPath("/api/recipes/", recipeA, ""),
 		"/api/reports/spending?from=2026-01-01&to=2026-12-31", "/api/reports/consumption?from=2026-01-01&to=2026-12-31",
+		"/api/export.json", "/api/export/products.csv", "/api/export/purchases.csv", "/api/export/movements.csv",
 	}
 	before := accSnapshot(t, a, ownerGets)
 
@@ -132,6 +133,14 @@ func TestAccIsolationAllStage2(t *testing.T) {
 		{"применение своего к чужой позиции", http.MethodPost, stkPath("/api/recipes/", recipeB, "/apply"), map[string]any{"items": item(prodA)}, 404},
 		{"порядок: чужой шаблон", http.MethodPost, "/api/recipes/reorder", map[string]any{"ids": []int64{recipeA}}, 400},
 		{"порядок: свой и чужой шаблон", http.MethodPost, "/api/recipes/reorder", map[string]any{"ids": []int64{recipeB, recipeA}}, 400},
+		// Импорт: ссылки в файле только на id внутри файла, чужие id из базы не годятся.
+		{"импорт со ссылкой на чужую категорию", http.MethodPost, "/api/import", map[string]any{
+			"format": "garage-export", "version": 1,
+			"products": []any{map[string]any{"id": 1, "category_id": catA, "name": "X", "unit": "ml", "package_size": 1}}}, 400},
+		{"импорт: покупка в чужой магазин", http.MethodPost, "/api/import", map[string]any{
+			"format": "garage-export", "version": 1, "purchases": []any{map[string]any{"id": 1, "store_id": storeA,
+				"date": "2026-10-04", "lines": []any{map[string]any{"id": 1, "product_id": prodA, "packages": 1}}}}}, 400},
+		{"импорт в непустой склад", http.MethodPost, "/api/import", map[string]any{"format": "garage-export", "version": 1}, 409},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -167,6 +176,7 @@ func TestAccIsolationAllStage2(t *testing.T) {
 		stkPath("/api/products?category_id=", catA, ""), stkPath("/api/products?location_id=", locA, ""),
 		"/api/brands", "/api/shopping", "/api/purchases", "/api/movements", "/api/recipes",
 		"/api/reports/spending?from=2026-01-01&to=2026-12-31", "/api/reports/consumption?from=2026-01-01&to=2026-12-31",
+		"/api/export.json", "/api/export/products.csv", "/api/export/purchases.csv", "/api/export/movements.csv",
 	}
 	for _, target := range lists {
 		rec := b.do(http.MethodGet, target, nil)

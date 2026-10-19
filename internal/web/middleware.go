@@ -42,6 +42,11 @@ const (
 // Порядок проверок: метод (405) → CSRF-заголовок (403) → сессия (401) →
 // владелец (403).
 func (s *Server) api(pattern string, level access, m methods) {
+	s.apiLimited(pattern, level, maxBody, m)
+}
+
+// apiLimited — api с другим пределом тела запроса (импорт файла, ФТ-10.3.3).
+func (s *Server) apiLimited(pattern string, level access, bodyLimit int64, m methods) {
 	allow := make([]string, 0, len(m)+1)
 	for method := range m {
 		allow = append(allow, method)
@@ -68,7 +73,7 @@ func (s *Server) api(pattern string, level access, m methods) {
 			return
 		}
 		if r.Body != nil {
-			r.Body = http.MaxBytesReader(w, r.Body, maxBody)
+			r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
 		}
 		if level == public {
 			h(w, r)

@@ -29,3 +29,4 @@ export const api = {
     request<Session>(`${tokenPath(token)}/accept`, { method: 'POST', body: { login, password } }),
 };
 export * from './inventory';
+export * from './transfer';

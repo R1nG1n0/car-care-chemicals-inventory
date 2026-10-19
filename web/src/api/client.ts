@@ -60,7 +60,11 @@ type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 export type RequestOptions = {
   method?: Method;
   body?: unknown;
+  /** Готовое JSON-тело (файл импорта): уходит как есть, без повторной сериализации. */
+  rawBody?: string;
   signal?: AbortSignal;
+  /** Сколько ждать ответа, мс; по умолчанию REQUEST_TIMEOUT_MS (большая загрузка ждёт дольше). */
+  timeoutMs?: number;
 };
 
 const GATEWAY_STATUSES = new Set([502, 503, 504]);
@@ -70,12 +74,15 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (method !== 'GET') headers['X-Requested-With'] = 'garage';
   let body: string | undefined;
-  if (opts.body !== undefined) {
+  if (opts.rawBody !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    body = opts.rawBody;
+  } else if (opts.body !== undefined) {
     headers['Content-Type'] = 'application/json';
     body = JSON.stringify(opts.body);
   }
 
-  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  const timeout = AbortSignal.timeout(opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
   const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout;
 
   let res: Response;

@@ -93,6 +93,7 @@ func (s *Server) routes() {
 		s.catalogRoutes()
 		s.stockRoutes()
 		s.reportRoutes()
+		s.transferRoutes()
 	}
 
 	s.mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
