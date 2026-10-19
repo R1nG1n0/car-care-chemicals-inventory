@@ -16,6 +16,7 @@ export const keys = {
   purchases: ['purchases'] as const,
   purchase: (id: number) => ['purchase', id] as const,
   movements: (productId?: number) => ['movements', productId ?? null] as const,
+  report: (kind: 'spending' | 'consumption', from: string, to: string) => ['report', kind, from, to] as const,
   recipes: ['recipes'] as const,
   recipe: (id: number) => ['recipe', id] as const,
 };
@@ -24,7 +25,7 @@ export const keys = {
 export function invalidateStock(qc: QueryClient): Promise<void> {
   return qc.invalidateQueries({
     predicate: (q) =>
-      ['products', 'product', 'brands', 'shopping', 'purchases', 'purchase', 'movements', 'recipes', 'recipe', 'locations'].includes(
+      ['products', 'product', 'brands', 'shopping', 'purchases', 'purchase', 'movements', 'recipes', 'recipe', 'locations', 'report'].includes(
         q.queryKey[0] as string,
       ),
   });

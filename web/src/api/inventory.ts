@@ -170,6 +170,22 @@ export type ApplyResult = {
   cost: number | null;
 };
 
+// Отчёты (ФТ-10.2): деньги — копейки, month — «ГГГГ-ММ».
+export type SpendingReport = {
+  total: number;
+  purchases_count: number;
+  by_category: { category_id: number; name: string; color: CatColor; total: number }[];
+  by_store: { store_id: number | null; name: string; total: number }[];
+  by_month: { month: string; total: number }[];
+};
+export type ProductUse = { product_id: number; name: string; unit: Unit; qty: number; cost: number | null };
+export type ConsumptionReport = {
+  total_cost: number;
+  by_product: ProductUse[];
+  by_month: { month: string; cost: number; qty_ml: number; qty_pcs: number }[];
+  writeoffs: { by_product: ProductUse[]; cost: number };
+};
+
 function qs(params: Record<string, string | number | boolean | undefined>): string {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -243,6 +259,12 @@ export const inventory = {
   revert: async (ids: number[]) => (await send<{ products: ProductSummary[] }>('POST', '/api/movements/revert', { ids })).products,
   movements: async (q: { product_id?: number; before?: number } = {}, signal?: AbortSignal) =>
     (await get<{ movements: Movement[] }>(`/api/movements${qs(q)}`, signal)).movements,
+
+  // Отчёты: from, to — «ГГГГ-ММ-ДД» включительно; tz — минуты к востоку от UTC
+  spending: (from: string, to: string, signal?: AbortSignal) =>
+    get<SpendingReport>(`/api/reports/spending${qs({ from, to })}`, signal),
+  consumption: (from: string, to: string, tz: number, signal?: AbortSignal) =>
+    get<ConsumptionReport>(`/api/reports/consumption${qs({ from, to, tz: tz === 0 ? undefined : tz })}`, signal),
 
   // Шаблоны
   recipes: async (signal?: AbortSignal) => (await get<{ recipes: Recipe[] }>('/api/recipes', signal)).recipes,

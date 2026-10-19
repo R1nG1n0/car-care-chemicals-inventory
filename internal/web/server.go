@@ -92,6 +92,7 @@ func (s *Server) routes() {
 	if s.db != nil {
 		s.catalogRoutes()
 		s.stockRoutes()
+		s.reportRoutes()
 	}
 
 	s.mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

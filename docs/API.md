@@ -101,6 +101,7 @@ Cross-Origin-Opener-Policy: same-origin
 | `POST /api/units`, `POST /api/units/{id}/move`, `/adjust`, `/writeoff` | с входом |
 | `POST /api/consume`, `GET /api/movements`, `POST /api/movements/revert` | с входом |
 | `GET`/`POST /api/recipes`, `GET`/`PUT`/`DELETE /api/recipes/{id}`, `POST /api/recipes/reorder`, `POST /api/recipes/{id}/apply` | с входом |
+| `GET /api/reports/spending`, `GET /api/reports/consumption` | с входом |
 
 ## Учётные записи
 
@@ -454,6 +455,59 @@ Cross-Origin-Opener-Policy: same-origin
 { "run_id": 5, "movements": [Movement], "products": [ProductSummary],
   "shortages": [{ "product_id": 12, "requested": 40, "consumed": 25 }], "cost": 4760 }
 ```
+
+## Отчёты (ФТ-10.2)
+
+Только чтение, только свои данные. Параметры обоих адресов:
+
+| Параметр | Правило | Ошибка |
+|---|---|---|
+| `from`, `to` | даты `ГГГГ-ММ-ДД`, обе включительно; обязательны | `400`, `field: "from"` или `"to"` |
+| | `from` ≤ `to`; период не больше 5 лет | `400`, `field: "to"` |
+| `tz` | необязательно: смещение часового пояса клиента от UTC в минутах (МСК — `180`), −840…840; по умолчанию `0`. Нужен только для расхода: движения хранятся в секундах Unix, и по `tz` сутки периода сдвигаются на местные | `400`, `field: "tz"` |
+
+Деньги — копейки. `by_month` содержит **все** месяцы периода по порядку, в том числе пустые (с нулями), — для столбиков.
+
+### `GET /api/reports/spending?from=&to=` — расходы на покупки (ФТ-10.2.2)
+
+Сумма строк покупок `packages × price_per_package`, чья дата покупки (`purchases.date`) попала в период. Категория — у позиции строки (в том числе архивная), магазин — у покупки.
+
+```json
+{
+  "total": 253000,                 // 0 — покупок за период нет
+  "purchases_count": 2,
+  "by_category": [ { "category_id": 3, "name": "Шампуни", "color": "blue", "total": 238000 } ],
+  "by_store":    [ { "store_id": 7, "name": "Автохим", "total": 238000 },
+                   { "store_id": null, "name": "Без магазина", "total": 15000 } ],
+  "by_month":    [ { "month": "2026-09", "total": 238000 }, { "month": "2026-10", "total": 15000 } ]
+}
+```
+
+`by_category` и `by_store` — по убыванию суммы, затем по названию; пустой период — пустые массивы.
+
+### `GET /api/reports/consumption?from=&to=[&tz=]` — расход (ФТ-10.2.3)
+
+Расход — движения `consume` за период (ручные и по шаблонам); отменённые (`/api/movements/revert`) из журнала удалены и в отчёт не входят. Себестоимость каждого движения — как `Movement.cost` (`|qty_delta| × цена упаковки ÷ initial_qty`, к ближайшему), затем суммируется. Списания (`writeoff`) в расход **не входят**, они отдельным блоком `writeoffs`. Перемещения и корректировки не учитываются.
+
+```json
+{
+  "total_cost": 33800,             // сумма cost по by_product; движения без цены дают 0
+  "by_product": [ { "product_id": 12, "name": "Шампунь", "unit": "ml", "qty": 100, "cost": 23800 } ],
+  "by_month":   [ { "month": "2026-10", "cost": 33800, "qty_ml": 100, "qty_pcs": 2 } ],
+  "writeoffs": {
+    "by_product": [ { "product_id": 12, "name": "Шампунь", "unit": "ml", "qty": 50, "cost": 11900 } ],
+    "cost": 11900
+  }
+}
+```
+
+- `by_product` и `writeoffs.by_product`: `qty` — мл или шт по `unit` позиции; `cost` — `null`, если ни у одного движения позиции нет цены (экземпляр введён без покупки). Порядок: по убыванию `cost` (без цены — в конце), затем по `qty`, затем по названию.
+- `by_month`: `qty_ml` и `qty_pcs` считаются отдельно (мл и штуки не складываются).
+- Месяц движения определяется по местному времени (`tz`).
+
+### История цены позиции (ФТ-10.2.4)
+
+Отдельного адреса нет: `GET /api/products/{id}` уже отдаёт `purchases` (последние 20 покупок, новые сверху) с `price_per_100` (мл) или `price_per_unit` (шт) по каждой дате — график строится по ним.
 
 ## Служебное
 

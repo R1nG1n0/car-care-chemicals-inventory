@@ -1,6 +1,6 @@
 // Ещё — меню, профиль, места, категории, магазины, история покупок.
 // Адреса раздела разбирает вложенный <Routes>.
-import { IconBox, IconBuildingStore, IconChevronRight, IconClipboardCheck, IconReceipt, IconTags, IconUser, type TablerIcon } from '@tabler/icons-react';
+import { IconBox, IconBuildingStore, IconChartBar, IconChevronRight, IconClipboardCheck, IconReceipt, IconTags, IconUser, type TablerIcon } from '@tabler/icons-react';
 import { Link, Route, Routes, type Location } from 'react-router';
 import { Ico } from '../../components/ui';
 import { ProfileScreen } from '../profile/ProfileScreen';
@@ -8,6 +8,7 @@ import { RefsScreen } from './RefsScreen';
 import { StoresScreen } from './StoresScreen';
 import { InventoryPlace } from './InventoryPlace';
 import { InventoryScreen } from './InventoryScreen';
+import { ReportsScreen } from '../reports/ReportsScreen';
 import { BackLink } from '../../components/BackLink';
 
 const MENU: { to: string; icon: TablerIcon; title: string; sub: string }[] = [
@@ -16,6 +17,7 @@ const MENU: { to: string; icon: TablerIcon; title: string; sub: string }[] = [
   { to: '/more/categories', icon: IconTags, title: 'Категории', sub: 'Названия и цвета' },
   { to: '/more/stores', icon: IconBuildingStore, title: 'Магазины', sub: 'Где покупаете' },
   { to: '/more/inventory', icon: IconClipboardCheck, title: 'Инвентаризация', sub: 'Сверить места с тем, что в учёте' },
+  { to: '/more/reports', icon: IconChartBar, title: 'Отчёты', sub: 'Сколько потратили и сколько ушло' },
   { to: '/purchases', icon: IconReceipt, title: 'История покупок', sub: 'Все покупки, новые сверху' },
 ];
 
@@ -59,6 +61,7 @@ export function MoreSection({ location }: { location: Location }) {
       <Route path="/more/stores" element={<StoresScreen />} />
       <Route path="/more/inventory" element={<InventoryScreen />} />
       <Route path="/more/inventory/:id" element={<InventoryPlace />} />
+      <Route path="/more/reports" element={<ReportsScreen />} />
       <Route path="*" element={<MoreMenu />} />
     </Routes>
   );

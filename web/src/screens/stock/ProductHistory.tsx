@@ -2,6 +2,7 @@
 // и журнал движений; расход, списание и корректировку можно отменить с подтверждением.
 import { useState } from 'react';
 import type { Movement, ProductDetail } from '../../api';
+import { PriceChart } from '../../components/PriceChart';
 import { Sheet } from '../../components/Sheet';
 import { useStockRefs } from '../../components/refs';
 import { busyProps } from '../../components/ui';
@@ -41,6 +42,8 @@ export function ProductHistory({ detail }: { detail: ProductDetail }) {
 
   return (
     <>
+      <PriceChart rows={purchases} unit={p.unit} />
+
       <h2 className="g-label">Покупки</h2>
       {purchases.length === 0 ? (
         <p className="g-muted">Покупок ещё не было.</p>

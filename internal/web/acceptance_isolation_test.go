@@ -58,6 +58,7 @@ func TestAccIsolationAllStage2(t *testing.T) {
 		"/api/shopping", "/api/purchases", stkPath("/api/purchases/", purchaseA.ID, ""),
 		"/api/movements", stkPath("/api/movements?product_id=", prodA, ""),
 		"/api/recipes", stkPath("/api/recipes/", recipeA, ""),
+		"/api/reports/spending?from=2026-01-01&to=2026-12-31", "/api/reports/consumption?from=2026-01-01&to=2026-12-31",
 	}
 	before := accSnapshot(t, a, ownerGets)
 
@@ -165,6 +166,7 @@ func TestAccIsolationAllStage2(t *testing.T) {
 		"/api/products", "/api/products?archived=1", "/api/products?q=секрет", "/api/products?filter=low",
 		stkPath("/api/products?category_id=", catA, ""), stkPath("/api/products?location_id=", locA, ""),
 		"/api/brands", "/api/shopping", "/api/purchases", "/api/movements", "/api/recipes",
+		"/api/reports/spending?from=2026-01-01&to=2026-12-31", "/api/reports/consumption?from=2026-01-01&to=2026-12-31",
 	}
 	for _, target := range lists {
 		rec := b.do(http.MethodGet, target, nil)

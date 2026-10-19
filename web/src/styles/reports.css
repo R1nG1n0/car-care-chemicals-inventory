@@ -1,0 +1,80 @@
+/* Отчёты (ФТ-10.2): выбор периода, итог, списки с полоской доли, столбики по месяцам,
+   график цены позиции. Только токены. Доля — переменная --lv (0…1), рисуется
+   трансформацией; появление — scaleX/scaleY от нуля с задержкой по порядку
+   (через :nth-child — без инлайновых стилей). При reduced-motion — только прозрачность. */
+
+.rep-panel { display: grid; animation: g-fade var(--dur-enter) var(--ease-out); }
+
+/* ---------- Период ---------- */
+.rep-period { display: grid; gap: var(--sp-3); }
+.rep-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.rep-nav__title { margin: 0; text-align: center; flex: 1; font: var(--fw-heavy) var(--fs-16) / var(--lh-tight) var(--font-display); }
+.rep-custom { display: grid; gap: var(--sp-2); }
+.rep-custom__dates { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+.rep-custom .g-field__error { margin: 0; }
+
+/* ---------- Итог ---------- */
+.rep-total { display: grid; gap: var(--sp-1); padding: var(--sp-4); border: var(--bw) solid var(--line); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--sh-lg); }
+.rep-total__num { font-size: var(--fs-40); line-height: var(--lh-tight); overflow-wrap: anywhere; }
+
+/* ---------- Список с полоской доли ---------- */
+.rep-list { list-style: none; margin: 0; padding: 0; }
+.rep-share { display: grid; gap: 6px; padding: var(--sp-3); border-bottom: 1px dashed var(--text-muted); }
+.rep-share:last-child { border-bottom: 0; }
+.rep-share__head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); }
+.rep-share__name { font-weight: var(--fw-bold); min-width: 0; overflow-wrap: anywhere; }
+.rep-share__val { flex: none; font-size: var(--fs-14); }
+.rep-track { height: 12px; overflow: hidden; background: var(--surface-raised); border: var(--bw) solid var(--line); border-radius: 6px; }
+.rep-fill {
+  display: block; width: 100%; height: 100%; transform-origin: left; transform: scaleX(var(--lv, 0));
+  background: color-mix(in srgb, var(--cat, var(--accent)), #fff var(--meter-lift));
+  animation: rep-grow 520ms var(--ease-out) backwards;
+}
+.rep-list > :nth-child(2) .rep-fill { animation-delay: 50ms; }
+.rep-list > :nth-child(3) .rep-fill { animation-delay: 100ms; }
+.rep-list > :nth-child(4) .rep-fill { animation-delay: 150ms; }
+.rep-list > :nth-child(5) .rep-fill { animation-delay: 200ms; }
+.rep-list > :nth-child(6) .rep-fill { animation-delay: 250ms; }
+.rep-list > :nth-child(7) .rep-fill { animation-delay: 300ms; }
+.rep-list > :nth-child(8) .rep-fill { animation-delay: 350ms; }
+.rep-list > :nth-child(n + 9) .rep-fill { animation-delay: 400ms; }
+
+/* ---------- Столбики по месяцам ---------- */
+.rep-months { margin: 0; display: grid; gap: var(--sp-2); padding: var(--sp-3); border: var(--bw) solid var(--line); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--sh-lg); }
+.rep-months__plot { list-style: none; margin: 0; padding: 0; display: flex; align-items: stretch; gap: 3px; }
+.rep-col { position: relative; flex: 1 1 0; min-width: 0; display: grid; grid-template-rows: 16px 120px 18px; justify-items: center; }
+.rep-col__val { font-size: var(--fs-12); font-weight: var(--fw-bold); white-space: nowrap; line-height: 16px; }
+.rep-col__bar { align-self: stretch; width: 100%; max-width: 44px; display: flex; align-items: flex-end; border-bottom: var(--bw) solid var(--line); }
+.rep-col__fill {
+  display: block; width: 100%; height: 100%; transform-origin: bottom; transform: scaleY(var(--lv, 0));
+  background: color-mix(in srgb, var(--accent), #fff var(--meter-lift)); border-radius: 3px 3px 0 0;
+  animation: rep-rise 520ms var(--ease-out) backwards;
+}
+.rep-col:nth-child(2) .rep-col__fill { animation-delay: 40ms; }
+.rep-col:nth-child(3) .rep-col__fill { animation-delay: 80ms; }
+.rep-col:nth-child(4) .rep-col__fill { animation-delay: 120ms; }
+.rep-col:nth-child(5) .rep-col__fill { animation-delay: 160ms; }
+.rep-col:nth-child(6) .rep-col__fill { animation-delay: 200ms; }
+.rep-col:nth-child(7) .rep-col__fill { animation-delay: 240ms; }
+.rep-col:nth-child(8) .rep-col__fill { animation-delay: 280ms; }
+.rep-col:nth-child(n + 9) .rep-col__fill { animation-delay: 320ms; }
+.rep-col__lab { font-size: var(--fs-12); color: var(--text-muted); white-space: nowrap; line-height: 18px; justify-self: center; }
+.rep-months__cap { margin: 0; font-size: var(--fs-12); }
+
+/* ---------- График цены позиции ---------- */
+.rep-price { display: grid; gap: var(--sp-2); }
+.rep-price__card { display: grid; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); }
+.rep-price__svg { display: block; width: 100%; max-width: 480px; height: auto; justify-self: center; overflow: visible; animation: g-fade var(--dur-enter) var(--ease-out); }
+.rep-price__grid { fill: none; stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 3 4; }
+.rep-price__line { fill: none; stroke: var(--text); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.rep-price__dot { fill: var(--surface); stroke: var(--text); stroke-width: 2; }
+.rep-price__dot--last { fill: var(--accent); }
+.rep-price__axis { display: flex; justify-content: space-between; font-size: var(--fs-12); color: var(--text-muted); }
+.rep-price__sum { margin: 0; font-size: var(--fs-13); }
+
+@keyframes rep-grow { from { transform: scaleX(0); } }
+@keyframes rep-rise { from { transform: scaleY(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .rep-fill, .rep-col__fill { animation-name: g-fade; animation-delay: 0s !important; animation-duration: var(--dur-fast); }
+}
