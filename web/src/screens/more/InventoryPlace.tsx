@@ -3,42 +3,32 @@
 // до завершения (lib/inventory). Все изменения — обычные движения с отменой.
 import { IconClipboardCheck } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { errorText, inventory, type InventoryUnit, type Location } from '../../api';
+import { errorText, inventory, type InventoryUnit } from '../../api';
 import { invalidateStock, keys } from '../../app/queries';
 import { useSession } from '../../app/session';
 import { useToast } from '../../app/toast';
-import { useRevert } from '../../app/useRevert';
 import { BackLink } from '../../components/BackLink';
 import { Meter } from '../../components/ProductCard';
 import { Empty, LoadError, SkelList } from '../../components/ui';
-import {
-  clearState,
-  loadState,
-  mergeOrder,
-  newState,
-  progressOf,
-  REASON_FIX,
-  REASON_MISSING,
-  saveState,
-  shortDate,
-  summarize,
-  withMark,
-  withoutMark,
-  type CheckState,
-  type Mark,
-} from '../../lib/inventory';
-import { qtyText } from '../../lib/stock';
+import { buildRows, clearState, loadState, mergeOrder, newState, progressOf, saveState, shortDate, summarize, type CheckState } from '../../lib/inventory';
 import { InventoryFinish } from './InventoryFinish';
+import { InventoryGroupRow } from './InventoryGroupRow';
+import { InventoryGroupSheet } from './InventoryGroupSheet';
 import { InventoryRow } from './InventoryRow';
-import { InventorySheet, type After, type SheetActions } from './InventorySheet';
+import { InventorySheet } from './InventorySheet';
+import { useInventoryActions } from './useInventoryActions';
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
 export function InventoryPlace() {
   const id = Number(useParams()['id']);
-  return Number.isInteger(id) && id > 0 ? <PlaceBody key={id} locationId={id} /> : <Missing />;
+  const userId = useSession().data?.user.id;
+  if (!Number.isInteger(id) || id <= 0) return <Missing />;
+  // Состояние проверки привязано к пользователю: пока сессия не известна, хранилище не трогаем
+  if (userId === undefined) return <div className="app-stack"><SkelList label="Загрузка" /></div>;
+  return <PlaceBody key={`${userId}:${id}`} userId={userId} locationId={id} />;
 }
 
 function Missing() {
@@ -50,12 +40,10 @@ function Missing() {
   );
 }
 
-function PlaceBody({ locationId }: { locationId: number }) {
+function PlaceBody({ userId, locationId }: { userId: number; locationId: number }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
-  const revert = useRevert();
-  const userId = useSession().data?.user.id ?? 0;
 
   const places = useQuery({ queryKey: keys.locations(false), queryFn: ({ signal }) => inventory.locations(false, signal) });
   const units = useQuery({
@@ -73,8 +61,17 @@ function PlaceBody({ locationId }: { locationId: number }) {
   const [fresh, setFresh] = useState<number | null>(null);
   const freshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(freshTimer.current), []);
+  const flash = (unitId: number) => {
+    setResumed(false);
+    setFresh(unitId);
+    clearTimeout(freshTimer.current);
+    freshTimer.current = setTimeout(() => setFresh(null), 900);
+  };
+  const { actions, groupActions, undo } = useInventoryActions({ locationId, places: places.data ?? [], state, setState, flash });
 
   const [picked, setPicked] = useState<InventoryUnit | null>(null);
+  const [pickedGroup, setPickedGroup] = useState<InventoryUnit[] | null>(null);
+  const [undoing, setUndoing] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
   const [finishBusy, setFinishBusy] = useState(false);
   const [finishError, setFinishError] = useState<string>();
@@ -86,78 +83,18 @@ function PlaceBody({ locationId }: { locationId: number }) {
   const merged = list ? mergeOrder(order, ids, state.marks) : order;
   if (merged.length !== order.length || merged.some((v, i) => v !== order[i])) setOrder(merged);
   const byId = useMemo(() => new Map((list ?? []).map((u) => [u.id, u])), [list]);
+  const rows = useMemo(() => buildRows(merged, byId, state.marks), [merged, byId, state.marks]);
 
   const progress = progressOf(ids, state.marks);
   const summary = summarize(ids, state.marks);
 
-  const mark = useCallback((unit: InventoryUnit, m: Omit<Mark, 'name'>) => {
-    setState((s) => withMark(s, unit.id, { ...m, name: unit.product.name }));
-    setResumed(false);
-    setFresh(unit.id);
-    clearTimeout(freshTimer.current);
-    freshTimer.current = setTimeout(() => setFresh(null), 900);
-  }, []);
-  const unmark = (unitId: number) => setState((s) => withoutMark(s, unitId));
-  const refresh = () => Promise.all([invalidateStock(qc), qc.invalidateQueries({ queryKey: keys.locationUnits(locationId) })]);
-
-  /** После отмены: сначала экземпляр возвращается в список, потом снимается отметка — строка остаётся на своём месте. */
-  const back = async (unitId: number) => {
-    await qc.refetchQueries({ queryKey: keys.locationUnits(locationId) });
-    unmark(unitId);
-    void invalidateStock(qc);
-  };
-
-  const placeName = (lid: number) => places.data?.find((l) => l.id === lid)?.name ?? 'другое место';
-
-  const undoable = (unit: InventoryUnit, movementId: number | undefined, text: string, undone: string): After => () => {
-    toast.show(
-      movementId === undefined
-        ? { text }
-        : {
-            text,
-            action: {
-              label: 'Отменить',
-              onClick: () =>
-                void revert([movementId], undone)
-                  .then(() => back(unit.id))
-                  .catch(() => undefined),
-            },
-          },
-    );
-  };
-
-  const actions: SheetActions = {
-    confirm: (u) => mark(u, { verdict: 'ok', detail: 'Остаток верный' }),
-    adjust: async (u, n) => {
-      const r = await inventory.adjustUnit(u.id, n, REASON_FIX);
-      mark(u, { verdict: 'fixed', detail: `${qtyText(u.remaining_qty, u.product.unit)} → ${qtyText(n, u.product.unit)}` });
-      void refresh();
-      return undoable(u, r.movement?.id, `Остаток исправлен: ${qtyText(n, u.product.unit)}`, 'Корректировка отменена');
-    },
-    missing: async (u) => {
-      const r = await inventory.writeoffUnit(u.id, REASON_MISSING);
-      mark(u, { verdict: 'missing', detail: `Списано ${qtyText(u.remaining_qty, u.product.unit)}` });
-      void refresh();
-      return undoable(u, r.movement?.id, `Списано ${qtyText(u.remaining_qty, u.product.unit)} · не найдено`, 'Списание отменено');
-    },
-    move: async (u, to: Location) => {
-      await inventory.moveUnit(u.id, to.id);
-      mark(u, { verdict: 'moved', detail: `Лежит в месте «${to.name}»` });
-      void refresh();
-      // Перемещение отмена API не умеет: возвращаем обратным перемещением
-      return () => toast.show({
-        text: `Перемещено: ${to.name}`,
-        action: {
-          label: 'Отменить',
-          onClick: () =>
-            void inventory
-              .moveUnit(u.id, locationId)
-              .then(() => back(u.id))
-              .then(() => toast.show({ text: `Возвращено: ${placeName(locationId)}` }))
-              .catch((err: unknown) => toast.show({ text: `Не отменено: ${errorText(err)}` })),
-        },
-      });
-    },
+  const runUndo = async (key: string, unitIds: readonly number[]) => {
+    setUndoing(key);
+    try {
+      await undo(unitIds);
+    } finally {
+      setUndoing(null);
+    }
   };
 
   const restart = () => {
@@ -204,7 +141,6 @@ function PlaceBody({ locationId }: { locationId: number }) {
     );
   }
 
-  const rows = merged;
   const empty = rows.length === 0;
   const left = progress.total - progress.done;
 
@@ -241,16 +177,35 @@ function PlaceBody({ locationId }: { locationId: number }) {
             <Meter level={progress.level} low={false} now={progress.done} max={Math.max(progress.total, 1)} label="Проверено экземпляров" className="inv-meter" />
           </div>
           <ul className="g-list inv-list" aria-label="Экземпляры места">
-            {rows.map((uid) => {
-              const u = byId.get(uid) ?? null;
+            {rows.map((row) => {
+              if (row.kind === 'group') {
+                const members = row.ids.flatMap((i) => byId.get(i) ?? []);
+                const marks = row.done ? row.ids.flatMap((i) => state.marks[String(i)] ?? []) : [];
+                return (
+                  <InventoryGroupRow
+                    key={row.key}
+                    units={members}
+                    marks={marks}
+                    count={row.ids.length}
+                    fresh={fresh !== null && row.ids.includes(fresh)}
+                    busy={undoing === row.key}
+                    onConfirm={() => groupActions.confirm(members)}
+                    onShortage={() => setPickedGroup(members)}
+                    onUndo={() => void runUndo(row.key, row.ids)}
+                  />
+                );
+              }
+              const u = byId.get(row.id) ?? null;
               return (
                 <InventoryRow
-                  key={uid}
+                  key={row.id}
                   unit={u}
-                  mark={state.marks[String(uid)] ?? null}
-                  fresh={fresh === uid}
+                  mark={state.marks[String(row.id)] ?? null}
+                  fresh={fresh === row.id}
+                  busy={undoing === String(row.id)}
                   onConfirm={() => u && actions.confirm(u)}
                   onMore={() => setPicked(u)}
+                  onUndo={() => void runUndo(String(row.id), [row.id])}
                 />
               );
             })}
@@ -258,13 +213,16 @@ function PlaceBody({ locationId }: { locationId: number }) {
         </>
       )}
 
-      <div className="inv-foot" data-toast-anchor>
-        <button type="button" className="g-btn g-btn--cta g-btn--block g-press" onClick={() => (setFinishError(undefined), setFinishing(true))}>
-          Завершить проверку
-        </button>
-      </div>
+      {!finishing && (
+        <div className="inv-foot" data-toast-anchor>
+          <button type="button" className="g-btn g-btn--cta g-btn--block g-press" onClick={() => (setFinishError(undefined), setFinishing(true))}>
+            Завершить проверку
+          </button>
+        </div>
+      )}
 
       <InventorySheet unit={picked} places={places.data ?? []} actions={actions} onClose={() => setPicked(null)} />
+      <InventoryGroupSheet units={pickedGroup} places={places.data ?? []} actions={groupActions} onClose={() => setPickedGroup(null)} />
       <InventoryFinish
         open={finishing}
         placeName={place?.name ?? 'Место'}

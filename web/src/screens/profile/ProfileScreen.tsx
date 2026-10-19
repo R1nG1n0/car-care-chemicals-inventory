@@ -3,10 +3,11 @@ import { IconChevronDown, IconChevronRight, IconDownload, IconLogout, IconShare2
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { api } from '../../api';
+import { api, type Session } from '../../api';
 import { promptInstall, useInstallMode } from '../../app/install';
-import { clearSession, useSession } from '../../app/session';
+import { clearSession, meKey, useSession } from '../../app/session';
 import { busyProps, Ico } from '../../components/ui';
+import { clearUserStates } from '../../lib/inventory';
 import { Invites } from './Invites';
 import { PasswordForm } from './PasswordForm';
 import { StepsForm } from './StepsForm';
@@ -38,6 +39,9 @@ function LogoutButtons() {
   const navigate = useNavigate();
   const [confirm, setConfirm] = useState(false);
   const done = () => {
+    // Незавершённые проверки инвентаризации вышедшего не остаются на устройстве
+    const me = client.getQueryData<Session | null>(meKey);
+    if (me) clearUserStates(me.user.id);
     clearSession(client);
     navigate('/login', { replace: true });
   };

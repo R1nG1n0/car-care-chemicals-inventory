@@ -116,6 +116,32 @@ func TestReportConsumptionRevertedAndTimezone(t *testing.T) {
 	}
 }
 
+// Корректировка вниз — отдельный блок «corrections», в расход не входит; вверх не учитывается.
+func TestReportConsumptionCorrections(t *testing.T) {
+	c, p1, _ := rptSetup(t)
+	buy := accBuy(t, c, map[string]any{"date": "2026-10-10", "lines": []any{accLine(p1, 1, 100000)}})
+	unit := buy.Purchase.Lines[0].UnitIDs[0]
+	adjust := func(qty int64) {
+		expect(t, c.do(http.MethodPost, stkPath("/api/units/", unit, "/adjust"), map[string]any{"remaining_qty": qty, "reason": "Инвентаризация"}),
+			http.StatusOK, "корректировка")
+	}
+	adjust(400) // -100 мл: 100 × 100000 / 500 = 20000
+	adjust(450) // +50 мл — вверх, не показывается
+	got := rptGet[report.Consumption](t, c, "consumption", "from=2026-10-01&to=2026-10-31")
+	if got.TotalCost != 33800 || got.Writeoffs.Cost != 11900 {
+		t.Fatalf("расход и списания не должны меняться: %+v", got)
+	}
+	cr := got.Corrections
+	if cr.Cost != 20000 || len(cr.ByProduct) != 1 || cr.ByProduct[0].ProductID != p1 || cr.ByProduct[0].Qty != 100 ||
+		cr.ByProduct[0].Cost == nil || *cr.ByProduct[0].Cost != 20000 {
+		t.Fatalf("корректировки: %+v", cr)
+	}
+	empty := rptGet[report.Consumption](t, c, "consumption", "from=2026-01-01&to=2026-01-31")
+	if empty.Corrections.ByProduct == nil || len(empty.Corrections.ByProduct) != 0 {
+		t.Fatalf("пустые корректировки должны быть []: %+v", empty.Corrections)
+	}
+}
+
 func TestReportConsumptionWithoutPrice(t *testing.T) {
 	e := newEnv(t, false)
 	c := stkSignIn(e, "owner")

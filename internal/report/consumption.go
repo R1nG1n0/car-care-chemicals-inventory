@@ -31,11 +31,14 @@ type Writeoffs struct {
 
 // Consumption — расход за период (ФТ-10.2.3): движения consume, в том числе
 // по шаблонам. Себестоимость каждого движения считается как Movement.cost.
+// Corrections — корректировки остатка вниз (adjust с отрицательной дельтой,
+// например из инвентаризации): в расход не входят, показываются отдельно.
 type Consumption struct {
-	TotalCost int64        `json:"total_cost"`
-	ByProduct []ProductUse `json:"by_product"`
-	ByMonth   []MonthUse   `json:"by_month"`
-	Writeoffs Writeoffs    `json:"writeoffs"`
+	TotalCost   int64        `json:"total_cost"`
+	ByProduct   []ProductUse `json:"by_product"`
+	ByMonth     []MonthUse   `json:"by_month"`
+	Writeoffs   Writeoffs    `json:"writeoffs"`
+	Corrections Writeoffs    `json:"corrections"`
 }
 
 // moveCost — стоимость движения в копейках: |qty_delta| × цена упаковки ÷
@@ -48,18 +51,22 @@ const moveFrom = ` FROM movements m
 	JOIN units u ON u.user_id = m.user_id AND u.id = m.unit_id
 	JOIN products pr ON pr.user_id = u.user_id AND pr.id = u.product_id
 	LEFT JOIN purchase_lines l ON l.user_id = u.user_id AND l.id = u.purchase_line_id
-	WHERE m.user_id = ? AND m.type = ? AND m.created_at >= ? AND m.created_at < ? `
+	WHERE m.user_id = ? AND m.type = ? AND m.qty_delta < 0 AND m.created_at >= ? AND m.created_at < ? `
 
 // Consumption считает расход и списания пользователя за период.
 func (s *Service) Consumption(ctx context.Context, userID int64, p Period) (Consumption, error) {
 	from, to := p.bounds()
-	out := Consumption{ByProduct: []ProductUse{}, ByMonth: []MonthUse{}, Writeoffs: Writeoffs{ByProduct: []ProductUse{}}}
+	out := Consumption{ByProduct: []ProductUse{}, ByMonth: []MonthUse{}, Writeoffs: Writeoffs{ByProduct: []ProductUse{}},
+		Corrections: Writeoffs{ByProduct: []ProductUse{}}}
 
 	var err error
 	if out.ByProduct, out.TotalCost, err = s.byProduct(ctx, userID, "consume", from, to); err != nil {
 		return out, err
 	}
 	if out.Writeoffs.ByProduct, out.Writeoffs.Cost, err = s.byProduct(ctx, userID, "writeoff", from, to); err != nil {
+		return out, err
+	}
+	if out.Corrections.ByProduct, out.Corrections.Cost, err = s.byProduct(ctx, userID, "adjust", from, to); err != nil {
 		return out, err
 	}
 	byMonth := map[string]MonthUse{}

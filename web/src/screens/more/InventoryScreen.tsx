@@ -12,10 +12,20 @@ import { Empty, Ico, LoadError, SkelList } from '../../components/ui';
 import { checkedLabel, exemplars, isStale, loadState, sortLocations } from '../../lib/inventory';
 
 export function InventoryScreen() {
-  const userId = useSession().data?.user.id ?? 0;
+  const userId = useSession().data?.user.id;
   const q = useQuery({ queryKey: keys.locations(false), queryFn: ({ signal }) => inventory.locations(false, signal) });
   const places = useMemo(() => sortLocations(q.data ?? []), [q.data]);
   const [now] = useState(() => Math.floor(Date.now() / 1000));
+  // Незавершённые проверки читаются из хранилища один раз на набор мест, а не на каждый рендер
+  const pending = useMemo(() => {
+    const m = new Map<number, number>();
+    if (userId === undefined) return m;
+    for (const l of places) {
+      const saved = loadState(userId, l.id, now);
+      if (saved) m.set(l.id, Object.keys(saved.marks).length);
+    }
+    return m;
+  }, [places, userId, now]);
 
   return (
     <div className="app-stack">
@@ -30,8 +40,7 @@ export function InventoryScreen() {
       {places.length > 0 && (
         <nav className="g-list" aria-label="Места для проверки">
           {places.map((l) => {
-            const saved = loadState(userId, l.id);
-            const marked = saved ? Object.keys(saved.marks).length : 0;
+            const marked = pending.get(l.id) ?? 0;
             const stale = l.checked_at !== null && isStale(l.checked_at, now);
             return (
               <Link key={l.id} to={`/more/inventory/${l.id}`} className="g-row g-row--link">

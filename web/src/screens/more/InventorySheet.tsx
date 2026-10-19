@@ -10,7 +10,7 @@ import { parseQty } from '../../lib/qty';
 import { qtyText } from '../../lib/stock';
 
 /** Шторка уходит за 200 мс плюс запас (components/Sheet). */
-const SHEET_LEAVE_MS = 260;
+export const SHEET_LEAVE_MS = 260;
 
 type Mode = 'adjust' | 'missing' | 'move';
 

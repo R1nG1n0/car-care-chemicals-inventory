@@ -29,7 +29,8 @@ func (s *Service) LocationUnits(ctx context.Context, userID, locationID int64) (
 	}
 	rows, err := s.q.QueryContext(ctx, `SELECT `+unitColumns+`, p.name, p.brand, p.unit, p.package_size`+unitFrom+`
 		JOIN products p ON p.user_id = u.user_id AND p.id = u.product_id
-		WHERE u.user_id = ? AND u.location_id = ? AND u.status IN ('sealed', 'open') AND p.archived = 0
+		JOIN locations lc ON lc.user_id = u.user_id AND lc.id = u.location_id
+		WHERE u.user_id = ? AND u.location_id = ? AND lc.archived = 0 AND u.status IN ('sealed', 'open') AND p.archived = 0
 		ORDER BY p.name COLLATE NOCASE, p.id, CASE u.status WHEN 'open' THEN 0 ELSE 1 END, u.id`,
 		userID, locationID)
 	if err != nil {

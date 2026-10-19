@@ -1,5 +1,6 @@
 // Отчёт «Расход» (ФТ-10.2.3): списано по позициям в мл/шт и в деньгах
-// (себестоимость), по месяцам; списания (испорчено, не найдено) — отдельно.
+// (себестоимость), по месяцам; списания (испорчено, не найдено) и корректировки
+// остатка вниз (потери при инвентаризации) — отдельными блоками, в расход не входят.
 import { IconDroplet } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { inventory, type ProductUse } from '../../api';
@@ -32,11 +33,12 @@ export function ReportsConsumption({ from, to }: { from: string; to: string }) {
   });
   const used = useRows(q.data?.by_product ?? []);
   const lost = useRows(q.data?.writeoffs.by_product ?? []);
+  const fixed = useRows(q.data?.corrections.by_product ?? []);
   if (q.isPending) return <SkelList rows={3} label="Отчёт загружается" />;
   if (q.isError && !q.data) return <LoadError id="rep-co-err" error={q.error} what="Отчёт" onRetry={() => void q.refetch()} />;
   const r = q.data;
   if (!r) return null;
-  if (r.by_product.length === 0 && r.writeoffs.by_product.length === 0) {
+  if (r.by_product.length === 0 && r.writeoffs.by_product.length === 0 && r.corrections.by_product.length === 0) {
     return <Empty id="rep-co-empty" icon={IconDroplet} title="Расхода нет" text="За этот период ничего не списывали. Выберите другой период." />;
   }
   return (
@@ -74,6 +76,16 @@ export function ReportsConsumption({ from, to }: { from: string; to: string }) {
           </h2>
           <p className="g-muted">Испорчено, не найдено, потеряно — в расход не входит.</p>
           <ShareList label="Списания по позициям" total={r.writeoffs.cost} rows={lost} />
+        </section>
+      )}
+
+      {r.corrections.by_product.length > 0 && (
+        <section className="app-stack" aria-labelledby="rep-co-fix">
+          <h2 className="g-label" id="rep-co-fix">
+            Корректировки: {formatMoney(r.corrections.cost)}
+          </h2>
+          <p className="g-muted">Остаток уменьшили при инвентаризации или вручную — в расход не входит.</p>
+          <ShareList label="Корректировки по позициям" total={r.corrections.cost} rows={fixed} />
         </section>
       )}
     </div>

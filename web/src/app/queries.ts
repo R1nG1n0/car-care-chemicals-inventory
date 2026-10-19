@@ -25,7 +25,7 @@ export const keys = {
 export function invalidateStock(qc: QueryClient): Promise<void> {
   return qc.invalidateQueries({
     predicate: (q) =>
-      ['products', 'product', 'brands', 'shopping', 'purchases', 'purchase', 'movements', 'recipes', 'recipe', 'locations', 'report'].includes(
+      ['products', 'product', 'brands', 'shopping', 'purchases', 'purchase', 'movements', 'recipes', 'recipe', 'locations', 'locationUnits', 'report'].includes(
         q.queryKey[0] as string,
       ),
   });
@@ -35,6 +35,6 @@ export function invalidateStock(qc: QueryClient): Promise<void> {
 export function invalidateRefs(qc: QueryClient): Promise<void> {
   return qc.invalidateQueries({
     predicate: (q) =>
-      ['categories', 'locations', 'stores', 'products', 'product', 'shopping', 'purchases', 'purchase'].includes(q.queryKey[0] as string),
+      ['categories', 'locations', 'locationUnits', 'stores', 'products', 'product', 'shopping', 'purchases', 'purchase'].includes(q.queryKey[0] as string),
   });
 }

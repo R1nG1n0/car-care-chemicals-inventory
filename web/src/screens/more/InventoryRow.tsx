@@ -1,9 +1,10 @@
 // Строка экземпляра при инвентаризации: позиция, остаток, вскрыт/запечатан. Пока не проверен —
 // «На месте» и «Другое…» (шторка с остальными действиями). После отметки на строке
-// появляется метка исхода: короткая «печать» (transform/opacity), без неё при reduced-motion.
+// появляется метка исхода (короткая «печать», без неё при reduced-motion) и кнопка,
+// которой отметку можно снять или отменить: «Снять отметку» / «Отменить».
 import { IconAlertTriangle, IconArrowsExchange, IconCheck, IconPencil, type TablerIcon } from '@tabler/icons-react';
 import type { InventoryUnit } from '../../api';
-import { Ico } from '../../components/ui';
+import { busyProps, Ico } from '../../components/ui';
 import { formatQty } from '../../lib/format';
 import { VERDICT_TEXT, type Mark, type Verdict } from '../../lib/inventory';
 import { qtyText } from '../../lib/stock';
@@ -16,16 +17,35 @@ function unitLine(u: InventoryUnit): string {
   return `${p.unit === 'pcs' ? 'Пачка запечатана' : 'Запечатана'} · ${qtyText(u.remaining_qty, p.unit)}`;
 }
 
+/** Метка исхода и кнопка «Снять отметку» / «Отменить» (≥ 44 px). */
+export function DoneControls({ verdict, name, busy, onUndo }: { verdict: Verdict; name: string; busy: boolean; onUndo: () => void }) {
+  const label = verdict === 'ok' ? 'Снять отметку' : 'Отменить';
+  return (
+    <div className="inv-row__actions">
+      <span className={`inv-badge inv-badge--${verdict}`}>
+        <Ico icon={ICON[verdict]} size={18} />
+        {VERDICT_TEXT[verdict]}
+      </span>
+      <button type="button" className="g-btn g-btn--sm g-btn--ghost g-press" aria-label={`${label}: ${name}`} onClick={() => !busy && onUndo()} {...busyProps(busy)}>
+        {busy ? 'Отменяю…' : label}
+      </button>
+    </div>
+  );
+}
+
 type Props = {
   unit: InventoryUnit | null;
   mark: Mark | null;
   /** Только что отмечена: проигрывается анимация метки. */
   fresh: boolean;
+  /** Идёт отмена отметки. */
+  busy: boolean;
   onConfirm: () => void;
   onMore: () => void;
+  onUndo: () => void;
 };
 
-export function InventoryRow({ unit, mark, fresh, onConfirm, onMore }: Props) {
+export function InventoryRow({ unit, mark, fresh, busy, onConfirm, onMore, onUndo }: Props) {
   const name = unit ? unit.product.name : (mark?.name ?? '');
   const brand = unit?.product.brand;
   const verdict = mark?.verdict;
@@ -38,10 +58,7 @@ export function InventoryRow({ unit, mark, fresh, onConfirm, onMore }: Props) {
         </span>
       </div>
       {mark && verdict ? (
-        <span className={`inv-badge inv-badge--${verdict}`}>
-          <Ico icon={ICON[verdict]} size={18} />
-          {VERDICT_TEXT[verdict]}
-        </span>
+        <DoneControls verdict={verdict} name={name} busy={busy} onUndo={onUndo} />
       ) : (
         unit && (
           <div className="inv-row__actions">

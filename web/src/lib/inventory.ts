@@ -14,6 +14,12 @@ export type Mark = {
   name: string;
   /** Подпись итога: «320 → 250 мл», «в Коробка 3», «списано 400 мл». */
   detail: string;
+  /** Групповое действие: id первого экземпляра группы (у отметок одной группы он общий). */
+  group?: number;
+  /** Движение, созданное отметкой (корректировка, списание): по нему работает «Отменить». */
+  mv?: number;
+  /** Куда переложен (для «moved»): отмена возвращает, только если экземпляр всё ещё там. */
+  to?: number;
 };
 
 export type CheckState = {
@@ -38,8 +44,19 @@ export function withMark(s: CheckState, unitId: number, m: Mark): CheckState {
 }
 
 export function withoutMark(s: CheckState, unitId: number): CheckState {
-  const marks = Object.fromEntries(Object.entries(s.marks).filter(([k]) => k !== String(unitId)));
+  return withoutMarks(s, [unitId]);
+}
+
+/** Ставит несколько отметок разом (групповое действие). */
+export function withMarks(s: CheckState, entries: readonly (readonly [number, Mark])[]): CheckState {
+  const marks = { ...s.marks };
+  for (const [id, m] of entries) marks[String(id)] = m;
   return { ...s, marks };
+}
+
+export function withoutMarks(s: CheckState, unitIds: readonly number[]): CheckState {
+  const drop = new Set(unitIds.map(String));
+  return { ...s, marks: Object.fromEntries(Object.entries(s.marks).filter(([k]) => !drop.has(k))) };
 }
 
 /**
@@ -126,6 +143,85 @@ export function mergeOrder(prev: readonly number[], current: readonly number[], 
   return [...kept, ...fresh, ...gone];
 }
 
+// ---------- Группы одинаковых запечатанных экземпляров ----------
+
+/** Поля экземпляра, нужные для группировки. */
+export type UnitLike = { id: number; status: string; initial_qty: number; remaining_qty: number; product: { id: number } };
+
+/** Строка экрана: один экземпляр или группа (pending — ещё не проверены, done — отмечены разом). */
+export type Row = { kind: 'unit'; id: number } | { kind: 'group'; key: string; ids: number[]; done: boolean };
+
+/** Ключ группы: позиция + размер упаковки + остаток; только запечатанные. Вскрытые — по одному. */
+export function groupKey(u: UnitLike): string | null {
+  return u.status === 'sealed' ? `${u.product.id}:${u.initial_qty}:${u.remaining_qty}` : null;
+}
+
+function push<K>(m: Map<K, number[]>, k: K, id: number): void {
+  const a = m.get(k);
+  if (a) a.push(id);
+  else m.set(k, [id]);
+}
+
+/**
+ * Строки экрана по порядку id. Непроверенные запечатанные одинаковые экземпляры (от двух)
+ * сливаются в группу на месте первого; отмеченные одним групповым действием (общий mark.group) —
+ * в группу-итог. Остальное — отдельные строки.
+ */
+export function buildRows(order: readonly number[], byId: ReadonlyMap<number, UnitLike>, marks: Readonly<Record<string, Mark>>): Row[] {
+  const pending = new Map<string, number[]>();
+  const done = new Map<number, number[]>();
+  for (const id of order) {
+    const m = marks[String(id)];
+    if (m) {
+      if (m.group !== undefined) push(done, m.group, id);
+      continue;
+    }
+    const u = byId.get(id);
+    const k = u ? groupKey(u) : null;
+    if (k) push(pending, k, id);
+  }
+  const rows: Row[] = [];
+  const seen = new Set<string>();
+  for (const id of order) {
+    const m = marks[String(id)];
+    const key = m ? (m.group !== undefined ? `d${m.group}` : null) : groupKeyOf(byId.get(id));
+    const ids = m ? (m.group !== undefined ? done.get(m.group) : undefined) : key ? pending.get(key.slice(1)) : undefined;
+    if (!key || !ids || ids.length < 2) {
+      rows.push({ kind: 'unit', id });
+    } else if (!seen.has(key)) {
+      seen.add(key);
+      rows.push({ kind: 'group', key, ids, done: m !== undefined });
+    }
+  }
+  return rows;
+}
+
+const groupKeyOf = (u: UnitLike | undefined): string | null => {
+  const k = u ? groupKey(u) : null;
+  return k ? `p${k}` : null;
+};
+
+/** Итог по отметкам группы одной строкой: «на месте 28 · не найдено 2». */
+export function groupSummary(marks: readonly Mark[]): string {
+  const n = (v: Verdict) => marks.filter((m) => m.verdict === v).length;
+  const parts: string[] = [];
+  if (n('ok') > 0) parts.push(`на месте ${n('ok')}`);
+  if (n('fixed') > 0) parts.push(`исправлено ${n('fixed')}`);
+  if (n('missing') > 0) parts.push(`не найдено ${n('missing')}`);
+  const moved = marks.filter((m) => m.verdict === 'moved');
+  if (moved.length > 0) {
+    const place = /«(.+)»/u.exec(moved[0]?.detail ?? '')?.[1];
+    parts.push(`${moved.length} ${place ? `в «${place}»` : 'в другом месте'}`);
+  }
+  return parts.join(' · ');
+}
+
+/** Главный исход группы для значка: не найдено > переложено > исправлено > на месте. */
+export function groupVerdict(marks: readonly Mark[]): Verdict {
+  for (const v of ['missing', 'moved', 'fixed'] as const) if (marks.some((m) => m.verdict === v)) return v;
+  return 'ok';
+}
+
 export type Summary = Record<Verdict, number> & { unchecked: number };
 
 /** Сводка завершения: сколько подтверждено, исправлено, не найдено, переложено и не проверено. */
@@ -166,10 +262,13 @@ export function serializeState(s: CheckState): string {
   return JSON.stringify(s);
 }
 
+const OPTIONAL_IDS = ['group', 'mv', 'to'] as const;
+
 function isMark(m: unknown): m is Mark {
   if (typeof m !== 'object' || m === null) return false;
   const r = m as Record<string, unknown>;
-  return (VERDICTS as readonly unknown[]).includes(r['verdict']) && typeof r['name'] === 'string' && typeof r['detail'] === 'string';
+  const optionalOk = OPTIONAL_IDS.every((k) => r[k] === undefined || (typeof r[k] === 'number' && Number.isInteger(r[k])));
+  return (VERDICTS as readonly unknown[]).includes(r['verdict']) && typeof r['name'] === 'string' && typeof r['detail'] === 'string' && optionalOk;
 }
 
 /** Разбирает сохранённое состояние; битое или от другого места — null. */
@@ -184,6 +283,7 @@ export function parseState(raw: string | null, locationId: number): CheckState |
     for (const [k, m] of Object.entries(marksRaw)) {
       if (!/^\d+$/u.test(k) || !isMark(m)) return null;
       marks[k] = { verdict: m.verdict, name: m.name, detail: m.detail };
+      for (const f of OPTIONAL_IDS) if (m[f] !== undefined) marks[k][f] = m[f];
     }
     return { v: 1, locationId, startedAt: o['startedAt'], marks };
   } catch {
@@ -191,12 +291,41 @@ export function parseState(raw: string | null, locationId: number): CheckState |
   }
 }
 
-/** Читает состояние из localStorage; недоступное хранилище — как «ничего нет». */
-export function loadState(userId: number, locationId: number): CheckState | null {
+/** Незавершённая проверка старше этого срока не предлагается и удаляется. */
+export const STATE_TTL_DAYS = 30;
+
+export function isExpired(startedAt: number, nowSeconds: number): boolean {
+  return nowSeconds - startedAt > STATE_TTL_DAYS * 86_400;
+}
+
+/** Читает состояние из localStorage; недоступное хранилище — как «ничего нет». Просроченное удаляет. */
+export function loadState(userId: number, locationId: number, nowSeconds: number = Math.floor(Date.now() / 1000)): CheckState | null {
   try {
-    return parseState(globalThis.localStorage.getItem(storageKey(userId, locationId)), locationId);
+    const key = storageKey(userId, locationId);
+    const s = parseState(globalThis.localStorage.getItem(key), locationId);
+    if (s && isExpired(s.startedAt, nowSeconds)) {
+      globalThis.localStorage.removeItem(key);
+      return null;
+    }
+    return s;
   } catch {
     return null;
+  }
+}
+
+/** Выход пользователя: удаляет все его незавершённые проверки на этом устройстве. */
+export function clearUserStates(userId: number): void {
+  try {
+    const prefix = `garage.inventory.${userId}.`;
+    const ls = globalThis.localStorage;
+    const found: string[] = [];
+    for (let i = 0; i < ls.length; i += 1) {
+      const k = ls.key(i);
+      if (k?.startsWith(prefix)) found.push(k);
+    }
+    for (const k of found) ls.removeItem(k);
+  } catch {
+    /* см. saveState */
   }
 }
 

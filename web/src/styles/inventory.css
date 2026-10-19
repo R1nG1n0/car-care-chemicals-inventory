@@ -15,7 +15,7 @@
 .inv-row--missing { --tone: var(--danger); }
 .inv-row__info { flex: 1 1 160px; min-width: 0; }
 .inv-row__info .g-row__title { overflow-wrap: anywhere; }
-.inv-row__actions { display: flex; gap: var(--sp-2); flex: none; margin-left: auto; }
+.inv-row__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--sp-2); flex: none; margin-left: auto; }
 
 /* Подсветка строки в момент отметки: слой за содержимым, гаснет */
 .inv-row::before {

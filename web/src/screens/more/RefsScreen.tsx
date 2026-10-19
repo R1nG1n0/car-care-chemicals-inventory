@@ -9,6 +9,7 @@ import { type CatColor, type Category, errorText, inventory, type Location } fro
 import { invalidateRefs, keys } from '../../app/queries';
 import { ShopSwatches } from '../../components/ShopSwatches';
 import { busyProps, HeadRow, Ico, LoadError, SkelList } from '../../components/ui';
+import { checkedLabel } from '../../lib/inventory';
 import { moveItem } from '../../lib/refsOrder';
 import { refNameError } from '../../lib/refsValidate';
 import { plural } from '../../lib/text';
@@ -18,7 +19,7 @@ import { catClass } from '../../components/refs';
 
 export type RefKind = 'places' | 'categories';
 
-type Item = { id: number; name: string; archived: boolean; count: number; color?: CatColor };
+type Item = { id: number; name: string; archived: boolean; count: number; color?: CatColor; checkedAt?: number | null };
 type Edit = { id: number | 'new'; name: string; color: CatColor };
 
 const TEXT = {
@@ -42,7 +43,11 @@ const TEXT = {
   },
 };
 
-const fromLocation = (l: Location): Item => ({ id: l.id, name: l.name, archived: l.archived, count: l.units_count });
+/** Подпись под названием: число экземпляров / позиций, у мест ещё и «проверено ДД.ММ» / «не проверялось». */
+const subText = (kind: RefKind, i: Item): string =>
+  kind === 'places' && i.checkedAt !== undefined ? `${TEXT[kind].count(i.count)} · ${checkedLabel(i.checkedAt)}` : TEXT[kind].count(i.count);
+
+const fromLocation = (l: Location): Item => ({ id: l.id, name: l.name, archived: l.archived, count: l.units_count, checkedAt: l.checked_at });
 const fromCategory = (c: Category): Item => ({ id: c.id, name: c.name, archived: c.archived, count: c.products_count, color: c.color });
 
 type RefApi = {
@@ -217,7 +222,7 @@ export function RefsScreen({ kind }: { kind: RefKind }) {
       {kind === 'categories' && <span className={`g-cat-sq ${catClass(i.color)}`} aria-hidden="true" />}
       <button type="button" className="g-row__main shop-rowbtn" onClick={() => startEdit(i)} aria-label={`Переименовать ${i.name}`}>
         <span className="g-row__title">{i.name}</span>
-        <span className="g-row__sub">{t.count(i.count)}</span>
+        <span className="g-row__sub">{subText(kind, i)}</span>
       </button>
     </>
   );
@@ -346,7 +351,7 @@ export function RefsScreen({ kind }: { kind: RefKind }) {
                   {kind === 'categories' && <span className={`g-cat-sq ${catClass(i.color)}`} aria-hidden="true" />}
                   <div className="g-row__main">
                     <div className="g-row__title">{i.name}</div>
-                    <div className="g-row__sub">{t.count(i.count)}</div>
+                    <div className="g-row__sub">{subText(kind, i)}</div>
                   </div>
                   <button
                     type="button"

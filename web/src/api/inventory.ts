@@ -184,6 +184,8 @@ export type ConsumptionReport = {
   by_product: ProductUse[];
   by_month: { month: string; cost: number; qty_ml: number; qty_pcs: number }[];
   writeoffs: { by_product: ProductUse[]; cost: number };
+  /** Корректировки остатка вниз (потери из инвентаризации): в расход не входят. */
+  corrections: { by_product: ProductUse[]; cost: number };
 };
 
 function qs(params: Record<string, string | number | boolean | undefined>): string {

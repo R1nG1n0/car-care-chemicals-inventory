@@ -1,8 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Location } from '../api';
 import {
+  buildRows,
   checkedLabel,
   clearState,
+  clearUserStates,
+  groupSummary,
+  groupVerdict,
+  isExpired,
+  withMarks,
+  withoutMarks,
+  type UnitLike,
   goneMarks,
   mergeOrder,
   isStale,
@@ -149,6 +157,8 @@ function fakeStorage(): Storage {
   };
 }
 
+const NOW = Math.floor(Date.now() / 1000);
+
 describe('localStorage', () => {
   const had = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   beforeEach(() => Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: fakeStorage() }));
@@ -158,7 +168,7 @@ describe('localStorage', () => {
   });
 
   it('сохраняет, читает и очищает; ключ зависит от пользователя', () => {
-    const s = withMark(newState(2, 1), 3, mark('ok'));
+    const s = withMark(newState(2, NOW), 3, mark('ok'));
     saveState(10, s);
     expect(globalThis.localStorage.getItem(storageKey(10, 2))).not.toBeNull();
     expect(loadState(10, 2)).toEqual(s);
@@ -167,8 +177,8 @@ describe('localStorage', () => {
     expect(loadState(10, 2)).toBeNull();
   });
   it('состояние без отметок удаляет ключ', () => {
-    saveState(1, withMark(newState(2, 1), 3, mark('ok')));
-    saveState(1, newState(2, 1));
+    saveState(1, withMark(newState(2, NOW), 3, mark('ok')));
+    saveState(1, newState(2, NOW));
     expect(loadState(1, 2)).toBeNull();
   });
   it('недоступное хранилище не роняет', () => {
@@ -179,7 +189,111 @@ describe('localStorage', () => {
       },
     });
     expect(loadState(1, 2)).toBeNull();
-    expect(() => saveState(1, withMark(newState(2, 1), 3, mark('ok')))).not.toThrow();
+    expect(() => saveState(1, withMark(newState(2, NOW), 3, mark('ok')))).not.toThrow();
     expect(() => clearState(1, 2)).not.toThrow();
+  });
+});
+
+describe('срок жизни и очистка', () => {
+  const had = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  beforeEach(() => Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: fakeStorage() }));
+  afterEach(() => {
+    if (had) Object.defineProperty(globalThis, 'localStorage', had);
+    else Reflect.deleteProperty(globalThis, 'localStorage');
+  });
+
+  it('проверка старше 30 дней не предлагается и удаляется', () => {
+    const now = 1_000 * 86_400;
+    saveState(1, withMark(newState(2, now - 31 * 86_400), 3, mark('ok')));
+    saveState(1, withMark(newState(5, now - 29 * 86_400), 3, mark('ok')));
+    expect(isExpired(now - 31 * 86_400, now)).toBe(true);
+    expect(loadState(1, 2, now)).toBeNull();
+    expect(globalThis.localStorage.getItem(storageKey(1, 2))).toBeNull();
+    expect(loadState(1, 5, now)).not.toBeNull();
+  });
+  it('выход удаляет только ключи этого пользователя', () => {
+    saveState(1, withMark(newState(2, NOW), 3, mark('ok')));
+    saveState(1, withMark(newState(3, NOW), 3, mark('ok')));
+    saveState(12, withMark(newState(2, NOW), 3, mark('ok')));
+    globalThis.localStorage.setItem('other', 'x');
+    clearUserStates(1);
+    expect(loadState(1, 2)).toBeNull();
+    expect(loadState(1, 3)).toBeNull();
+    expect(loadState(12, 2)).not.toBeNull();
+    expect(globalThis.localStorage.getItem('other')).toBe('x');
+  });
+  it('необязательные поля отметки (group, mv, to) переживают сохранение; мусор в них — отказ', () => {
+    const m: Mark = { verdict: 'moved', name: 'Воск', detail: 'в Полка', group: 7, mv: 11, to: 3 };
+    const s = withMark(newState(4, 1), 9, m);
+    expect(parseState(serializeState(s), 4)).toEqual(s);
+    const bad = JSON.stringify({ v: 1, locationId: 4, startedAt: 1, marks: { '1': { ...m, mv: 'x' } } });
+    expect(parseState(bad, 4)).toBeNull();
+  });
+});
+
+const un = (id: number, product = 1, status = 'sealed', initial = 1, remaining = initial): UnitLike => ({
+  id,
+  status,
+  initial_qty: initial,
+  remaining_qty: remaining,
+  product: { id: product },
+});
+const byIdOf = (list: UnitLike[]) => new Map(list.map((u) => [u.id, u]));
+
+describe('buildRows: группы одинаковых запечатанных', () => {
+  it('одинаковые запечатанные сливаются в одну строку на месте первого', () => {
+    const list = [un(1), un(2), un(3), un(4, 2, 'open', 500, 200), un(5, 2, 'sealed', 500)];
+    const rows = buildRows([1, 2, 3, 4, 5], byIdOf(list), {});
+    expect(rows).toEqual([
+      { kind: 'group', key: 'p1:1:1', ids: [1, 2, 3], done: false },
+      { kind: 'unit', id: 4 },
+      { kind: 'unit', id: 5 },
+    ]);
+  });
+  it('другой размер упаковки, остаток или позиция — другая группа; вскрытые никогда не группируются', () => {
+    const list = [un(1, 1, 'sealed', 500), un(2, 1, 'sealed', 250), un(3, 1, 'sealed', 500), un(4, 1, 'open', 500, 100), un(5, 1, 'open', 500, 100)];
+    const rows = buildRows([1, 2, 3, 4, 5], byIdOf(list), {});
+    expect(rows.map((r) => (r.kind === 'group' ? r.ids : r.id))).toEqual([[1, 3], 2, 4, 5]);
+  });
+  it('неадъяцентные в порядке экземпляры всё равно собираются; одиночный остаётся строкой', () => {
+    const list = [un(1), un(2, 2), un(3), un(4, 3)];
+    const rows = buildRows([1, 2, 3, 4], byIdOf(list), {});
+    expect(rows.map((r) => (r.kind === 'group' ? r.ids : r.id))).toEqual([[1, 3], 2, 4]);
+  });
+  it('отмеченные по одному не входят в группу непроверенных', () => {
+    const list = [un(1), un(2), un(3)];
+    const rows = buildRows([1, 2, 3], byIdOf(list), { '1': mark('ok') });
+    expect(rows).toEqual([{ kind: 'unit', id: 1 }, { kind: 'group', key: 'p1:1:1', ids: [2, 3], done: false }]);
+  });
+  it('отмеченные одним действием образуют группу-итог, в том числе ушедшие из места', () => {
+    const list = [un(1), un(2)];
+    const s = withMarks(newState(1, 1), [
+      [1, { verdict: 'ok', name: 'М', detail: '', group: 1 }],
+      [2, { verdict: 'missing', name: 'М', detail: '', group: 1, mv: 5 }],
+      [3, { verdict: 'missing', name: 'М', detail: '', group: 1, mv: 6 }],
+    ]);
+    const rows = buildRows([1, 2, 3], byIdOf(list.slice(0, 1)), s.marks);
+    expect(rows).toEqual([{ kind: 'group', key: 'd1', ids: [1, 2, 3], done: true }]);
+  });
+  it('снятие отметок возвращает группу непроверенных', () => {
+    const list = [un(1), un(2)];
+    const s = withMarks(newState(1, 1), [
+      [1, { verdict: 'ok', name: 'М', detail: '', group: 1 }],
+      [2, { verdict: 'ok', name: 'М', detail: '', group: 1 }],
+    ]);
+    expect(withoutMarks(s, [1, 2]).marks).toEqual({});
+    expect(buildRows([1, 2], byIdOf(list), withoutMarks(s, [1, 2]).marks)).toEqual([{ kind: 'group', key: 'p1:1:1', ids: [1, 2], done: false }]);
+  });
+  it('итог и главный исход группы', () => {
+    const ms: Mark[] = [
+      { verdict: 'ok', name: 'М', detail: '' },
+      { verdict: 'ok', name: 'М', detail: '' },
+      { verdict: 'moved', name: 'М', detail: 'Лежит в месте «Полка 2»' },
+      { verdict: 'missing', name: 'М', detail: '' },
+    ];
+    expect(groupSummary(ms)).toBe('на месте 2 · не найдено 1 · 1 в «Полка 2»');
+    expect(groupVerdict(ms)).toBe('missing');
+    expect(groupVerdict(ms.slice(0, 2))).toBe('ok');
+    expect(groupVerdict([ms[2] as Mark])).toBe('moved');
   });
 });
