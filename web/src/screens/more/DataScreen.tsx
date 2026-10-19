@@ -7,7 +7,8 @@ import { downloadHref, type DownloadKind } from '../../lib/transfer';
 import { DataImport } from './DataImport';
 
 const FILES: { kind: DownloadKind; title: string; sub: string; csv: boolean }[] = [
-  { kind: 'json', title: 'Скачать всё (JSON)', sub: 'Полная копия: для переноса и восстановления', csv: false },
+  { kind: 'json', title: 'Скачать всё с фото', sub: 'Полная копия для переноса и восстановления. С фото файл большой: до 0,5 МБ на позицию с фото', csv: false },
+  { kind: 'json-nophoto', title: 'Скачать без фото', sub: 'Та же копия, но маленькая: фото в неё не войдут', csv: false },
   { kind: 'products', title: 'Позиции с остатками (CSV)', sub: 'Для Excel', csv: true },
   { kind: 'purchases', title: 'Покупки (CSV)', sub: 'Строки покупок, для Excel', csv: true },
   { kind: 'movements', title: 'Движения (CSV)', sub: 'Журнал прихода и расхода, для Excel', csv: true },

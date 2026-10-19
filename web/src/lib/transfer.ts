@@ -3,7 +3,7 @@
 import { plural } from './text';
 
 /** Предел файла импорта, как на сервере (docs/API.md). */
-export const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
+export const MAX_IMPORT_BYTES = 100 * 1024 * 1024;
 
 export const EXPORT_FORMAT = 'garage-export';
 export const EXPORT_VERSION = 1;
@@ -31,7 +31,7 @@ export type ExportSummary = {
 
 export type ParseResult = { ok: true; summary: ExportSummary } | { ok: false; error: string };
 
-const NOT_EXPORT = 'Это не файл экспорта garage. Нужен файл, скачанный кнопкой «Скачать всё (JSON)».';
+const NOT_EXPORT = 'Это не файл экспорта garage. Нужен файл, скачанный кнопкой «Скачать всё с фото» или «Скачать без фото».';
 
 /** Списки файла, которые считаются. Отсутствующий список — пустой, не массив — ошибка. */
 const LISTS = ['categories', 'locations', 'stores', 'products', 'units', 'purchases', 'movements', 'recipes', 'shopping'] as const;
@@ -40,7 +40,7 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 
 /** Проверка размера до чтения файла; null — размер подходит. */
 export function fileSizeError(size: number): string | null {
-  if (size > MAX_IMPORT_BYTES) return 'Файл больше 25 МБ. Загрузить его нельзя.';
+  if (size > MAX_IMPORT_BYTES) return 'Файл больше 100 МБ. Загрузить его нельзя. Скачайте копию «без фото» или уменьшите число фото.';
   if (size === 0) return 'Файл пустой.';
   return null;
 }
@@ -125,12 +125,15 @@ export function exportedLabel(iso: string | null): string | null {
   return new Date(t).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-export type DownloadKind = 'json' | 'products' | 'purchases' | 'movements';
+/** json — полная копия с фото, json-nophoto — та же копия без фото (?photos=0). */
+export type DownloadKind = 'json' | 'json-nophoto' | 'products' | 'purchases' | 'movements';
 
 /** Адрес скачивания. tz — смещение часового пояса в минутах к востоку от UTC (МСК = 180). */
 export function downloadHref(kind: DownloadKind, tz = -new Date().getTimezoneOffset()): string {
-  const path = kind === 'json' ? '/api/export.json' : `/api/export/${kind}.csv`;
-  return tz === 0 ? path : `${path}?tz=${tz}`;
+  const json = kind === 'json' || kind === 'json-nophoto';
+  const path = json ? '/api/export.json' : `/api/export/${kind}.csv`;
+  const query = [kind === 'json-nophoto' ? 'photos=0' : '', tz === 0 ? '' : `tz=${tz}`].filter(Boolean).join('&');
+  return query ? `${path}?${query}` : path;
 }
 
 /**

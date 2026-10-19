@@ -336,13 +336,13 @@ func TestImportOptionalPhoto(t *testing.T) {
 func TestImportSizeLimitOnlyOnImport(t *testing.T) {
 	e := newEnv(t, false)
 	b := stkSignIn(e, "friend")
-	big := []byte(`{"format":"garage-export","version":1,"pad":"` + strings.Repeat("a", 26<<20) + `"}`)
+	big := []byte(`{"format":"garage-export","version":1,"pad":"` + strings.Repeat("a", 101<<20) + `"}`)
 	rec := trRaw(b, "/api/import", big)
-	expect(t, rec, http.StatusRequestEntityTooLarge, "файл больше 25 МБ")
-	if msg := decode[errBody](t, rec).Error; !strings.Contains(msg, "25 МБ") {
+	expect(t, rec, http.StatusRequestEntityTooLarge, "файл больше 100 МБ")
+	if msg := decode[errBody](t, rec).Error; !strings.Contains(msg, "100 МБ") {
 		t.Fatalf("текст: %q", msg)
 	}
-	// Файл крупнее обычного предела, но меньше 25 МБ, проходит чтение (отказ — по содержанию).
+	// Файл крупнее обычного предела, но меньше 100 МБ, проходит чтение (отказ — по содержанию).
 	mid := []byte(`{"format":"garage-export","version":1,"pad":"` + strings.Repeat("a", 5<<20) + `"}`)
 	if rec := trRaw(b, "/api/import", mid); rec.Code != http.StatusOK {
 		t.Fatalf("5 МБ: код %d, %s", rec.Code, rec.Body.String())

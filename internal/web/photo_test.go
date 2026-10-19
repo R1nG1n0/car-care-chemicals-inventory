@@ -109,7 +109,7 @@ func TestPhotoLifecycle(t *testing.T) {
 	rec := phSend(c, http.MethodPut, phPath(id), data, "text/plain")
 	expect(t, rec, http.StatusOK, "PUT jpeg")
 	put := decode[catalog.ProductSummary](t, rec)
-	if put.PhotoUpdatedAt == nil || *put.PhotoUpdatedAt != e.clock.Now().Unix() || put.ID != id {
+	if put.PhotoUpdatedAt == nil || *put.PhotoUpdatedAt != e.clock.Now().UnixMilli() || put.ID != id {
 		t.Fatalf("ответ PUT: %+v", put)
 	}
 	if p := catalogOne(t, c, id); p.PhotoUpdatedAt == nil {

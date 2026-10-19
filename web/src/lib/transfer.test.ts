@@ -111,12 +111,12 @@ describe('предпросмотр', () => {
 });
 
 describe('размер файла', () => {
-  it('до 25 МБ включительно проходит', () => {
+  it('до 100 МБ включительно проходит', () => {
     expect(fileSizeError(1)).toBeNull();
     expect(fileSizeError(MAX_IMPORT_BYTES)).toBeNull();
   });
   it('больше предела и пустой — отказ', () => {
-    expect(fileSizeError(MAX_IMPORT_BYTES + 1)).toContain('25 МБ');
+    expect(fileSizeError(MAX_IMPORT_BYTES + 1)).toContain('100 МБ');
     expect(fileSizeError(0)).toBe('Файл пустой.');
   });
 });
@@ -124,6 +124,8 @@ describe('размер файла', () => {
 describe('скачивание и пустой склад', () => {
   it('адреса с часовым поясом', () => {
     expect(downloadHref('json', 180)).toBe('/api/export.json?tz=180');
+    expect(downloadHref('json-nophoto', 180)).toBe('/api/export.json?photos=0&tz=180');
+    expect(downloadHref('json-nophoto', 0)).toBe('/api/export.json?photos=0');
     expect(downloadHref('products', 0)).toBe('/api/export/products.csv');
     expect(downloadHref('movements', -300)).toBe('/api/export/movements.csv?tz=-300');
     expect(downloadHref('purchases', 180)).toBe('/api/export/purchases.csv?tz=180');

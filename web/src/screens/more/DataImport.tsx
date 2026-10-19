@@ -62,7 +62,7 @@ export function DataImport() {
       <span className="g-label" id="data-up">
         Загрузить из файла
       </span>
-      <p className="g-muted">Перенос и восстановление: файл, скачанный кнопкой «Скачать всё (JSON)». Загрузить можно только в пустой склад.</p>
+      <p className="g-muted">Перенос и восстановление: файл, скачанный кнопкой «Скачать всё с фото» или «Скачать без фото». Файл — до 100 МБ; загрузить можно только в пустой склад.</p>
 
       {checked && !empty && (
         <p className="g-banner" id="data-busy">

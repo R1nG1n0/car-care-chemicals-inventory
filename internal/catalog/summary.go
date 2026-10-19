@@ -39,7 +39,7 @@ type ProductSummary struct {
 	LocationIDs []int64 `json:"location_ids"`
 	// LastConsumeQty — сколько списали последним ручным расходом; null — не списывали.
 	LastConsumeQty *int64 `json:"last_consume_qty"`
-	// PhotoUpdatedAt — метка фото (секунды Unix) для адреса ?v=; null — фото нет (ФТ-10.4).
+	// PhotoUpdatedAt — метка фото (миллисекунды Unix) для адреса ?v=; null — фото нет (ФТ-10.4).
 	PhotoUpdatedAt *int64 `json:"photo_updated_at"`
 }
 

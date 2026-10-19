@@ -129,6 +129,9 @@ func Validate(f *File) error {
 	if f.Version != FormatVersion {
 		return bad("version", fmt.Sprintf("Версия файла %d не поддерживается, нужна %d", f.Version, FormatVersion))
 	}
+	if err := checkLimits(f); err != nil {
+		return err
+	}
 	if f.Settings != nil {
 		err := auth.ValidateSettings(auth.Settings{StepSmall: int(f.Settings.StepSmall), StepLarge: int(f.Settings.StepLarge)})
 		if err != nil {
@@ -141,7 +144,7 @@ func Validate(f *File) error {
 	}
 	for _, step := range []func(*File, *sets) error{
 		validateRefs, validateProducts, validatePurchases, validateUnits, validateRecipes, validateMovements,
-		validateShopping,
+		validateBalances, validateShopping,
 	} {
 		if err := step(f, st); err != nil {
 			return err
@@ -180,6 +183,9 @@ func validateRefs(f *File, st *sets) error {
 		if err := catalog.ValidateColor(c.Color); err != nil {
 			return fromField(at("categories", i, ""), err)
 		}
+		if err := inRange(at("categories", i, "sort"), c.Sort, -maxSort, maxSort, "Порядок"); err != nil {
+			return err
+		}
 	}
 	names = uniqueNames{}
 	for i := range f.Locations {
@@ -196,6 +202,9 @@ func validateRefs(f *File, st *sets) error {
 			return err
 		}
 		if err := checkOptTime(at("locations", i, "checked_at"), l.CheckedAt); err != nil {
+			return err
+		}
+		if err := inRange(at("locations", i, "sort"), l.Sort, -maxSort, maxSort, "Порядок"); err != nil {
 			return err
 		}
 	}
@@ -345,6 +354,9 @@ func validateUnits(f *File, st *sets) error {
 		default:
 			return bad(p("status"), "Статус — sealed, open, finished или written_off")
 		}
+		if err := checkUnitState(p, u); err != nil {
+			return err
+		}
 		for field, v := range map[string]*int64{"opened_at": u.OpenedAt, "finished_at": u.FinishedAt} {
 			if err := checkOptTime(p(field), v); err != nil {
 				return err
@@ -356,6 +368,8 @@ func validateUnits(f *File, st *sets) error {
 	}
 	return nil
 }
+
+func validateBalances(f *File, _ *sets) error { return checkBalances(f) }
 
 func validateRecipes(f *File, st *sets) error {
 	names := uniqueNames{}

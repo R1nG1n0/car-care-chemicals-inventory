@@ -41,19 +41,43 @@ func Count(f *File) Counts {
 
 // importer ведёт карты «id в файле → id в базе» в одной транзакции.
 type importer struct {
-	ctx context.Context
-	tx  *sql.Tx
-	uid int64
-	now int64
+	ctx   context.Context
+	tx    *sql.Tx
+	uid   int64
+	now   int64
+	stmts []*sql.Stmt
 
 	categories, locations, stores, products, lines, units, runs, movements, recipes map[int64]int64
 }
 
+// BeginImport занимает единственное место для импорта: большой файл держит
+// память и единственное соединение с базой, поэтому на сервере идёт не больше
+// одного импорта. release отпускает место; ok == false — место занято.
+func (s *Service) BeginImport() (release func(), ok bool) {
+	if !s.importing.CompareAndSwap(false, true) {
+		return nil, false
+	}
+	return func() { s.importing.Store(false) }, true
+}
+
+// CheckEmpty — дешёвая проверка «склад пуст» без транзакции: чтобы отказать
+// до чтения и разбора большого файла. Решающая проверка — внутри Import.
+func (s *Service) CheckEmpty(ctx context.Context, userID int64) error {
+	return checkEmpty(ctx, s.db, userID)
+}
+
 // Import проверяет файл и переносит его в склад пользователя одной
-// транзакцией. Склад должен быть пустым: ни одной позиции, покупки или
-// движения. Категории, места и магазины с совпадающим именем (без учёта
-// регистра) сливаются: стандартные категории, созданные при регистрации,
-// не мешают. Ошибка — ничего не записано.
+// транзакцией. Склад должен быть пустым: ни одной позиции, покупки,
+// движения. Категории, места и магазины
+// с совпадающим именем (без учёта регистра) сливаются: стандартные категории,
+// созданные при регистрации, не мешают. Ошибка — ничего не записано.
+//
+// Два импорта в одного пользователя не создадут дубль только потому, что у
+// базы одно соединение (store.Open: MaxOpenConns(1)): вторая транзакция
+// начинается после завершения первой, и checkEmpty внутри неё уже видит
+// данные. Если число соединений когда-либо вырастет, нужна блокировка записи
+// (BEGIN IMMEDIATE), иначе эта гарантия пропадёт; тест
+// TestImportParallelOneWinner это проверяет.
 func (s *Service) Import(ctx context.Context, userID int64, f *File) (Counts, error) {
 	if err := Validate(f); err != nil {
 		return Counts{}, err
@@ -66,11 +90,12 @@ func (s *Service) Import(ctx context.Context, userID int64, f *File) (Counts, er
 	if err := checkEmpty(ctx, tx, userID); err != nil {
 		return Counts{}, err
 	}
-	im := &importer{ctx: ctx, tx: tx, uid: userID, now: s.now().Unix(),
+	im := &importer{ctx: ctx, tx: tx, uid: userID, now: s.now().UnixMilli(),
 		categories: map[int64]int64{}, locations: map[int64]int64{}, stores: map[int64]int64{},
 		products: map[int64]int64{}, lines: map[int64]int64{}, units: map[int64]int64{},
 		runs: map[int64]int64{}, movements: map[int64]int64{}, recipes: map[int64]int64{},
 	}
+	defer im.closeStmts()
 	for _, step := range []func(*File) error{
 		im.settings, im.refs, im.productsStep, im.purchases, im.unitsStep, im.recipesStep, im.movementsStep,
 		im.shopping,
@@ -85,7 +110,12 @@ func (s *Service) Import(ctx context.Context, userID int64, f *File) (Counts, er
 	return Count(f), nil
 }
 
-func checkEmpty(ctx context.Context, q *sql.Tx, uid int64) error {
+// checkEmpty: склад пуст, если у пользователя нет ни позиций (в том числе
+// архивных), ни покупок, ни движений. Справочники (категории, места, магазины)
+// не считаются: они сливаются по имени. Шаблоны расхода и пункты списка
+// покупок тоже не считаются: шаблон с совпадающим названием отклоняется
+// ошибкой 400 уже при записи (откат полный), остальное дописывается.
+func checkEmpty(ctx context.Context, q querier, uid int64) error {
 	var products, purchases, movements int
 	err := q.QueryRowContext(ctx, `SELECT
 		(SELECT COUNT(*) FROM products WHERE user_id = ?),
@@ -100,6 +130,32 @@ func checkEmpty(ctx context.Context, q *sql.Tx, uid int64) error {
 			products, purchases, movements)}
 	}
 	return nil
+}
+
+// prepare готовит запрос для цикла вставки; закрывается в конце импорта.
+func (im *importer) prepare(what, query string) (*sql.Stmt, error) {
+	st, err := im.tx.PrepareContext(im.ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("импорт, %s: %w", what, err)
+	}
+	im.stmts = append(im.stmts, st)
+	return st, nil
+}
+
+func (im *importer) closeStmts() {
+	for _, st := range im.stmts {
+		_ = st.Close()
+	}
+}
+
+// run выполняет подготовленный запрос и возвращает id вставленной строки.
+func (im *importer) run(st *sql.Stmt, what string, args ...any) (int64, error) {
+	res, err := st.ExecContext(im.ctx, args...)
+	if err != nil {
+		return 0, fmt.Errorf("импорт, %s: %w", what, err)
+	}
+	id, _ := res.LastInsertId()
+	return id, nil
 }
 
 func (im *importer) exec(what, query string, args ...any) (int64, error) {
@@ -204,20 +260,27 @@ func mapped(m map[int64]int64, id *int64) any {
 }
 
 func (im *importer) productsStep(f *File) error {
+	ins, err := im.prepare("позиция", `INSERT INTO products
+		(user_id, category_id, name, brand, unit, package_size, barcode, min_stock, note, archived, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	ph, err := im.prepare("фото позиции", `INSERT INTO product_photos
+		(user_id, product_id, mime, data, width, height, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
 	for _, p := range f.Products {
-		id, err := im.exec("позиция", `INSERT INTO products
-			(user_id, category_id, name, brand, unit, package_size, barcode, min_stock, note, archived, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			im.uid, im.categories[p.CategoryID], p.Name, p.Brand, p.Unit, p.PackageSize, p.Barcode, p.MinStock,
-			p.Note, p.Archived, p.CreatedAt)
+		id, err := im.run(ins, "позиция", im.uid, im.categories[p.CategoryID], p.Name, p.Brand, p.Unit, p.PackageSize,
+			p.Barcode, p.MinStock, p.Note, p.Archived, p.CreatedAt)
 		if err != nil {
 			return err
 		}
 		im.products[p.ID] = id
 		if p.Photo != nil {
-			if _, err := im.exec("фото позиции", `INSERT INTO product_photos
-				(user_id, product_id, mime, data, width, height, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-				im.uid, id, p.Photo.info.Mime, p.Photo.raw, p.Photo.info.Width, p.Photo.info.Height, im.now); err != nil {
+			if _, err := im.run(ph, "фото позиции", im.uid, id, p.Photo.info.Mime, p.Photo.raw,
+				p.Photo.info.Width, p.Photo.info.Height, im.now); err != nil {
 				return err
 			}
 		}
@@ -226,16 +289,24 @@ func (im *importer) productsStep(f *File) error {
 }
 
 func (im *importer) purchases(f *File) error {
+	insP, err := im.prepare("покупка", `INSERT INTO purchases (user_id, store_id, date, note, created_at)
+		VALUES (?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	insL, err := im.prepare("строка покупки", `INSERT INTO purchase_lines
+		(user_id, purchase_id, product_id, packages, price_per_package) VALUES (?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
 	for _, p := range f.Purchases {
-		id, err := im.exec("покупка", `INSERT INTO purchases (user_id, store_id, date, note, created_at)
-			VALUES (?, ?, ?, ?, ?)`, im.uid, mapped(im.stores, p.StoreID), p.Date, p.Note, p.CreatedAt)
+		id, err := im.run(insP, "покупка", im.uid, mapped(im.stores, p.StoreID), p.Date, p.Note, p.CreatedAt)
 		if err != nil {
 			return err
 		}
 		for _, l := range p.Lines {
-			im.lines[l.ID], err = im.exec("строка покупки", `INSERT INTO purchase_lines
-				(user_id, purchase_id, product_id, packages, price_per_package) VALUES (?, ?, ?, ?, ?)`,
-				im.uid, id, im.products[l.ProductID], l.Packages, l.PricePerPackage)
+			im.lines[l.ID], err = im.run(insL, "строка покупки", im.uid, id, im.products[l.ProductID], l.Packages,
+				l.PricePerPackage)
 			if err != nil {
 				return err
 			}
@@ -245,12 +316,16 @@ func (im *importer) purchases(f *File) error {
 }
 
 func (im *importer) unitsStep(f *File) error {
+	ins, err := im.prepare("экземпляр", `INSERT INTO units
+		(user_id, product_id, purchase_line_id, location_id, initial_qty, remaining_qty, status,
+		 opened_at, finished_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
 	for _, u := range f.Units {
-		id, err := im.exec("экземпляр", `INSERT INTO units
-			(user_id, product_id, purchase_line_id, location_id, initial_qty, remaining_qty, status,
-			 opened_at, finished_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			im.uid, im.products[u.ProductID], mapped(im.lines, u.PurchaseLineID), mapped(im.locations, u.LocationID),
-			u.InitialQty, u.RemainingQty, u.Status, u.OpenedAt, u.FinishedAt, u.CreatedAt)
+		id, err := im.run(ins, "экземпляр", im.uid, im.products[u.ProductID], mapped(im.lines, u.PurchaseLineID),
+			mapped(im.locations, u.LocationID), u.InitialQty, u.RemainingQty, u.Status, u.OpenedAt, u.FinishedAt,
+			u.CreatedAt)
 		if err != nil {
 			return err
 		}
@@ -261,6 +336,11 @@ func (im *importer) unitsStep(f *File) error {
 
 func (im *importer) recipesStep(f *File) error {
 	names, err := im.existing("recipes")
+	if err != nil {
+		return err
+	}
+	insItem, err := im.prepare("строка шаблона", `INSERT INTO recipe_items (user_id, recipe_id, product_id, qty, sort)
+		VALUES (?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -275,8 +355,7 @@ func (im *importer) recipesStep(f *File) error {
 		}
 		im.recipes[r.ID] = id
 		for _, it := range r.Items {
-			if _, err := im.exec("строка шаблона", `INSERT INTO recipe_items (user_id, recipe_id, product_id, qty, sort)
-				VALUES (?, ?, ?, ?, ?)`, im.uid, id, im.products[it.ProductID], it.Qty, it.Sort); err != nil {
+			if _, err := im.run(insItem, "строка шаблона", im.uid, id, im.products[it.ProductID], it.Qty, it.Sort); err != nil {
 				return err
 			}
 		}
@@ -300,25 +379,32 @@ func (im *importer) recipesStep(f *File) error {
 }
 
 func (im *importer) movementsStep(f *File) error {
+	ins, err := im.prepare("движение", `INSERT INTO movements
+		(user_id, unit_id, type, qty_delta, from_location_id, to_location_id, reason, recipe_run_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
 	for _, m := range f.Movements {
-		id, err := im.exec("движение", `INSERT INTO movements
-			(user_id, unit_id, type, qty_delta, from_location_id, to_location_id, reason, recipe_run_id, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			im.uid, im.units[m.UnitID], m.Type, m.QtyDelta, mapped(im.locations, m.FromLocationID),
-			mapped(im.locations, m.ToLocationID), m.Reason, mapped(im.runs, m.RecipeRunID), m.CreatedAt)
+		id, err := im.run(ins, "движение", im.uid, im.units[m.UnitID], m.Type, m.QtyDelta,
+			mapped(im.locations, m.FromLocationID), mapped(im.locations, m.ToLocationID), m.Reason,
+			mapped(im.runs, m.RecipeRunID), m.CreatedAt)
 		if err != nil {
 			return err
 		}
 		im.movements[m.ID] = id
 	}
 	// Группа движений запроса — id первого движения: переносим через карту.
+	upd, err := im.prepare("группа движений", `UPDATE movements SET batch_id = ? WHERE user_id = ? AND id = ?`)
+	if err != nil {
+		return err
+	}
 	for _, m := range f.Movements {
 		batch := im.movements[m.ID]
 		if m.BatchID != nil {
 			batch = im.movements[*m.BatchID]
 		}
-		if _, err := im.exec("группа движений", `UPDATE movements SET batch_id = ? WHERE user_id = ? AND id = ?`,
-			batch, im.uid, im.movements[m.ID]); err != nil {
+		if _, err := im.run(upd, "группа движений", batch, im.uid, im.movements[m.ID]); err != nil {
 			return err
 		}
 	}
@@ -326,9 +412,14 @@ func (im *importer) movementsStep(f *File) error {
 }
 
 func (im *importer) shopping(f *File) error {
+	ins, err := im.prepare("список покупок", `INSERT INTO shopping_items (user_id, product_id, title, done_at, created_at)
+		VALUES (?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
 	for _, it := range f.Shopping {
-		if _, err := im.exec("список покупок", `INSERT INTO shopping_items (user_id, product_id, title, done_at, created_at)
-			VALUES (?, ?, ?, ?, ?)`, im.uid, mapped(im.products, it.ProductID), it.Title, it.DoneAt, it.CreatedAt); err != nil {
+		if _, err := im.run(ins, "список покупок", im.uid, mapped(im.products, it.ProductID), it.Title, it.DoneAt,
+			it.CreatedAt); err != nil {
 			return err
 		}
 	}

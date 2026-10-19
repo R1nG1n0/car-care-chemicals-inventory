@@ -2,8 +2,8 @@
 import { request } from './client';
 import type { TransferCounts } from '../lib/transfer';
 
-/** Большой файл по мобильной сети грузится дольше обычного запроса. */
-const IMPORT_TIMEOUT_MS = 3 * 60_000;
+/** Файл до 100 МБ по мобильной сети грузится долго; чуть дольше срока сервера (internal/web/handlers_transfer.go). */
+const IMPORT_TIMEOUT_MS = 12 * 60_000;
 
 export const transfer = {
   /** text — содержимое файла как есть. */

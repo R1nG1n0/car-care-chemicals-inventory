@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"sync/atomic"
 
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
@@ -78,11 +79,15 @@ type querier interface {
 type Service struct {
 	db *sql.DB
 	q  querier
+	// photoFloor — наибольшая выданная метка фото: следующая всегда больше,
+	// даже если DELETE и новый PUT пришли в ту же миллисекунду. Общий для
+	// всех копий сервиса (WithTx).
+	photoFloor *atomic.Int64
 }
 
 // New создаёт сервис над базой.
 func New(db *sql.DB) *Service {
-	return &Service{db: db, q: db}
+	return &Service{db: db, q: db, photoFloor: new(atomic.Int64)}
 }
 
 // WithTx возвращает сервис, чьи чтения идут внутри транзакции tx.
@@ -90,7 +95,7 @@ func New(db *sql.DB) *Service {
 // (store.Open), и запрос мимо открытой транзакции ждал бы её вечно.
 // Изменяющие методы такого сервиса тоже работают в tx.
 func (s *Service) WithTx(tx *sql.Tx) *Service {
-	return &Service{db: s.db, q: tx}
+	return &Service{db: s.db, q: tx, photoFloor: s.photoFloor}
 }
 
 // inTx выполняет fn в транзакции. Если сервис уже привязан к транзакции
@@ -113,7 +118,7 @@ func (s *Service) inTx(ctx context.Context, fn func(q querier) error) error {
 // inTxSvc — inTx, где fn получает сервис над той же транзакцией: его
 // чтения (сводки, записи справочников) видят то же, что и запись.
 func (s *Service) inTxSvc(ctx context.Context, fn func(t *Service) error) error {
-	return s.inTx(ctx, func(q querier) error { return fn(&Service{db: s.db, q: q}) })
+	return s.inTx(ctx, func(q querier) error { return fn(&Service{db: s.db, q: q, photoFloor: s.photoFloor}) })
 }
 
 func isUniqueViolation(err error) bool {

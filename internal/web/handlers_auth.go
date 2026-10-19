@@ -119,6 +119,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.clearSessionCookie(w)
+	clearBrowserCache(w)
 	writeNoContent(w)
 }
 
@@ -130,6 +131,7 @@ func (s *Server) handleLogoutAll(w http.ResponseWriter, r *http.Request) {
 	}
 	s.log.Info("выход со всех устройств", "login", c.user.Login)
 	s.clearSessionCookie(w)
+	clearBrowserCache(w)
 	writeNoContent(w)
 }
 
@@ -193,4 +195,10 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, st)
+}
+
+// clearBrowserCache просит браузер забыть кэш этого сайта при выходе: фото
+// позиций лежат в нём по году и на общем устройстве остались бы видны.
+func clearBrowserCache(w http.ResponseWriter) {
+	w.Header().Set("Clear-Site-Data", `"cache"`)
 }

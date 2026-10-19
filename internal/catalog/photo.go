@@ -33,10 +33,25 @@ func PhotoError(err error) error {
 	return invalid("photo", "Нужно фото JPEG, PNG или WebP")
 }
 
+// nextPhotoVersion — метка фото: миллисекунды Unix, но строго больше любой
+// выданной раньше этим сервером. Строки, записанные до перехода на
+// миллисекунды (секунды), заведомо меньше.
+func (s *Service) nextPhotoVersion(nowMilli int64) int64 {
+	for {
+		last := s.photoFloor.Load()
+		v := max(nowMilli, last+1)
+		if s.photoFloor.CompareAndSwap(last, v) {
+			return v
+		}
+	}
+}
+
 // SetPhoto сохраняет или заменяет фото своей позиции. Чужая и несуществующая
-// позиция — ErrNotFound. Метка времени растёт при каждой замене, даже в ту
-// же секунду: по ней клиент сбрасывает кэш картинки.
+// позиция — ErrNotFound. at — текущее время в миллисекундах Unix. Метка растёт
+// при каждой замене, даже после DELETE в ту же миллисекунду: по ней клиент
+// сбрасывает кэш картинки.
 func (s *Service) SetPhoto(ctx context.Context, userID, productID int64, data []byte, at int64) (ProductSummary, error) {
+	at = s.nextPhotoVersion(at)
 	info, err := photo.Inspect(data)
 	if err != nil {
 		return ProductSummary{}, PhotoError(err)

@@ -139,12 +139,6 @@ func TestAccIsolationAllStage2(t *testing.T) {
 		{"порядок: чужой шаблон", http.MethodPost, "/api/recipes/reorder", map[string]any{"ids": []int64{recipeA}}, 400},
 		{"порядок: свой и чужой шаблон", http.MethodPost, "/api/recipes/reorder", map[string]any{"ids": []int64{recipeB, recipeA}}, 400},
 		// Импорт: ссылки в файле только на id внутри файла, чужие id из базы не годятся.
-		{"импорт со ссылкой на чужую категорию", http.MethodPost, "/api/import", map[string]any{
-			"format": "garage-export", "version": 1,
-			"products": []any{map[string]any{"id": 1, "category_id": catA, "name": "X", "unit": "ml", "package_size": 1}}}, 400},
-		{"импорт: покупка в чужой магазин", http.MethodPost, "/api/import", map[string]any{
-			"format": "garage-export", "version": 1, "purchases": []any{map[string]any{"id": 1, "store_id": storeA,
-				"date": "2026-10-04", "lines": []any{map[string]any{"id": 1, "product_id": prodA, "packages": 1}}}}}, 400},
 		{"импорт в непустой склад", http.MethodPost, "/api/import", map[string]any{"format": "garage-export", "version": 1}, 409},
 	}
 	for _, tc := range cases {
@@ -155,6 +149,17 @@ func TestAccIsolationAllStage2(t *testing.T) {
 				t.Fatalf("текст ошибки %q, ожидалось «… не найдено»", msg)
 			}
 		})
+	}
+	// Импорт проверяет файл раньше, чем содержимое склада, но непустой склад отказывает
+	// ещё раньше (409): ссылки на чужие id проверяем от имени пользователя с пустым складом.
+	fresh := stkSignIn(e, "newbie")
+	for _, body := range []map[string]any{
+		{"format": "garage-export", "version": 1,
+			"products": []any{map[string]any{"id": 1, "category_id": catA, "name": "X", "unit": "ml", "package_size": 1}}},
+		{"format": "garage-export", "version": 1, "purchases": []any{map[string]any{"id": 1, "store_id": storeA,
+			"date": "2026-10-04", "lines": []any{map[string]any{"id": 1, "product_id": prodA, "packages": 1}}}}},
+	} {
+		expect(t, fresh.do(http.MethodPost, "/api/import", body), http.StatusBadRequest, "импорт со ссылкой на чужие id")
 	}
 	// Фото: байты настоящие, поэтому отказ именно по владельцу (404), а не по содержимому (400).
 	b64Photo := transferB64(photoA)

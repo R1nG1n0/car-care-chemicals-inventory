@@ -39,7 +39,7 @@ func (h *catalogHandlers) putPhoto(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Не удалось прочитать фото")
 		return
 	}
-	p, err := h.cat.SetPhoto(r.Context(), h.uid(r), id, data, h.s.now().Unix())
+	p, err := h.cat.SetPhoto(r.Context(), h.uid(r), id, data, h.s.now().UnixMilli())
 	h.respond(w, r, http.StatusOK, p, err)
 }
 
