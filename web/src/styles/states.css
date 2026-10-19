@@ -151,6 +151,19 @@
   font-weight: var(--fw-bold); cursor: pointer;
 }
 .g-suggest__opt[aria-selected="true"] { background: var(--surface-raised); }
+/* Поле бренда с кнопкой «все бренды» справа */
+.g-brand { position: relative; }
+.g-brand .g-input { padding-right: calc(var(--tap) + var(--sp-1)); }
+.g-brand__toggle {
+  position: absolute; top: 0; right: 0; display: grid; place-items: center;
+  width: var(--tap); height: 100%; min-height: var(--tap);
+  border: 0; background: none; color: var(--text-muted); cursor: pointer;
+}
+.g-brand__toggle[aria-expanded="true"] { color: var(--text); }
+/* Полный список прокручивается внутри, страница при этом не уезжает */
+.g-suggest--all { max-height: calc(var(--tap) * 5.5 + var(--sp-2)); overflow-y: auto; overscroll-behavior: contain; }
+.g-suggest__opt .ti { flex: none; color: var(--accent); }
+.g-suggest__empty { padding: var(--sp-2); color: var(--text-muted); font-size: var(--fs-13); font-weight: var(--fw-semibold); }
 .g-suggest__opt small { font-size: var(--fs-12); color: var(--text-muted); font-weight: var(--fw-semibold); }
 
 /* Кнопка без рамки с текстом цвета ошибки: «Выйти на всех устройствах», «Отозвать» */

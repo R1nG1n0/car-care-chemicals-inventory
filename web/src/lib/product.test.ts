@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { unitPriceText } from './money';
 import { canRevert, movementTitle } from './movements';
-import { suggestBrands, validateProduct, type ProductFields } from './product';
+import { allBrands, suggestBrands, validateProduct, type ProductFields } from './product';
 import { purchaseDay } from './text';
 
 const norm = (s: string | null) => (s ?? '').replace(/\s/gu, ' ');
@@ -72,5 +72,14 @@ describe('подсказка бренда', () => {
     expect(suggestBrands(all, 'чис')).toEqual(['Чистый Кот']);
     expect(suggestBrands(all, '')).toEqual([]);
     expect(suggestBrands(all, 'sonax')).toEqual([]);
+  });
+});
+
+describe('выпадающий список брендов', () => {
+  it('все бренды по алфавиту без учёта регистра (русская сортировка: кириллица раньше), исходный массив не меняется', () => {
+    const all = ['sonax', 'Gyeon', 'Чистый Кот', 'Koch Chemie', 'grass'];
+    expect(allBrands(all)).toEqual(['Чистый Кот', 'grass', 'Gyeon', 'Koch Chemie', 'sonax']);
+    expect(all[0]).toBe('sonax');
+    expect(allBrands([])).toEqual([]);
   });
 });

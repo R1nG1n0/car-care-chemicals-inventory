@@ -49,6 +49,11 @@ export function validateProduct(f: ProductFields): Result {
 }
 
 /** Подсказка бренда: введённые ранее, начинаются с набранного (или содержат), до 5. */
+/** Все бренды для выпадающего списка — по алфавиту, без учёта регистра. */
+export function allBrands(all: readonly string[]): string[] {
+  return [...all].sort((a, b) => a.localeCompare(b, 'ru-RU', { sensitivity: 'base' }));
+}
+
 export function suggestBrands(all: readonly string[], typed: string): string[] {
   const q = typed.trim().toLocaleLowerCase('ru-RU');
   if (q === '') return [];

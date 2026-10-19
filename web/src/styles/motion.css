@@ -36,6 +36,14 @@
 /* Появление блока при смене состояния (раздел Telegram в профиле) */
 .g-enter { animation: g-rise var(--dur-enter) var(--ease-out) backwards; }
 
+/* Выпадающий список бренда: раскрывается от поля, короче появления карточек */
+.g-suggest { animation: g-drop 180ms var(--ease-out); transform-origin: top center; }
+.g-brand__toggle .ti { transition: transform var(--dur-fast) var(--ease-out); }
+.g-brand__toggle[aria-expanded="true"] .ti { transform: rotate(180deg); }
+
+@keyframes g-drop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+}
 @keyframes g-rise {
   from { opacity: 0; transform: translateY(8px); }
 }
@@ -214,6 +222,8 @@
   .g-meter__fill { transition: background-color var(--dur-fast) ease; }
   .g-stagger > * { animation-name: g-fade; }
   .g-enter { animation-name: g-fade; }
+  .g-suggest { animation-name: g-fade; }
+  .g-brand__toggle .ti { transition: none; }
 
   .g-view { transition: opacity var(--dur-route) var(--ease-out); }
   .g-view.is-leaving { filter: none; transition: opacity var(--dur-fast) var(--ease-out); }
