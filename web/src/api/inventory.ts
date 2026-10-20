@@ -266,7 +266,8 @@ export const inventory = {
     send<UnitChange>('POST', `/api/units/${id}/writeoff`, { qty, reason }),
 
   // Расход и журнал
-  consume: (b: { product_id: number; qty: number; unit_id?: number }) => send<ConsumeResult>('POST', '/api/consume', b),
+  consume: (b: { product_id: number; qty: number; unit_id?: number; client_op_id?: string; occurred_at?: number }) =>
+    request<ConsumeResult>('/api/consume', { method: 'POST', body: b, offlineOk: true }),
   revert: async (ids: number[]) => (await send<{ products: ProductSummary[] }>('POST', '/api/movements/revert', { ids })).products,
   movements: async (q: { product_id?: number; before?: number } = {}, signal?: AbortSignal) =>
     (await get<{ movements: Movement[] }>(`/api/movements${qs(q)}`, signal)).movements,
@@ -284,6 +285,7 @@ export const inventory = {
   updateRecipe: (id: number, b: RecipeInput) => send<Recipe>('PUT', `/api/recipes/${id}`, b),
   deleteRecipe: (id: number) => send<undefined>('DELETE', `/api/recipes/${id}`),
   reorderRecipes: (ids: number[]) => send<undefined>('POST', '/api/recipes/reorder', { ids }),
-  applyRecipe: (id: number, items: { product_id: number; qty: number }[]) =>
-    send<ApplyResult>('POST', `/api/recipes/${id}/apply`, { items }),
+  /** client_op_id и occurred_at — очередь без связи (ФТ-12.4.1): повтор с тем же номером не списывает второй раз. */
+  applyRecipe: (id: number, items: { product_id: number; qty: number }[], op?: { client_op_id: string; occurred_at: number }) =>
+    request<ApplyResult>(`/api/recipes/${id}/apply`, { method: 'POST', body: { items, ...op }, offlineOk: true }),
 };

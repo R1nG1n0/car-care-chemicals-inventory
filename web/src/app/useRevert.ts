@@ -5,11 +5,13 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { errorText, inventory, isNetworkError, type ProductDetail, type ProductSummary } from '../api';
 import { replaceProducts } from '../lib/stock';
+import { applyFreshWithQueue } from './offline';
 import { invalidateStock, keys } from './queries';
 import { useToast } from './toast';
 
 /** Свежие сводки позиций — сразу в список и в карточки. */
 export function applyProducts(qc: QueryClient, fresh: readonly ProductSummary[]): void {
+  if (applyFreshWithQueue(qc, fresh)) return;
   qc.setQueryData<ProductSummary[]>(keys.products(), (old) => (old ? replaceProducts(old, fresh) : old));
   for (const p of fresh) {
     qc.setQueryData<ProductDetail>(keys.product(p.id), (old) => (old ? { ...old, product: p } : old));

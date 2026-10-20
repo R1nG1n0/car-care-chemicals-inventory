@@ -164,24 +164,31 @@ type ConsumeInput struct {
 	ProductID int64  `json:"product_id"`
 	Qty       int64  `json:"qty"`
 	UnitID    *int64 `json:"unit_id"`
+	Op
 }
 
 // Consume списывает qty позиции одной транзакцией (ФТ-5.1, ФТ-5.2). Всего
 // меньше qty — ShortageError, ничего не меняется.
 func (s *Service) Consume(ctx context.Context, userID int64, in ConsumeInput) (ConsumeResult, error) {
-	var res ConsumeResult
+	res, _, _, err := s.ConsumeOp(ctx, userID, in, nil)
+	return res, err
+}
+
+// ConsumeOp — Consume с номером операции и временем с телефона (ФТ-12.4).
+// При in.ClientOpID render собирает ответ в той же транзакции, он
+// сохраняется; повтор с тем же номером ничего не списывает и возвращает
+// сохранённый body (replay = true, res пуст).
+func (s *Service) ConsumeOp(ctx context.Context, userID int64, in ConsumeInput,
+	render Render[ConsumeResult]) (res ConsumeResult, body []byte, replay bool, err error) {
 	if in.Qty < 1 || in.Qty > maxQty {
-		return res, &ValidationError{Field: "qty", Message: "Количество — от 1 до 100 000"}
+		return res, nil, false, &ValidationError{Field: "qty", Message: "Количество — от 1 до 100 000"}
 	}
-	now := s.now().Unix()
-	err := s.inTx(ctx, func(tx *sql.Tx) error {
+	return runOp(ctx, s, userID, in.Op, opKindConsume, func(tx *sql.Tx, at int64) (ConsumeResult, error) {
 		p, err := product(ctx, tx, userID, in.ProductID)
 		if err != nil {
-			return err
+			return ConsumeResult{}, err
 		}
 		var batch int64
-		res, err = consumeTx(ctx, tx, userID, p, in.Qty, in.UnitID, sql.NullInt64{}, &batch, now, false)
-		return err
-	})
-	return res, err
+		return consumeTx(ctx, tx, userID, p, in.Qty, in.UnitID, sql.NullInt64{}, &batch, at, false)
+	}, render)
 }

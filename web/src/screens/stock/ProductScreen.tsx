@@ -8,6 +8,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { errorText, inventory, isApiError, type ProductDetail, type ProductSummary, type StockUnit } from '../../api';
 import { invalidateRefs, invalidateStock, keys } from '../../app/queries';
 import { useToast } from '../../app/toast';
+import { useNeedsOnline, usePendingProductIds } from '../../app/useOffline';
 import { Sheet } from '../../components/Sheet';
 import { BackLink } from '../../components/BackLink';
 import { catClassOf, useStockRefs } from '../../components/refs';
@@ -73,6 +74,8 @@ function ProductView({ detail, back }: { detail: ProductDetail; back: ReactNode 
   const cat = refs.categories.get(p.category_id);
   const cc = catClassOf(refs.categories, p);
   const head = [cat?.name, p.brand].filter(Boolean).join(' · ');
+  const unsent = usePendingProductIds().has(p.id);
+  const online = useNeedsOnline();
   const lastPlace = units.find((u) => u.location_id !== null)?.location_id ?? null;
 
   return (
@@ -99,6 +102,7 @@ function ProductView({ detail, back }: { detail: ProductDetail; back: ReactNode 
           </div>
           <div className="stock-meta">{productMeta(p)}</div>
           {stickerText(p) && <span className="g-sticker">{stickerText(p)}</span>}
+          {unsent && <span className="g-badge">не отправлено</span>}
         </div>
       </div>
 
@@ -112,7 +116,7 @@ function ProductView({ detail, back }: { detail: ProductDetail; back: ReactNode 
         >
           Расход
         </button>
-        <Link className="g-btn g-press" to={`/purchases/new?product=${p.id}`}>
+        <Link className="g-btn g-press" to={`/purchases/new?product=${p.id}`} {...online.props} onClick={(e) => online.offline && e.preventDefault()}>
           Покупка
         </Link>
       </div>
@@ -131,9 +135,10 @@ function ProductView({ detail, back }: { detail: ProductDetail; back: ReactNode 
       ) : (
         <p className="g-muted">Экземпляров нет.</p>
       )}
-      <button type="button" className="g-btn g-btn--block g-press" onClick={() => setAdding(true)}>
+      <button type="button" className="g-btn g-btn--block g-press" {...online.props} onClick={online.guard(() => setAdding(true))}>
         <Ico icon={IconPlus} /> Ввести имеющийся остаток
       </button>
+      {online.hint && <p className="g-field__hint">{online.hint}: покупки и правки доступны только онлайн.</p>}
 
       <ProductHistory detail={detail} />
 
@@ -150,6 +155,7 @@ function ProductMenu({ open, product: p, onClose }: { open: boolean; product: Pr
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
+  const online = useNeedsOnline();
   const archive = useMutation({
     mutationFn: (archived: boolean) => inventory.updateProduct(p.id, { archived }),
     onSuccess: async (r) => {
@@ -171,11 +177,11 @@ function ProductMenu({ open, product: p, onClose }: { open: boolean; product: Pr
             <div className="g-row__title">{p.barcode || 'не указан'}</div>
           </div>
         </div>
-        <button type="button" className="g-row g-row--link app-row-btn" onClick={() => (onClose(), navigate(`/items/${p.id}/edit`))}>
+        <button type="button" className="g-row g-row--link app-row-btn" {...online.props} onClick={online.guard(() => (onClose(), navigate(`/items/${p.id}/edit`)))}>
           <Ico icon={IconPencil} />
           <span className="g-row__main g-row__title">Изменить</span>
         </button>
-        <button type="button" className="g-row g-row--link app-row-btn" onClick={() => archive.mutate(!p.archived)} aria-busy={archive.isPending || undefined}>
+        <button type="button" className="g-row g-row--link app-row-btn" {...online.props} onClick={online.guard(() => archive.mutate(!p.archived))} aria-busy={archive.isPending || undefined}>
           <Ico icon={p.archived ? IconArchiveOff : IconArchive} />
           <span className="g-row__main g-row__title">{p.archived ? 'Вернуть из архива' : 'В архив — больше не покупаю'}</span>
         </button>

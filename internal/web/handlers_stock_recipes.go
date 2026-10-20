@@ -1,6 +1,7 @@
 package web
 
 import (
+	"database/sql"
 	"net/http"
 
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/catalog"
@@ -162,32 +163,35 @@ func (s *Server) handleApplyRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 	var in struct {
 		Items []stock.ItemInput `json:"items"`
+		stock.Op
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
 	uid := currentFrom(r).user.ID
-	res, err := s.stockSvc().ApplyRecipe(r.Context(), uid, id, in.Items)
+	// Ответ собирается внутри транзакции применения, см. handleConsume.
+	render := func(tx *sql.Tx, res stock.ApplyResult) ([]byte, error) {
+		cat := s.stockCatalog().WithTx(tx)
+		ms, err := cat.MovementsByIDs(r.Context(), uid, res.MovementIDs)
+		if err != nil {
+			return nil, err
+		}
+		products, err := cat.Summaries(r.Context(), uid, res.ProductIDs)
+		if err != nil {
+			return nil, err
+		}
+		return stkEncode(struct {
+			RunID     int64                    `json:"run_id"`
+			Movements []catalog.Movement       `json:"movements"`
+			Products  []catalog.ProductSummary `json:"products"`
+			Shortages []stock.Shortage         `json:"shortages"`
+			Cost      *int64                   `json:"cost"`
+		}{res.RunID, ms, products, res.Shortages, stkSumCost(ms)})
+	}
+	_, body, replay, err := s.stockSvc().ApplyRecipeOp(r.Context(), uid, id, in.Items, in.Op, render)
 	if err != nil {
 		s.writeStockError(w, r, err)
 		return
 	}
-	cat := s.stockCatalog()
-	ms, err := cat.MovementsByIDs(r.Context(), uid, res.MovementIDs)
-	if err != nil {
-		s.internalError(w, r, err)
-		return
-	}
-	products, err := cat.Summaries(r.Context(), uid, res.ProductIDs)
-	if err != nil {
-		s.internalError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, struct {
-		RunID     int64                    `json:"run_id"`
-		Movements []catalog.Movement       `json:"movements"`
-		Products  []catalog.ProductSummary `json:"products"`
-		Shortages []stock.Shortage         `json:"shortages"`
-		Cost      *int64                   `json:"cost"`
-	}{res.RunID, ms, products, res.Shortages, stkSumCost(ms)})
+	writeOp(w, body, replay)
 }

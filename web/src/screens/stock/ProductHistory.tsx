@@ -10,12 +10,14 @@ import { formatMoney } from '../../lib/format';
 import { unitPriceText } from '../../lib/money';
 import { canRevert, movementTitle, revertQuestion } from '../../lib/movements';
 import { formatDay, formatTime, purchaseDay } from '../../lib/text';
+import { useNeedsOnline } from '../../app/useOffline';
 import { useRevert } from '../../app/useRevert';
 
 export function ProductHistory({ detail }: { detail: ProductDetail }) {
   const { product: p, purchases, movements } = detail;
   const refs = useStockRefs();
   const revert = useRevert();
+  const online = useNeedsOnline();
   const [ask, setAsk] = useState<Movement | null>(null);
   const [last, setLast] = useState<Movement | null>(null);
   const [busy, setBusy] = useState(false);
@@ -78,7 +80,7 @@ export function ProductHistory({ detail }: { detail: ProductDetail }) {
                 <div className="g-row__sub">{sub(m)}</div>
               </div>
               {canRevert(m) && (
-                <button type="button" className="g-btn g-btn--sm g-btn--ghost" onClick={() => setAsk(m)} aria-label={`Отменить: ${movementTitle(m, p.unit)}`}>
+                <button type="button" className="g-btn g-btn--sm g-btn--ghost" {...online.props} onClick={online.guard(() => setAsk(m))} aria-label={`Отменить: ${movementTitle(m, p.unit)}`}>
                   Отменить
                 </button>
               )}

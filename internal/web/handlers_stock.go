@@ -1,6 +1,8 @@
 package web
 
 import (
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -293,35 +295,59 @@ func stkSumCost(ms []catalog.Movement) *int64 {
 	return sum
 }
 
+// writeOp отвечает на расход или применение шаблона: впервые — 201 с
+// собранным ответом, повтор по номеру операции — 200 с сохранённым ответом
+// и заголовком X-Garage-Replayed (ФТ-12.4.1).
+func writeOp(w http.ResponseWriter, body []byte, replay bool) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	code := http.StatusCreated
+	if replay {
+		w.Header().Set("X-Garage-Replayed", "1")
+		code = http.StatusOK
+	}
+	w.WriteHeader(code)
+	_, _ = w.Write(body)
+}
+
+// stkEncode — JSON ответа с переводом строки, как у writeJSON.
+func stkEncode(v any) ([]byte, error) {
+	b, err := json.Marshal(v)
+	return append(b, '\n'), err
+}
+
 func (s *Server) handleConsume(w http.ResponseWriter, r *http.Request) {
 	var in stock.ConsumeInput
 	if !decodeJSON(w, r, &in) {
 		return
 	}
 	uid := currentFrom(r).user.ID
-	res, err := s.stockSvc().Consume(r.Context(), uid, in)
+	// Ответ собирается внутри транзакции списания (чтения идут через tx) и
+	// при client_op_id сохраняется вместе с ним.
+	render := func(tx *sql.Tx, res stock.ConsumeResult) ([]byte, error) {
+		cat := s.stockCatalog().WithTx(tx)
+		ms, err := cat.MovementsByIDs(r.Context(), uid, res.MovementIDs)
+		if err != nil {
+			return nil, err
+		}
+		p, err := cat.Summary(r.Context(), uid, res.ProductID)
+		if err != nil {
+			return nil, err
+		}
+		return stkEncode(struct {
+			Movements       []catalog.Movement     `json:"movements"`
+			Product         catalog.ProductSummary `json:"product"`
+			OpenedUnitIDs   []int64                `json:"opened_unit_ids"`
+			FinishedUnitIDs []int64                `json:"finished_unit_ids"`
+			Cost            *int64                 `json:"cost"`
+		}{ms, p, res.OpenedUnitIDs, res.FinishedUnitIDs, stkSumCost(ms)})
+	}
+	_, body, replay, err := s.stockSvc().ConsumeOp(r.Context(), uid, in, render)
 	if err != nil {
 		s.writeStockError(w, r, err)
 		return
 	}
-	cat := s.stockCatalog()
-	ms, err := cat.MovementsByIDs(r.Context(), uid, res.MovementIDs)
-	if err != nil {
-		s.internalError(w, r, err)
-		return
-	}
-	p, err := cat.Summary(r.Context(), uid, res.ProductID)
-	if err != nil {
-		s.internalError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, struct {
-		Movements       []catalog.Movement     `json:"movements"`
-		Product         catalog.ProductSummary `json:"product"`
-		OpenedUnitIDs   []int64                `json:"opened_unit_ids"`
-		FinishedUnitIDs []int64                `json:"finished_unit_ids"`
-		Cost            *int64                 `json:"cost"`
-	}{ms, p, res.OpenedUnitIDs, res.FinishedUnitIDs, stkSumCost(ms)})
+	writeOp(w, body, replay)
 }
 
 func (s *Server) handleRevert(w http.ResponseWriter, r *http.Request) {

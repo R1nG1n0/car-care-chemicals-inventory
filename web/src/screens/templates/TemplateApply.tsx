@@ -6,7 +6,8 @@ import { IconAlertTriangle, IconStack2, IconX } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { errorText, inventory, isApiError, type Recipe } from '../../api';
+import { errorText, inventory, isApiError, type ApplyResult, type Recipe } from '../../api';
+import { applyOrQueue, toastQueued } from '../../app/offline';
 import { invalidateStock, keys } from '../../app/queries';
 import { useToast } from '../../app/toast';
 import { useRevert } from '../../app/useRevert';
@@ -53,10 +54,13 @@ function Apply({ recipe, report, setReport }: { recipe: Recipe; report: string; 
   const setQty = (id: number, qty: string) => setRows((rs) => rs.map((x) => (x.product_id === id ? { ...x, qty } : x)));
 
   const apply = useMutation({
-    mutationFn: () => inventory.applyRecipe(recipe.id, items),
-    onSuccess: async (res) => {
+    mutationFn: () => applyOrQueue(qc, recipe, items),
+    onSuccess: async (out) => {
       setError('');
       setResetOnNext(true);
+      // Нет связи: шаблон записан в очередь (ФТ-12.3)
+      if ('queued' in out) return toastQueued(qc, toast, out.queued, 'Шаблон записан без связи — отправится, когда появится VPN');
+      const res: ApplyResult = out.sent;
       setReport(res.shortages.length ? `Не хватило: ${shortageReport(res.shortages, recipe.items)}` : '');
       const cost = res.cost !== null ? ` · ${formatMoney(res.cost)}` : '';
       const ids = res.movements.map((m) => m.id);

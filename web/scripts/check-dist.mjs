@@ -44,6 +44,23 @@ for (const f of files) {
     if (!readFileSync(f).subarray(0, 4).equals(Buffer.from([0, 0x61, 0x73, 0x6d]))) fail(`${f}: не WebAssembly`);
   }
 }
+// Сервис-воркер (ФТ-12.1): есть, метки подставлены, каждый файл списка существует,
+// в списке нет wasm и API
+if (!files.includes(join('dist', 'sw.js'))) fail('нет dist/sw.js');
+{
+  const sw = readFileSync(join('dist', 'sw.js'), 'utf8');
+  if (sw.includes('__SW_')) fail('в sw.js остались метки подстановки');
+  const m = /const PRECACHE = (\[[^\n]*\]);/.exec(sw);
+  if (!m) fail('в sw.js не найден список файлов');
+  const list = JSON.parse(m[1]);
+  if (!list.includes('/index.html')) fail('в предкэше нет /index.html');
+  for (const url of list) {
+    if (url.endsWith('.wasm')) fail(`wasm в предкэше: ${url}`);
+    if (url.startsWith('/api/')) fail(`API в предкэше: ${url}`);
+    if (!files.includes(join('dist', ...url.slice(1).split('/')))) fail(`в предкэше есть ${url}, а файла в dist нет`);
+  }
+  if (/\beval\(|new Function\(|importScripts\(\s*["']https?:/.test(sw)) fail('небезопасный код в sw.js');
+}
 // Сканер грузится только при первом открытии: в index.html его нет
 if (/zxing|reader-[\w-]+\.js/i.test(html)) fail('модуль сканера подключён в index.html — он должен грузиться по требованию');
 for (const f of files.sort()) console.log(`  ${f.padEnd(40)} ${(statSync(f).size / 1024).toFixed(1).padStart(8)} КБ`);

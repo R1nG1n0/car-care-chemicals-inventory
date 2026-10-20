@@ -30,6 +30,13 @@ export default defineConfig(
     },
   },
   {
+    // Шаблон сервис-воркера: глобальные имена воркера
+    files: ['src/sw/sw.js'],
+    languageOptions: {
+      globals: { self: 'readonly', caches: 'readonly', Request: 'readonly', Response: 'readonly', URL: 'readonly', fetch: 'readonly', AbortController: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly' },
+    },
+  },
+  {
     files: ['scripts/**/*.mjs', '*.config.{js,ts}'],
     languageOptions: { globals: { process: 'readonly', console: 'readonly' } },
   },

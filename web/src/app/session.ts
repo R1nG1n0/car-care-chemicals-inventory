@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react';
 import { MutationCache, QueryCache, QueryClient, queryOptions, useQuery } from '@tanstack/react-query';
 import { api, isApiError, isNetworkError, type Session } from '../api';
 import { isOnline, subscribeConnection } from '../api/connection';
+import { installOffline } from './offline';
 import { invalidateStock } from './queries';
 
 export const meKey = ['me'] as const;
@@ -45,6 +46,8 @@ export function createQueryClient(): QueryClient {
       mutations: { networkMode: 'always', retry: false },
     },
   });
+  // Сохранённые данные и очередь без связи (ФТ-12)
+  installOffline(client);
   return client;
 }
 

@@ -1,8 +1,10 @@
 // Ещё — меню, профиль, места, категории, магазины, инвентаризация, отчёты, данные, история покупок.
 // Адреса раздела разбирает вложенный <Routes>.
-import { IconBox, IconBuildingStore, IconChartBar, IconChevronRight, IconClipboardCheck, IconDatabase, IconReceipt, IconTags, IconUser, type TablerIcon } from '@tabler/icons-react';
+import { IconBox, IconBuildingStore, IconChartBar, IconChevronRight, IconClipboardCheck, IconCloudUpload, IconDatabase, IconReceipt, IconTags, IconUser, type TablerIcon } from '@tabler/icons-react';
 import { Link, Route, Routes, type Location } from 'react-router';
+import { usePendingOps } from '../../app/useOffline';
 import { Ico } from '../../components/ui';
+import { PendingScreen } from './PendingScreen';
 import { ProfileScreen } from '../profile/ProfileScreen';
 import { RefsScreen } from './RefsScreen';
 import { StoresScreen } from './StoresScreen';
@@ -24,11 +26,13 @@ const MENU: { to: string; icon: TablerIcon; title: string; sub: string }[] = [
 ];
 
 function MoreMenu() {
+  const pending = usePendingOps().length;
+  const items = pending > 0 ? [{ to: '/more/pending', icon: IconCloudUpload, title: `Неотправленное · ${pending}`, sub: 'Записи расхода, сделанные без связи' }, ...MENU] : MENU;
   return (
     <div className="app-stack">
       <h1 className="g-title">Ещё</h1>
       <nav className="g-list" aria-label="Ещё">
-        {MENU.map((m) => (
+        {items.map((m) => (
           <Link key={m.to} to={m.to} className="g-row g-row--link">
             <Ico icon={m.icon} />
             <span className="g-row__main">
@@ -64,6 +68,7 @@ export function MoreSection({ location }: { location: Location }) {
       <Route path="/more/inventory" element={<InventoryScreen />} />
       <Route path="/more/inventory/:id" element={<InventoryPlace />} />
       <Route path="/more/reports" element={<ReportsScreen />} />
+      <Route path="/more/pending" element={<PendingScreen />} />
       <Route path="/more/data" element={<DataScreen />} />
       <Route path="*" element={<MoreMenu />} />
     </Routes>

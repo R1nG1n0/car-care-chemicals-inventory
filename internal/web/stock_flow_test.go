@@ -2,7 +2,9 @@ package web
 
 import (
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/catalog"
 )
@@ -195,4 +197,91 @@ func TestStockRecipeFlow(t *testing.T) {
 	}
 	expect(t, c.do(http.MethodDelete, stkPath("/api/recipes/", id, ""), nil), http.StatusNoContent, "удаление")
 	expect(t, c.do(http.MethodGet, stkPath("/api/recipes/", id, ""), nil), http.StatusNotFound, "удалённый")
+}
+
+// ФТ-12.4: номер операции и время с телефона у расхода и применения шаблона.
+func TestOfflineOps(t *testing.T) {
+	e := newEnv(t, false)
+	c := stkSignIn(e, "owner")
+	cat := stkCategory(c, "Тест")
+	p := stkProduct(c, cat, "Gsf", "ml", 500)
+	stkBuy(c, p, 1, 119000, nil)
+	total := func(cl *client, prod int64) int64 {
+		rec := cl.do(http.MethodGet, stkPath("/api/products/", prod, ""), nil)
+		expect(t, rec, http.StatusOK, "позиция")
+		return decode[struct {
+			Product catalog.ProductSummary `json:"product"`
+		}](t, rec).Product.Stock.Total
+	}
+	at := e.clock.Now().Add(-time.Hour).Unix()
+	body := map[string]any{"product_id": p, "qty": 100, "client_op_id": "op-consume-0001", "occurred_at": at}
+
+	rec := c.do(http.MethodPost, "/api/consume", body)
+	expect(t, rec, http.StatusCreated, "первый расход")
+	if rec.Header().Get("X-Garage-Replayed") != "" {
+		t.Fatal("заголовок повтора у первого ответа")
+	}
+	first := decode[stkConsumeBody](t, rec)
+	if first.Movements[0].CreatedAt != at || total(c, p) != 400 {
+		t.Fatalf("время движения %d, остаток %d", first.Movements[0].CreatedAt, total(c, p))
+	}
+	// Повтор: 200, тот же JSON, заголовок, остаток прежний.
+	again := c.do(http.MethodPost, "/api/consume", body)
+	expect(t, again, http.StatusOK, "повтор расхода")
+	if again.Header().Get("X-Garage-Replayed") != "1" || again.Body.String() != rec.Body.String() || total(c, p) != 400 {
+		t.Fatalf("повтор: заголовок %q, остаток %d", again.Header().Get("X-Garage-Replayed"), total(c, p))
+	}
+	// Другой вид операции с тем же номером — 409.
+	r := stkCreate(c, "/api/recipes", map[string]any{"name": "М", "items": []any{map[string]any{"product_id": p, "qty": 5}}})
+	rec = c.do(http.MethodPost, stkPath("/api/recipes/", r, "/apply"),
+		map[string]any{"items": []any{map[string]any{"product_id": p, "qty": 5}}, "client_op_id": "op-consume-0001"})
+	expect(t, rec, http.StatusConflict, "номер от расхода в apply")
+	// Неверный номер и время вне пределов.
+	rec = c.do(http.MethodPost, "/api/consume", map[string]any{"product_id": p, "qty": 1, "client_op_id": "x y"})
+	expect(t, rec, http.StatusBadRequest, "неверный номер")
+	if !strings.Contains(rec.Body.String(), `"client_op_id"`) {
+		t.Fatalf("поле ошибки: %s", rec.Body.String())
+	}
+	future := e.clock.Now().Add(time.Hour).Unix()
+	rec = c.do(http.MethodPost, "/api/consume", map[string]any{"product_id": p, "qty": 1, "occurred_at": future})
+	expect(t, rec, http.StatusCreated, "время в будущем")
+	if got := decode[stkConsumeBody](t, rec).Movements[0].CreatedAt; got != e.clock.Now().Unix() {
+		t.Fatalf("будущее время принято: %d", got)
+	}
+
+	// Нехватка не запоминается: после пополнения тот же номер проходит.
+	short := map[string]any{"product_id": p, "qty": 1000, "client_op_id": "op-short-00001"}
+	rec = c.do(http.MethodPost, "/api/consume", short)
+	expect(t, rec, http.StatusConflict, "нехватка")
+	if sb := decode[stkShortageBody](t, rec); sb.Available != 399 || sb.Error != "Не хватает: есть 399 мл" {
+		t.Fatalf("нехватка: %s", rec.Body.String())
+	}
+	stkBuy(c, p, 2, 119000, nil)
+	expect(t, c.do(http.MethodPost, "/api/consume", short), http.StatusCreated, "после пополнения")
+
+	// Применение шаблона: повтор не списывает.
+	before := total(c, p)
+	ap := map[string]any{"items": []any{map[string]any{"product_id": p, "qty": 5}}, "client_op_id": "op-apply-00001", "occurred_at": at}
+	rec = c.do(http.MethodPost, stkPath("/api/recipes/", r, "/apply"), ap)
+	expect(t, rec, http.StatusCreated, "применение")
+	again = c.do(http.MethodPost, stkPath("/api/recipes/", r, "/apply"), ap)
+	expect(t, again, http.StatusOK, "повтор применения")
+	if again.Header().Get("X-Garage-Replayed") != "1" || again.Body.String() != rec.Body.String() || total(c, p) != before-5 {
+		t.Fatalf("повтор применения: остаток %d", total(c, p))
+	}
+	if run := decode[struct {
+		Movements []catalog.Movement `json:"movements"`
+	}](t, rec); run.Movements[0].CreatedAt != at {
+		t.Fatalf("время применения: %d", run.Movements[0].CreatedAt)
+	}
+
+	// Изоляция: тот же номер у другого пользователя списывает у него.
+	f := stkSignIn(e, "friend")
+	pf := stkProduct(f, stkCategory(f, "Тест"), "Gsf", "ml", 500)
+	stkBuy(f, pf, 1, 100, nil)
+	rec = f.do(http.MethodPost, "/api/consume", map[string]any{"product_id": pf, "qty": 100, "client_op_id": "op-consume-0001"})
+	expect(t, rec, http.StatusCreated, "тот же номер у другого")
+	if rec.Header().Get("X-Garage-Replayed") != "" || total(f, pf) != 400 || total(c, p) != before-5 {
+		t.Fatal("номер одного пользователя повлиял на другого")
+	}
 }

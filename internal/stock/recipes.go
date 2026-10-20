@@ -316,23 +316,30 @@ type ApplyResult struct {
 // транзакцией: запись recipe_runs и расход по правилам Consume. qty 0 —
 // строка пропускается; нехватка не ошибка — списывается сколько есть.
 func (s *Service) ApplyRecipe(ctx context.Context, userID, recipeID int64, items []ItemInput) (ApplyResult, error) {
-	res := ApplyResult{MovementIDs: []int64{}, ProductIDs: []int64{}, Shortages: []Shortage{}}
-	now := s.now().Unix()
-	err := s.inTx(ctx, func(tx *sql.Tx) error {
+	res, _, _, err := s.ApplyRecipeOp(ctx, userID, recipeID, items, Op{}, nil)
+	return res, err
+}
+
+// ApplyRecipeOp — ApplyRecipe с номером операции и временем с телефона
+// (ФТ-12.4); правила — как у ConsumeOp.
+func (s *Service) ApplyRecipeOp(ctx context.Context, userID, recipeID int64, items []ItemInput, op Op,
+	render Render[ApplyResult]) (ApplyResult, []byte, bool, error) {
+	return runOp(ctx, s, userID, op, opKindApply, func(tx *sql.Tx, now int64) (ApplyResult, error) {
+		res := ApplyResult{MovementIDs: []int64{}, ProductIDs: []int64{}, Shortages: []Shortage{}}
 		if err := recipeExists(ctx, tx, userID, recipeID); err != nil {
-			return err
+			return res, err
 		}
 		infos, err := validateItems(ctx, tx, userID, items, true)
 		if err != nil {
-			return err
+			return res, err
 		}
 		r, err := tx.ExecContext(ctx, `INSERT INTO recipe_runs (user_id, recipe_id, created_at) VALUES (?, ?, ?)`,
 			userID, recipeID, now)
 		if err != nil {
-			return fmt.Errorf("запись применения шаблона: %w", err)
+			return res, fmt.Errorf("запись применения шаблона: %w", err)
 		}
 		if res.RunID, err = r.LastInsertId(); err != nil {
-			return err
+			return res, err
 		}
 		run := sql.NullInt64{Int64: res.RunID, Valid: true}
 		var batch int64 // все движения применения — одна группа
@@ -342,7 +349,7 @@ func (s *Service) ApplyRecipe(ctx context.Context, userID, recipeID int64, items
 			}
 			c, err := consumeTx(ctx, tx, userID, infos[i], it.Qty, nil, run, &batch, now, true)
 			if err != nil {
-				return err
+				return res, err
 			}
 			res.MovementIDs = append(res.MovementIDs, c.MovementIDs...)
 			res.ProductIDs = append(res.ProductIDs, it.ProductID)
@@ -351,9 +358,8 @@ func (s *Service) ApplyRecipe(ctx context.Context, userID, recipeID int64, items
 			}
 		}
 		if len(res.ProductIDs) == 0 {
-			return &ValidationError{Field: "items", Message: "Нечего списывать: все количества равны нулю"}
+			return res, &ValidationError{Field: "items", Message: "Нечего списывать: все количества равны нулю"}
 		}
-		return nil
-	})
-	return res, err
+		return res, nil
+	}, render)
 }

@@ -3,7 +3,7 @@
 // - каждый запрос, кроме GET/HEAD, несёт X-Requested-With: garage (ТБ-3);
 // - ошибка API — тело {error, field?, retry_after?} → ApiError;
 // - «нет связи» (fetch упал, истёк срок ожидания, 502–504 от nginx) → NetworkError.
-import { reportConnection } from './connection';
+import { isOnline, reportConnection } from './connection';
 
 /** Сколько ждать ответа: без VPN соединение может висеть минуту и дольше. */
 export const REQUEST_TIMEOUT_MS = 15_000;
@@ -14,13 +14,16 @@ export class ApiError extends Error {
   readonly field: string | undefined;
   /** Через сколько секунд можно повторить (429). */
   readonly retryAfter: number | undefined;
+  /** Сколько есть на складе (409 «не хватает» у расхода). */
+  readonly available: number | undefined;
 
-  constructor(status: number, message: string, field?: string, retryAfter?: number) {
+  constructor(status: number, message: string, field?: string, retryAfter?: number, available?: number) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.field = field;
     this.retryAfter = retryAfter;
+    this.available = available;
   }
 }
 
@@ -67,6 +70,11 @@ export type RequestOptions = {
   signal?: AbortSignal;
   /** Сколько ждать ответа, мс; по умолчанию REQUEST_TIMEOUT_MS (большая загрузка ждёт дольше). */
   timeoutMs?: number;
+  /**
+   * Изменение, которое можно отправлять без связи (расход и шаблон: очередь, ФТ-12).
+   * Остальные изменения при известном отсутствии связи не уходят в сеть вовсе.
+   */
+  offlineOk?: boolean;
 };
 
 const GATEWAY_STATUSES = new Set([502, 503, 504]);
@@ -86,6 +94,9 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     headers['Content-Type'] = 'application/json';
     body = JSON.stringify(opts.body);
   }
+
+  // Связи нет — изменение (кроме расхода и входа) не ждёт тайм-аута: «Нужна связь» сразу (ФТ-12.2.3).
+  if (method !== 'GET' && !opts.offlineOk && !isOnline() && !path.startsWith('/api/auth/')) throw new NetworkError('offline');
 
   const timeout = AbortSignal.timeout(opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
   const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout;
@@ -132,7 +143,7 @@ async function readJson(res: Response): Promise<unknown> {
   }
 }
 
-type ErrorBody = { error: string; field?: unknown; retry_after?: unknown };
+type ErrorBody = { error: string; field?: unknown; retry_after?: unknown; available?: unknown };
 
 function hasErrorText(data: unknown): data is ErrorBody {
   return typeof data === 'object' && data !== null && typeof (data as ErrorBody).error === 'string';
@@ -147,5 +158,6 @@ function toApiError(res: Response, data: unknown): ApiError {
     const header = Number(res.headers.get('Retry-After'));
     if (Number.isFinite(header) && header > 0) retryAfter = header;
   }
-  return new ApiError(res.status, message, field, retryAfter);
+  const available = typeof body?.available === 'number' ? body.available : undefined;
+  return new ApiError(res.status, message, field, retryAfter, available);
 }

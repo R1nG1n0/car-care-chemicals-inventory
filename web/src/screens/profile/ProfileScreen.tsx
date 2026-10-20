@@ -1,13 +1,16 @@
 // Профиль (ФТ-1.4) — по макету «Профиль и приглашения».
 import { IconChevronDown, IconChevronRight, IconDownload, IconLogout, IconShare2, IconUser } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { api, type Session } from '../../api';
+import { api, isApiError } from '../../api';
+import { forgetUser } from '../../app/offline';
+import { usePendingOps } from '../../app/useOffline';
 import { promptInstall, useInstallMode } from '../../app/install';
-import { clearSession, meKey, useSession } from '../../app/session';
+import { clearSession, useSession } from '../../app/session';
 import { busyProps, Ico } from '../../components/ui';
 import { clearUserStates } from '../../lib/inventory';
+import { plural } from '../../lib/text';
 import { Invites } from './Invites';
 import { PasswordForm } from './PasswordForm';
 import { StepsForm } from './StepsForm';
@@ -39,18 +42,40 @@ function LogoutButtons() {
   const client = useQueryClient();
   const navigate = useNavigate();
   const [confirm, setConfirm] = useState(false);
+  const unsent = usePendingOps().length;
+  // Кто сейчас вошёл: нужно и тогда, когда выход ответил 401 и сессия в кэше уже обнулена
+  const uid = useSession().data?.user.id;
+  const lastUid = useRef(uid);
+  useEffect(() => {
+    if (uid !== undefined) lastUid.current = uid;
+  }, [uid]);
   const done = () => {
-    // Незавершённые проверки инвентаризации вышедшего не остаются на устройстве
-    const me = client.getQueryData<Session | null>(meKey);
-    if (me) clearUserStates(me.user.id);
+    const id = lastUid.current;
+    if (id !== undefined) {
+      // Незавершённые проверки инвентаризации, снимки данных и неотправленное вышедшего стираются (ФТ-12.5.2)
+      clearUserStates(id);
+      forgetUser(id);
+    }
     clearSession(client);
     navigate('/login', { replace: true });
   };
-  const logout = useMutation({ mutationFn: api.logout, onSuccess: done });
-  const logoutAll = useMutation({ mutationFn: api.logoutAll, onSuccess: done });
+  // Cookie протухла (401) — выйти всё равно нужно, и данные на телефоне тоже стереть
+  const onError = (err: unknown) => {
+    if (isApiError(err, 401)) done();
+  };
+  const logout = useMutation({ mutationFn: api.logout, onSuccess: done, onError });
+  const logoutAll = useMutation({ mutationFn: api.logoutAll, onSuccess: done, onError });
 
   return (
     <div className="g-section">
+      {unsent > 0 && (
+        <p className="g-banner" role="status">
+          <Ico icon={IconLogout} />
+          <span className="g-banner__text">
+            {unsent} {plural(unsent, ['запись не отправлена', 'записи не отправлены', 'записей не отправлено'])} и {unsent === 1 ? 'пропадёт' : 'пропадут'} при выходе.
+          </span>
+        </p>
+      )}
       <button type="button" className="g-btn g-btn--block g-press" onClick={() => !logout.isPending && logout.mutate()} {...busyProps(logout.isPending)}>
         <Ico icon={IconLogout} /> Выйти
       </button>

@@ -35,7 +35,10 @@
   background: var(--surface-raised); color: var(--text); box-shadow: var(--sh-md);
   font-size: var(--fs-13); font-weight: var(--fw-bold); line-height: var(--lh-tight);
 }
-.g-banner__text { flex: 1; min-width: 0; }
+.g-banner__text { flex: 1 1 12rem; min-width: 0; }
+/* Две кнопки не сжимают текст в столбик: на узком экране уходят строкой ниже */
+.g-banner { flex-wrap: wrap; }
+.g-banner__actions { display: flex; gap: var(--sp-2); margin-left: auto; }
 .g-banner .ti { font-size: 20px; flex: none; }
 .g-banner .g-btn { flex: none; box-shadow: none; }
 .g-banner--danger { background: var(--danger); color: var(--on-danger); border-color: var(--line-key); }

@@ -7,6 +7,7 @@ import { useState, type FormEvent } from 'react';
 import { errorText, inventory, type Movement, type ProductSummary, type StockUnit } from '../../api';
 import { invalidateStock } from '../../app/queries';
 import { useToast } from '../../app/toast';
+import { useNeedsOnline } from '../../app/useOffline';
 import { QtyInput } from '../../components/QtyInput';
 import { Sheet } from '../../components/Sheet';
 import { useStockRefs } from '../../components/refs';
@@ -37,6 +38,7 @@ function UnitBody({ u, product: p, onClose }: { u: StockUnit; product: ProductSu
   const toast = useToast();
   const revert = useRevert();
   const refs = useStockRefs();
+  const online = useNeedsOnline();
   const places = refs.locationList.filter((l) => !l.archived);
   // Мест нет — перемещать некуда: сразу «Остаток»
   const [mode, setMode] = useState<Mode>(places.length > 0 ? 'move' : 'adjust');
@@ -75,6 +77,7 @@ function UnitBody({ u, product: p, onClose }: { u: StockUnit; product: ProductSu
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (mut.isPending) return;
+    if (online.offline) return setError('Нужна связь: перемещение, корректировка и списание доступны только онлайн');
     const n = parseQty(qty);
     if (mode === 'move') {
       if (place === null) return setError('Выберите место');
@@ -175,7 +178,7 @@ function UnitBody({ u, product: p, onClose }: { u: StockUnit; product: ProductSu
         </>
       )}
 
-      <button type="submit" className="g-btn g-btn--cta g-btn--block g-press" {...busyProps(mut.isPending)}>
+      <button type="submit" className="g-btn g-btn--cta g-btn--block g-press" {...online.props} {...busyProps(mut.isPending)}>
         {mut.isPending ? 'Сохраняю…' : cta}
       </button>
     </form>

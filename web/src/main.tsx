@@ -27,12 +27,14 @@ import './styles/inventory.css';
 import './styles/reports.css';
 import { App } from './App';
 import { listenInstallPrompt } from './app/install';
+import { registerServiceWorker } from './app/registerSw';
 import { syncThemeColor } from './app/themeColor';
 
 // До первого рендера: beforeinstallprompt приходит рано (И-2.1),
 // цвет строки состояния — по текущей теме (И-2.2).
 listenInstallPrompt();
 syncThemeColor();
+registerServiceWorker();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -11,6 +11,7 @@ import { Link } from 'react-router';
 import type { ProductSummary } from '../api';
 import { formatQty } from '../lib/format';
 import { locationChip, meterLevel, meterValues, openLine, qtyText, stickerText, unitLabel } from '../lib/stock';
+import { usePendingProductIds } from '../app/useOffline';
 import { usePresence } from './hooks';
 import { ProductThumb } from './ProductThumb';
 import { catClassOf, useStockRefs } from './refs';
@@ -33,9 +34,10 @@ export function ProductCard({ product: p, to, current, onClick, ref, className }
   const meter = meterValues(p.stock);
   const open = openLine(p.stock, p.unit, p.package_size);
   const sticker = stickerText(p);
+  const unsent = usePendingProductIds().has(p.id);
   // Метка ссылки заменяет содержимое для диктора — поэтому в ней всё главное:
   // остаток, подпись вскрытой и текст наклейки («мало!», «нет»)
-  const label = [p.name, cat?.name, place, qtyText(p.stock.total, p.unit), open, sticker].filter(Boolean).join(', ');
+  const label = [p.name, cat?.name, place, qtyText(p.stock.total, p.unit), open, sticker, unsent ? 'не отправлено' : ''].filter(Boolean).join(', ');
 
   return (
     <Link
@@ -62,6 +64,7 @@ export function ProductCard({ product: p, to, current, onClick, ref, className }
         </div>
         <Meter level={meterLevel(p.stock)} low={p.low} now={meter.now} max={meter.max} />
         <div className="g-card__open">{open}</div>
+        {unsent && <span className="g-badge">не отправлено</span>}
       </div>
       <Sticker text={sticker} />
     </Link>

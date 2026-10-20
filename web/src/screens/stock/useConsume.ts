@@ -1,7 +1,8 @@
 // Расход (ФТ-5.1, ФТ-5.6): POST /api/consume, уведомление «Списано 40 мл · …»
 // с «Отменить» на 10 секунд (общий useRevert), обновление кэша.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { inventory, type ProductSummary } from '../../api';
+import type { ProductSummary } from '../../api';
+import { consumeOrQueue, toastQueued } from '../../app/offline';
 import { invalidateStock } from '../../app/queries';
 import { useToast } from '../../app/toast';
 import { applyProducts, useRevert } from '../../app/useRevert';
@@ -17,9 +18,12 @@ export function useConsume(onDone?: () => void) {
   const toast = useToast();
   const revert = useRevert();
   return useMutation({
-    mutationFn: (v: ConsumeVars) => inventory.consume({ product_id: v.product.id, qty: v.qty, unit_id: v.unitId }),
-    onSuccess: (r, v) => {
+    mutationFn: (v: ConsumeVars) => consumeOrQueue(qc, v),
+    onSuccess: (res, v) => {
       onDone?.();
+      // Нет связи: запись ушла в очередь, остаток на экране — оценка (ФТ-12.3)
+      if ('queued' in res) return toastQueued(qc, toast, res.queued);
+      const r = res.sent;
       setTimeout(() => {
         applyProducts(qc, [r.product]);
         void invalidateStock(qc);

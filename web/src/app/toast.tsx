@@ -17,7 +17,7 @@ export type ToastOptions = {
 
 type ToastState = ToastOptions & { id: number; leaving: boolean };
 
-type ToastApi = { show: (t: ToastOptions) => void; hide: () => void };
+export type ToastApi = { show: (t: ToastOptions) => void; hide: () => void };
 
 const ToastContext = createContext<ToastApi | null>(null);
 

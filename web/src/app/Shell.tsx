@@ -23,6 +23,8 @@ import { ShoppingSection } from '../screens/shopping/ShoppingSection';
 import { StockSection } from '../screens/stock/StockSection';
 import { TemplatesSection } from '../screens/templates/TemplatesSection';
 import { ErrorBoundary } from './ErrorBoundary';
+import { OfflineSync } from './OfflineSync';
+import { useNeedsOnline } from './useOffline';
 import { ToastProvider } from './toast';
 
 export type SectionKey = 'stock' | 'shopping' | 'templates' | 'more';
@@ -74,6 +76,7 @@ const ROOTS = new Set(['/', '/shopping', '/templates', '/more', '/purchases']);
  */
 function PlusMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
+  const online = useNeedsOnline();
   const go = (to: string) => {
     onClose();
     void navigate(to);
@@ -81,15 +84,16 @@ function PlusMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <Sheet open={open} onClose={onClose} label="Добавить">
       <div className="app-stack">
-        <button type="button" className="g-btn g-btn--block g-press" onClick={() => go('/purchases/new')}>
+        <button type="button" className="g-btn g-btn--block g-press" {...online.props} onClick={online.guard(() => go('/purchases/new'))}>
           <Ico icon={IconShoppingCart} /> Покупка
         </button>
         <button type="button" className="g-btn g-btn--block g-press" onClick={() => go('/?consume=1')}>
           <Ico icon={IconDroplet} /> Расход
         </button>
-        <button type="button" className="g-btn g-btn--block g-press" onClick={() => go('/items/new')}>
+        <button type="button" className="g-btn g-btn--block g-press" {...online.props} onClick={online.guard(() => go('/items/new'))}>
           <Ico icon={IconCirclePlus} /> Новая позиция
         </button>
+        {online.hint && <p className="g-field__hint">{online.hint}: покупки и новые позиции доступны только онлайн. Расход можно записать.</p>}
         <button type="button" className="g-btn g-btn--ghost g-btn--block" onClick={onClose}>
           <Ico icon={IconX} /> Закрыть
         </button>
@@ -132,6 +136,7 @@ export function Shell() {
 
   return (
     <ToastProvider>
+      <OfflineSync />
       <div className="app">
         <nav className="g-side app-side" aria-label="Разделы">
           <div className="app-side__logo">
