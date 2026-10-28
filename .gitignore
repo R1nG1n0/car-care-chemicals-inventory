@@ -12,6 +12,10 @@
 .claude-flow/
 .swarm/
 .mcp.json
+# Ruflo ставит свой CLI в корень проекта (npm) — не наш код
+/package.json
+/package-lock.json
+/node_modules/
 ruvector.db
 agentdb.rvf*
 CLAUDE.md
