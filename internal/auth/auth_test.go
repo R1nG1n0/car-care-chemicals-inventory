@@ -143,6 +143,9 @@ func TestCreateUserOwnerAndDefaults(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM categories WHERE user_id = ?`, second.ID).Scan(&n); err != nil || n != len(defaultCategories) {
 		t.Fatalf("категорий по умолчанию %d (%v)", n, err)
 	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM purposes WHERE user_id = ?`, second.ID).Scan(&n); err != nil || n != len(defaultPurposes) {
+		t.Fatalf("назначений по умолчанию %d (%v)", n, err)
+	}
 	var color string
 	if err := s.db.QueryRow(`SELECT color FROM categories WHERE user_id = ? AND name = 'Активная пена'`, second.ID).Scan(&color); err != nil || color != "berry" {
 		t.Fatalf("цвет «Активной пены»: %q (%v)", color, err)

@@ -187,7 +187,7 @@ func (b *Bot) cardText(ctx context.Context, userID, productID int64) (string, *t
 		}
 		sb.WriteString("\n")
 	}
-	return strings.TrimRight(sb.String(), "\n"), consumeKeyboard(p), nil
+	return strings.TrimRight(sb.String(), "\n"), consumeKeyboard(p.ProductSummary), nil
 }
 
 // consumeKeyboard — кнопки расхода: мл −10/−50/−100, шт −1/−5 (ФТ-11.5.2).

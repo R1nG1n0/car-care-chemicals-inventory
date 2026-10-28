@@ -8,10 +8,13 @@ package transfer
 
 import "github.com/R1nG1n0/car-care-chemicals-inventory/internal/photo"
 
-// Признаки формата файла.
+// Признаки формата файла. Версия 2 (v1.5, ФТ-15.6.1) добавила назначения
+// (purposes), поля позиции purpose_ids, ph, incompatible, instruction, rating,
+// do_not_buy; файлы версии 1 импортируются (новых полей в них нет).
 const (
-	FormatName    = "garage-export"
-	FormatVersion = 1
+	FormatName       = "garage-export"
+	FormatVersion    = 2
+	MinFormatVersion = 1
 )
 
 // File — файл экспорта. id внутри файла — прежние id из базы: они нужны
@@ -27,6 +30,7 @@ type File struct {
 	Categories []Category  `json:"categories"`
 	Locations  []Location  `json:"locations"`
 	Stores     []Store     `json:"stores"`
+	Purposes   []Purpose   `json:"purposes"`
 	Products   []Product   `json:"products"`
 	Units      []Unit      `json:"units"`
 	Purchases  []Purchase  `json:"purchases"`
@@ -73,6 +77,14 @@ type Store struct {
 	Archived bool   `json:"archived"`
 }
 
+// Purpose — назначение средства (версия 2).
+type Purpose struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Sort     int64  `json:"sort"`
+	Archived bool   `json:"archived"`
+}
+
 // Product — позиция каталога. Photo — необязательное фото (ФТ-10.4):
 // без поля (или null) позиция остаётся без фото.
 type Product struct {
@@ -88,6 +100,13 @@ type Product struct {
 	Archived    bool   `json:"archived"`
 	CreatedAt   int64  `json:"created_at"`
 	Photo       *Photo `json:"photo,omitempty"`
+	// Поля версии 2 (ФТ-15): у файла версии 1 их нет.
+	PurposeIDs   []int64  `json:"purpose_ids"`
+	PH           *float64 `json:"ph"`
+	Incompatible string   `json:"incompatible"`
+	Instruction  string   `json:"instruction"`
+	Rating       *int64   `json:"rating"`
+	DoNotBuy     bool     `json:"do_not_buy"`
 }
 
 // Photo — фото позиции в файле: тип и байты в base64. Тип при импорте

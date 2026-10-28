@@ -36,6 +36,7 @@ func checkLimits(f *File) error {
 		{"categories", len(f.Categories), maxOtherRecords},
 		{"locations", len(f.Locations), maxOtherRecords},
 		{"stores", len(f.Stores), maxOtherRecords},
+		{"purposes", len(f.Purposes), maxOtherRecords},
 		{"recipes", len(f.Recipes), maxOtherRecords},
 		{"recipe_runs", len(f.RecipeRuns), maxOtherRecords},
 		{"shopping", len(f.Shopping), maxOtherRecords},

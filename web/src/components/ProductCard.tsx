@@ -13,7 +13,9 @@ import { formatQty } from '../lib/format';
 import { locationChip, meterLevel, meterValues, openLine, qtyText, stickerText, unitLabel } from '../lib/stock';
 import { usePendingProductIds } from '../app/useOffline';
 import { usePresence } from './hooks';
+import { DO_NOT_BUY_TEXT, ratingLabel } from '../lib/purposes';
 import { ProductThumb } from './ProductThumb';
+import { RatingMini } from './Rating';
 import { catClassOf, useStockRefs } from './refs';
 
 export type ProductCardProps = {
@@ -37,7 +39,7 @@ export function ProductCard({ product: p, to, current, onClick, ref, className }
   const unsent = usePendingProductIds().has(p.id);
   // Метка ссылки заменяет содержимое для диктора — поэтому в ней всё главное:
   // остаток, подпись вскрытой и текст наклейки («мало!», «нет»)
-  const label = [p.name, cat?.name, place, qtyText(p.stock.total, p.unit), open, sticker, unsent ? 'не отправлено' : ''].filter(Boolean).join(', ');
+  const label = [p.name, cat?.name, place, qtyText(p.stock.total, p.unit), open, sticker, p.rating ? ratingLabel(p.rating) : '', p.do_not_buy ? 'не брать больше' : '', unsent ? 'не отправлено' : ''].filter(Boolean).join(', ');
 
   return (
     <Link
@@ -64,7 +66,13 @@ export function ProductCard({ product: p, to, current, onClick, ref, className }
         </div>
         <Meter level={meterLevel(p.stock)} low={p.low} now={meter.now} max={meter.max} />
         <div className="g-card__open">{open}</div>
-        {unsent && <span className="g-badge">не отправлено</span>}
+        {(p.rating || p.do_not_buy || unsent) && (
+          <div className="stock-card__tags">
+            <RatingMini value={p.rating} />
+            {p.do_not_buy && <span className="g-badge g-badge--dnb">{DO_NOT_BUY_TEXT}</span>}
+            {unsent && <span className="g-badge">не отправлено</span>}
+          </div>
+        )}
       </div>
       <Sticker text={sticker} />
     </Link>

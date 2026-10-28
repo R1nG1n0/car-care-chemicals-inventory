@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+
+	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/catalog"
 )
 
 // NotEmptyError — склад не пуст, импорт невозможен (409).
@@ -17,6 +19,7 @@ type Counts struct {
 	Categories    int `json:"categories"`
 	Locations     int `json:"locations"`
 	Stores        int `json:"stores"`
+	Purposes      int `json:"purposes"`
 	Products      int `json:"products"`
 	Units         int `json:"units"`
 	Purchases     int `json:"purchases"`
@@ -30,7 +33,7 @@ type Counts struct {
 func Count(f *File) Counts {
 	c := Counts{
 		Categories: len(f.Categories), Locations: len(f.Locations), Stores: len(f.Stores),
-		Products: len(f.Products), Units: len(f.Units), Purchases: len(f.Purchases),
+		Purposes: len(f.Purposes), Products: len(f.Products), Units: len(f.Units), Purchases: len(f.Purchases),
 		Movements: len(f.Movements), Recipes: len(f.Recipes), Shopping: len(f.Shopping),
 	}
 	for _, p := range f.Purchases {
@@ -47,7 +50,7 @@ type importer struct {
 	now   int64
 	stmts []*sql.Stmt
 
-	categories, locations, stores, products, lines, units, runs, movements, recipes map[int64]int64
+	categories, locations, stores, purposes, products, lines, units, runs, movements, recipes map[int64]int64
 }
 
 // BeginImport занимает единственное место для импорта: большой файл держит
@@ -92,7 +95,7 @@ func (s *Service) Import(ctx context.Context, userID int64, f *File) (Counts, er
 	}
 	im := &importer{ctx: ctx, tx: tx, uid: userID, now: s.now().UnixMilli(),
 		categories: map[int64]int64{}, locations: map[int64]int64{}, stores: map[int64]int64{},
-		products: map[int64]int64{}, lines: map[int64]int64{}, units: map[int64]int64{},
+		purposes: map[int64]int64{}, products: map[int64]int64{}, lines: map[int64]int64{}, units: map[int64]int64{},
 		runs: map[int64]int64{}, movements: map[int64]int64{}, recipes: map[int64]int64{},
 	}
 	defer im.closeStmts()
@@ -248,6 +251,29 @@ func (im *importer) refs(f *File) error {
 			return err
 		}
 	}
+	return im.purposesRefs(f)
+}
+
+// purposesRefs сливает назначения файла с имеющимися по имени, как категории:
+// стартовый набор из миграции не мешает, а получает порядок и архив из файла.
+func (im *importer) purposesRefs(f *File) error {
+	existing, err := im.existing("purposes")
+	if err != nil {
+		return err
+	}
+	for _, p := range f.Purposes {
+		if id, ok := existing[strings.ToLower(p.Name)]; ok {
+			im.purposes[p.ID] = id
+			_, err = im.exec("назначение", `UPDATE purposes SET sort = ?, archived = ? WHERE user_id = ? AND id = ?`,
+				p.Sort, p.Archived, im.uid, id)
+		} else {
+			im.purposes[p.ID], err = im.exec("назначение", `INSERT INTO purposes (user_id, name, sort, archived)
+				VALUES (?, ?, ?, ?)`, im.uid, p.Name, p.Sort, p.Archived)
+		}
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -261,8 +287,14 @@ func mapped(m map[int64]int64, id *int64) any {
 
 func (im *importer) productsStep(f *File) error {
 	ins, err := im.prepare("позиция", `INSERT INTO products
-		(user_id, category_id, name, brand, unit, package_size, barcode, min_stock, note, archived, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		(user_id, category_id, name, brand, unit, package_size, barcode, min_stock, note, archived, created_at,
+		 ph_x10, incompatible, instruction, rating, do_not_buy)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	link, err := im.prepare("назначение позиции", `INSERT INTO product_purposes (user_id, product_id, purpose_id)
+		VALUES (?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -272,12 +304,23 @@ func (im *importer) productsStep(f *File) error {
 		return err
 	}
 	for _, p := range f.Products {
+		var phX10 *int64 // pH уже проверен Validate
+		if p.PH != nil {
+			x, _ := catalog.PhX10(*p.PH)
+			phX10 = &x
+		}
 		id, err := im.run(ins, "позиция", im.uid, im.categories[p.CategoryID], p.Name, p.Brand, p.Unit, p.PackageSize,
-			p.Barcode, p.MinStock, p.Note, p.Archived, p.CreatedAt)
+			p.Barcode, p.MinStock, p.Note, p.Archived, p.CreatedAt, phX10, p.Incompatible, p.Instruction, p.Rating,
+			p.DoNotBuy)
 		if err != nil {
 			return err
 		}
 		im.products[p.ID] = id
+		for _, pid := range p.PurposeIDs {
+			if _, err := im.run(link, "назначение позиции", im.uid, id, im.purposes[pid]); err != nil {
+				return err
+			}
+		}
 		if p.Photo != nil {
 			if _, err := im.run(ph, "фото позиции", im.uid, id, p.Photo.info.Mime, p.Photo.raw,
 				p.Photo.info.Width, p.Photo.info.Height, im.now); err != nil {

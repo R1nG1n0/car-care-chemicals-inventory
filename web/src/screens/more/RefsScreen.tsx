@@ -5,7 +5,7 @@ import { IconArrowDown, IconArrowUp, IconArchive, IconCheck, IconChevronDown, Ic
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { type CatColor, type Category, errorText, inventory, type Location } from '../../api';
+import { type CatColor, type Category, errorText, inventory, type Location, type Purpose } from '../../api';
 import { invalidateRefs, keys } from '../../app/queries';
 import { ShopSwatches } from '../../components/ShopSwatches';
 import { busyProps, HeadRow, Ico, LoadError, SkelList } from '../../components/ui';
@@ -17,9 +17,9 @@ import { SortableList } from './SortableList';
 import { BackLink } from '../../components/BackLink';
 import { catClass } from '../../components/refs';
 
-export type RefKind = 'places' | 'categories';
+export type RefKind = 'places' | 'categories' | 'purposes';
 
-type Item = { id: number; name: string; archived: boolean; count: number; color?: CatColor; checkedAt?: number | null };
+type Item = { id: number; name: string; archived: boolean; count: number | null; color?: CatColor; checkedAt?: number | null };
 type Edit = { id: number | 'new'; name: string; color: CatColor };
 
 const TEXT = {
@@ -41,14 +41,26 @@ const TEXT = {
     count: (n: number) => (n ? `${n} ${plural(n, ['позиция', 'позиции', 'позиций'])}` : 'нет позиций'),
     placeholder: 'Глины и полироли',
   },
+  purposes: {
+    title: 'Назначения',
+    add: 'Назначение',
+    hint: 'Для чего средство: ЛКП, стекло, кожа. Перетащите за ручку, чтобы поменять порядок. Нажмите на название, чтобы переименовать.',
+    one: 'назначения',
+    archiveWord: ['назначение', 'назначения', 'назначений'] as const,
+    count: (n: number) => (n ? `${n} ${plural(n, ['позиция', 'позиции', 'позиций'])}` : 'нет позиций'),
+    placeholder: 'ЛКП, стекло, кожа',
+  },
 };
 
 /** Подпись под названием: число экземпляров / позиций, у мест ещё и «проверено ДД.ММ» / «не проверялось». */
-const subText = (kind: RefKind, i: Item): string =>
-  kind === 'places' && i.checkedAt !== undefined ? `${TEXT[kind].count(i.count)} · ${checkedLabel(i.checkedAt)}` : TEXT[kind].count(i.count);
+const subText = (kind: RefKind, i: Item): string => {
+  if (i.count === null) return '';
+  return kind === 'places' && i.checkedAt !== undefined ? `${TEXT[kind].count(i.count)} · ${checkedLabel(i.checkedAt)}` : TEXT[kind].count(i.count);
+};
 
 const fromLocation = (l: Location): Item => ({ id: l.id, name: l.name, archived: l.archived, count: l.units_count, checkedAt: l.checked_at });
 const fromCategory = (c: Category): Item => ({ id: c.id, name: c.name, archived: c.archived, count: c.products_count, color: c.color });
+const fromPurpose = (p: Purpose): Item => ({ id: p.id, name: p.name, archived: p.archived, count: p.products_count ?? null });
 
 type RefApi = {
   key: readonly unknown[];
@@ -59,6 +71,16 @@ type RefApi = {
 };
 
 function api(kind: RefKind): RefApi {
+  if (kind === 'purposes') {
+    return {
+      key: keys.purposes(true),
+      list: async (signal?: AbortSignal) => (await inventory.purposes(true, signal)).map(fromPurpose),
+      create: (e: Edit) => inventory.createPurpose({ name: e.name }),
+      update: (id: number, b: { name?: string; color?: CatColor; archived?: boolean }) =>
+        inventory.updatePurpose(id, { name: b.name, archived: b.archived }),
+      reorder: inventory.reorderPurposes,
+    };
+  }
   return kind === 'places'
     ? {
         key: keys.locations(true),
@@ -104,7 +126,7 @@ function EditRow({ kind, edit, setEdit, onSave, saving, error }: {
           autoFocus
           onFocus={(e) => e.currentTarget.select()}
           placeholder={t.placeholder}
-          aria-label={kind === 'places' ? 'Название места' : 'Название категории'}
+          aria-label={kind === 'places' ? 'Название места' : kind === 'purposes' ? 'Название назначения' : 'Название категории'}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errId : undefined}
           onChange={(e) => setEdit({ ...edit, name: e.target.value })}
@@ -222,7 +244,7 @@ export function RefsScreen({ kind }: { kind: RefKind }) {
       {kind === 'categories' && <span className={`g-cat-sq ${catClass(i.color)}`} aria-hidden="true" />}
       <button type="button" className="g-row__main shop-rowbtn" onClick={() => startEdit(i)} aria-label={`Переименовать ${i.name}`}>
         <span className="g-row__title">{i.name}</span>
-        <span className="g-row__sub">{subText(kind, i)}</span>
+        {subText(kind, i) && <span className="g-row__sub">{subText(kind, i)}</span>}
       </button>
     </>
   );
@@ -243,7 +265,7 @@ export function RefsScreen({ kind }: { kind: RefKind }) {
         <button type="button" className="g-btn g-btn--sm g-press" onClick={() => startEdit(i)}>
           <Ico icon={IconPencil} /> Переименовать
         </button>
-        {kind === 'places' && i.count > 0 && (
+        {kind === 'places' && (i.count ?? 0) > 0 && (
           <Link className="g-btn g-btn--sm g-press" to={`/?location=${i.id}`}>
             Экземпляры
           </Link>
@@ -351,7 +373,7 @@ export function RefsScreen({ kind }: { kind: RefKind }) {
                   {kind === 'categories' && <span className={`g-cat-sq ${catClass(i.color)}`} aria-hidden="true" />}
                   <div className="g-row__main">
                     <div className="g-row__title">{i.name}</div>
-                    <div className="g-row__sub">{subText(kind, i)}</div>
+                    {subText(kind, i) && <div className="g-row__sub">{subText(kind, i)}</div>}
                   </div>
                   <button
                     type="button"

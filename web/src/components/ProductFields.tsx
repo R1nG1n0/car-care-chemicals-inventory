@@ -5,9 +5,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { IconCheck, IconChevronDown } from '@tabler/icons-react';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { inventory, type Category } from '../api';
+import { inventory, type Category, type Purpose } from '../api';
 import { keys } from '../app/queries';
 import { allBrands, suggestBrands } from '../lib/product';
+import { purposeChoices, toggleId } from '../lib/purposes';
 import { Ico } from './ui';
 import { catClass } from './refs';
 
@@ -202,6 +203,84 @@ export function CategoryPick({ categories, value, onChange, error, idPrefix = 'n
       )}
       {error && (
         <span className="g-field__error" id={`${idPrefix}-category_id-err`}>
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
+
+type PurposeProps = { purposes: Purpose[]; value: number[]; onChange: (ids: number[]) => void; idPrefix?: string };
+
+/**
+ * Назначения чипами (ФТ-15.1.3): мультивыбор, у каждого чипа aria-checked (role="checkbox").
+ * Архивные не предлагаются, но уже выбранные остаются и помечены.
+ */
+export function PurposePick({ purposes, value, onChange, idPrefix = 'np' }: PurposeProps) {
+  const list = purposeChoices(purposes, value);
+  return (
+    <div className="g-field">
+      <span className="g-label" id={`${idPrefix}-pur-l`}>
+        Назначения <span className="g-field__opt">· необязательно</span>
+      </span>
+      {list.length === 0 ? (
+        <p className="g-muted">Назначений нет — добавьте их в разделе «Ещё».</p>
+      ) : (
+        <div className="g-catpick" id={`${idPrefix}-purpose_ids`} role="group" aria-labelledby={`${idPrefix}-pur-l`}>
+          {list.map((p) => {
+            const on = value.includes(p.id);
+            return (
+              <button key={p.id} type="button" className="g-catpick__opt g-purpick__opt" role="checkbox" aria-checked={on} onClick={() => onChange(toggleId(value, p.id))}>
+                {on && <Ico icon={IconCheck} size={16} />}
+                {p.name}
+                {p.archived && <span className="g-purpick__arch">в архиве</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type AreaProps = {
+  id: string;
+  label: string;
+  value: string;
+  max: number;
+  onChange: (v: string) => void;
+  error?: string | undefined;
+  placeholder?: string;
+  hint?: string;
+  rows?: number;
+};
+
+/** Многострочное необязательное поле с подписью и ошибкой. */
+export function AreaField({ id, label, value, max, onChange, error, placeholder, hint, rows }: AreaProps) {
+  const described = [hint ? `${id}-hint` : '', error ? `${id}-err` : ''].filter(Boolean).join(' ') || undefined;
+  return (
+    <div className={`g-field${error ? ' g-field--error' : ''}`}>
+      <label className="g-label" htmlFor={id}>
+        {label} <span className="g-field__opt">· необязательно</span>
+      </label>
+      <textarea
+        className="g-input g-input--area"
+        id={id}
+        rows={rows}
+        maxLength={max}
+        placeholder={placeholder}
+        value={value}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={described}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {hint && (
+        <span className="g-field__hint" id={`${id}-hint`}>
+          {hint}
+        </span>
+      )}
+      {error && (
+        <span className="g-field__error" id={`${id}-err`}>
           {error}
         </span>
       )}

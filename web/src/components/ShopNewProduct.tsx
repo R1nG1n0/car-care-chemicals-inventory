@@ -5,13 +5,13 @@ import { useState } from 'react';
 import { fieldErrors, inventory, type ProductSummary, type Unit } from '../api';
 import { invalidateRefs, invalidateStock } from '../app/queries';
 import { validateProduct, type ProductErrors } from '../lib/product';
-import { CategoryPick } from './ProductFields';
+import { CategoryPick, PurposePick } from './ProductFields';
 import { useStockRefs } from './refs';
 import { Sheet } from './Sheet';
 import { busyProps, Field } from './ui';
 
 /** Поля, которые есть в шторке: ошибка сервера по ним — под поле. */
-const SHOWN = ['name', 'category_id', 'package_size', 'min_stock'] as const;
+const SHOWN = ['name', 'category_id', 'package_size', 'min_stock', 'purpose_ids'] as const;
 
 type Props = {
   /** Набранное в поиске имя; null — шторка закрыта. */
@@ -26,6 +26,7 @@ function Form({ initialName, onCreated }: { initialName: string; onCreated: (p: 
   const cats = refs.categoryList.filter((c) => !c.archived);
   const [name, setName] = useState(initialName);
   const [categoryId, setCategoryId] = useState<number | null>(null);
+  const [purposeIds, setPurposeIds] = useState<number[]>([]);
   const [unit, setUnit] = useState<Unit>('ml');
   const [size, setSize] = useState('');
   const [min, setMin] = useState('');
@@ -44,7 +45,7 @@ function Form({ initialName, onCreated }: { initialName: string; onCreated: (p: 
 
   const submit = () => {
     if (create.isPending) return;
-    const r = validateProduct({ name, brand: '', category_id: categoryId, unit, package_size: size, min_stock: min, barcode: '', note: '' });
+    const r = validateProduct({ name, brand: '', category_id: categoryId, unit, package_size: size, min_stock: min, barcode: '', note: '', purpose_ids: purposeIds, ph: '', incompatible: '', instruction: '' });
     if (!r.ok) {
       setErrors(r.errors);
       return;
@@ -65,6 +66,7 @@ function Form({ initialName, onCreated }: { initialName: string; onCreated: (p: 
     >
       <Field id="snp-name" label="Название" value={name} maxLength={80} error={errors.name} data-autofocus onChange={(e) => setName(e.target.value)} />
       <CategoryPick idPrefix="snp" categories={cats} value={categoryId} onChange={setCategoryId} error={errors.category_id} />
+      <PurposePick idPrefix="snp" purposes={refs.purposeList.filter((p) => !p.archived)} value={purposeIds} onChange={setPurposeIds} />
       <div className="g-field">
         <span className="g-label" id="snp-unit">
           Единица

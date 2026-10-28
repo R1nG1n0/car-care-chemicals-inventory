@@ -15,6 +15,8 @@ export type Location = {
   /** Когда место проверяли инвентаризацией (секунды Unix); null — не проверялось. */
   checked_at: number | null;
 };
+/** Назначение средства (ФТ-15.1): «ЛКП», «стекло»… Свой справочник у каждого пользователя. */
+export type Purpose = { id: number; name: string; sort: number; archived: boolean; products_count?: number };
 export type Store = { id: number; name: string; url: string; archived: boolean };
 
 export type Unit = 'ml' | 'pcs';
@@ -44,7 +46,18 @@ export type ProductSummary = {
   last_consume_qty: number | null;
   /** Метка фото (секунды Unix) для адреса ?v=; null — фото нет (ФТ-10.4). */
   photo_updated_at: number | null;
+  /** Назначения позиции (ФТ-15.1.3), в том числе архивные. */
+  purpose_ids: number[];
+  /** Кислотность 0–14 с одним знаком (ФТ-15.2.1); null — не указана. */
+  ph: number | null;
+  /** Оценка 1–5 (ФТ-15.4.1); null — не оценена. */
+  rating: number | null;
+  /** «Не брать больше» (ФТ-15.4.2). */
+  do_not_buy: boolean;
 };
+
+/** Аналог из имеющегося (ФТ-15.5): позиция в наличии с общим назначением. */
+export type AnalogBrief = { id: number; name: string; brand: string; unit: Unit; total: number };
 
 export type UnitStatus = 'sealed' | 'open' | 'finished' | 'written_off';
 
@@ -97,7 +110,10 @@ export type Movement = {
 };
 
 export type ProductDetail = {
-  product: ProductSummary;
+  product: ProductSummary & { incompatible?: string; instruction?: string };
+  /** Если сервер кладёт текстовые поля рядом с product, а не внутрь. */
+  incompatible?: string;
+  instruction?: string;
   units: StockUnit[];
   purchases: PurchaseRow[];
   movements: Movement[];
@@ -112,12 +128,23 @@ export type ProductInput = {
   barcode: string;
   min_stock: number | null;
   note: string;
+  purpose_ids: number[];
+  ph: number | null;
+  incompatible: string;
+  instruction: string;
 };
 
 export type ProductFilter = 'all' | 'low' | 'out' | 'in';
-export type ProductQuery = { q?: string; category_id?: number; location_id?: number; filter?: ProductFilter; archived?: boolean };
+export type ProductQuery = { q?: string; category_id?: number; location_id?: number; purpose_id?: number; filter?: ProductFilter; archived?: boolean };
 
-export type LowItem = { product: ProductSummary; last_price: number | null; last_store: string | null; cheapest_store: string | null };
+export type LowItem = {
+  product: ProductSummary;
+  last_price: number | null;
+  last_store: string | null;
+  cheapest_store: string | null;
+  /** Есть дома для того же (ФТ-15.5.3), до 3. */
+  analogs?: AnalogBrief[];
+};
 export type ShoppingItem = {
   id: number;
   product_id: number | null;
@@ -216,6 +243,12 @@ export const inventory = {
     send<Category>('PATCH', `/api/categories/${id}`, b),
   reorderCategories: (ids: number[]) => send<undefined>('POST', '/api/categories/reorder', { ids }),
 
+  purposes: async (archived = false, signal?: AbortSignal) =>
+    (await get<{ purposes: Purpose[] }>(`/api/purposes${qs({ archived })}`, signal)).purposes,
+  createPurpose: (b: { name: string }) => send<Purpose>('POST', '/api/purposes', b),
+  updatePurpose: (id: number, b: Partial<{ name: string; archived: boolean }>) => send<Purpose>('PATCH', `/api/purposes/${id}`, b),
+  reorderPurposes: (ids: number[]) => send<undefined>('POST', '/api/purposes/reorder', { ids }),
+
   locations: async (archived = false, signal?: AbortSignal) =>
     (await get<{ locations: Location[] }>(`/api/locations${qs({ archived })}`, signal)).locations,
   createLocation: (b: { name: string }) => send<Location>('POST', '/api/locations', b),
@@ -239,6 +272,12 @@ export const inventory = {
   createProduct: (b: ProductInput) => send<ProductSummary>('POST', '/api/products', b),
   updateProduct: (id: number, b: Partial<ProductInput & { archived: boolean }>) =>
     send<ProductSummary>('PATCH', `/api/products/${id}`, b),
+  /** Оценка и «Не брать больше» (ФТ-15.4): передаются только изменяемые поля; rating: null снимает оценку. */
+  setRating: (id: number, b: { rating?: number | null; do_not_buy?: boolean }) =>
+    send<ProductSummary>('PATCH', `/api/products/${id}/rating`, b),
+  /** Аналоги из имеющегося (ФТ-15.5), до 5. */
+  analogs: async (id: number, signal?: AbortSignal) =>
+    (await get<{ analogs: ProductSummary[] }>(`/api/products/${id}/analogs`, signal)).analogs,
   /** Фото позиции (ФТ-10.4): тело — сырые байты JPEG; ответ — сводка с новым photo_updated_at. */
   setPhoto: (id: number, photo: Blob) =>
     request<ProductSummary>(`/api/products/${id}/photo`, { method: 'PUT', binary: photo, timeoutMs: PHOTO_TIMEOUT_MS }),

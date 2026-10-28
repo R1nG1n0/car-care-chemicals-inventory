@@ -116,8 +116,8 @@ func (s ids) hasOpt(path string, id *int64, what string) error {
 
 // sets — id всех видов записей, на которые ссылаются другие записи.
 type sets struct {
-	categories, locations, stores, products, lines, units, runs, movements ids
-	lineProduct                                                            map[int64]int64
+	categories, locations, stores, purposes, products, lines, units, runs, movements ids
+	lineProduct                                                                      map[int64]int64
 }
 
 // Validate проверяет файл целиком и приводит тексты к нормальному виду
@@ -126,8 +126,9 @@ func Validate(f *File) error {
 	if f.Format != FormatName {
 		return bad("format", "Это не файл экспорта garage: ожидается \""+FormatName+"\"")
 	}
-	if f.Version != FormatVersion {
-		return bad("version", fmt.Sprintf("Версия файла %d не поддерживается, нужна %d", f.Version, FormatVersion))
+	if f.Version < MinFormatVersion || f.Version > FormatVersion {
+		return bad("version", fmt.Sprintf("Версия файла %d не поддерживается, нужна %d или %d",
+			f.Version, MinFormatVersion, FormatVersion))
 	}
 	if err := checkLimits(f); err != nil {
 		return err
@@ -139,7 +140,7 @@ func Validate(f *File) error {
 		}
 	}
 	st := &sets{
-		categories: ids{}, locations: ids{}, stores: ids{}, products: ids{}, lines: ids{}, units: ids{},
+		categories: ids{}, locations: ids{}, stores: ids{}, purposes: ids{}, products: ids{}, lines: ids{}, units: ids{},
 		runs: ids{}, movements: ids{}, lineProduct: map[int64]int64{},
 	}
 	for _, step := range []func(*File, *sets) error{
@@ -226,7 +227,54 @@ func validateRefs(f *File, st *sets) error {
 			return fromField(at("stores", i, ""), err)
 		}
 	}
+	names = uniqueNames{}
+	for i := range f.Purposes {
+		p := &f.Purposes[i]
+		if err := st.purposes.add(at("purposes", i, "id"), p.ID); err != nil {
+			return err
+		}
+		name, err := catalog.CleanRefName("name", p.Name)
+		if err != nil {
+			return fromField(at("purposes", i, ""), err)
+		}
+		p.Name = name
+		if err := names.add(at("purposes", i, "name"), name); err != nil {
+			return err
+		}
+		if err := inRange(at("purposes", i, "sort"), p.Sort, -maxSort, maxSort, "Порядок"); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// validateProductV2 проверяет поля позиции версии 2 (ФТ-15) и возвращает
+// pH в десятых долях.
+func validateProductV2(f *File, st *sets, i int) (*int64, error) {
+	p := &f.Products[i]
+	var phX10 *int64
+	if p.PH != nil {
+		x, err := catalog.PhX10(*p.PH)
+		if err != nil {
+			return nil, fromField(at("products", i, ""), err)
+		}
+		phX10 = &x
+	}
+	if len(p.PurposeIDs) > catalog.MaxProductPurposes {
+		return nil, bad(at("products", i, "purpose_ids"), fmt.Sprintf("Назначений у позиции — не больше %d", catalog.MaxProductPurposes))
+	}
+	seen := map[int64]bool{}
+	for j, id := range p.PurposeIDs {
+		path := fmt.Sprintf("products[%d].purpose_ids[%d]", i, j)
+		if err := st.purposes.has(path, id, "Назначения"); err != nil {
+			return nil, err
+		}
+		if seen[id] {
+			return nil, bad(path, "Назначение повторяется")
+		}
+		seen[id] = true
+	}
+	return phX10, nil
 }
 
 func validateProducts(f *File, st *sets) error {
@@ -238,14 +286,20 @@ func validateProducts(f *File, st *sets) error {
 		if err := st.categories.has(at("products", i, "category_id"), p.CategoryID, "Категории"); err != nil {
 			return err
 		}
+		phX10, err := validateProductV2(f, st, i)
+		if err != nil {
+			return err
+		}
 		in, err := catalog.ValidateProduct(catalog.ProductInput{
 			CategoryID: p.CategoryID, Name: p.Name, Brand: p.Brand, Unit: p.Unit, PackageSize: p.PackageSize,
 			Barcode: p.Barcode, MinStock: p.MinStock, Note: p.Note,
+			PhX10: phX10, Incompatible: p.Incompatible, Instruction: p.Instruction, Rating: p.Rating,
 		})
 		if err != nil {
 			return fromField(at("products", i, ""), err)
 		}
 		p.Name, p.Brand, p.Barcode, p.Note = in.Name, in.Brand, in.Barcode, in.Note
+		p.Incompatible, p.Instruction = in.Incompatible, in.Instruction
 		if err := checkTime(at("products", i, "created_at"), p.CreatedAt); err != nil {
 			return err
 		}

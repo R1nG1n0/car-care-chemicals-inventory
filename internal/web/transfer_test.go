@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -48,6 +49,17 @@ func trSeed(t *testing.T, c *client) {
 	foam := catProduct(t, c, map[string]any{"category_id": cat, "name": "Пена активная", "brand": "Grass",
 		"unit": "ml", "package_size": 1000, "min_stock": 500, "barcode": "4600000000011", "note": "Для мойки"}).ID
 	cloth := catProduct(t, c, map[string]any{"category_id": cat, "name": "Салфетка полировочная", "unit": "pcs", "package_size": 1}).ID
+	// v1.5: свой порядок и архив назначений, свойства, оценка (ФТ-15.6.1).
+	purposes := decode[purposeList](t, c.do(http.MethodGet, "/api/purposes", nil)).Purposes
+	extra := stkCreate(c, "/api/purposes", map[string]any{"name": "Рога и копыта"})
+	expect(t, c.do(http.MethodPatch, stkPath("/api/products/", foam, ""), map[string]any{
+		"purpose_ids": []int64{purposes[0].ID, purposes[2].ID, extra}, "ph": 5.5, "incompatible": "с хлором",
+		"instruction": "Разбавить 1:10", "rating": 4}), http.StatusOK, "свойства позиции")
+	// Архивное назначение остаётся у позиции и уезжает в файл.
+	expect(t, c.do(http.MethodPatch, stkPath("/api/purposes/", purposes[2].ID, ""), map[string]any{"archived": true}),
+		http.StatusOK, "архив назначения")
+	expect(t, c.do(http.MethodPatch, stkPath("/api/products/", cloth, "/rating"), map[string]any{"do_not_buy": true}),
+		http.StatusOK, "не брать больше")
 
 	buy := func(date string, store any, lines ...any) {
 		expect(t, c.do(http.MethodPost, "/api/purchases", map[string]any{"date": date, "store_id": store,
@@ -111,7 +123,7 @@ func TestTransferRoundTrip(t *testing.T) {
 		t.Fatalf("Content-Type: %q", ct)
 	}
 	fileA := decode[transfer.File](t, rec)
-	if fileA.Format != "garage-export" || fileA.Version != 1 || fileA.User.Login != "owner" || fileA.ExportedAt == "" {
+	if fileA.Format != "garage-export" || fileA.Version != 2 || fileA.User.Login != "owner" || fileA.ExportedAt == "" {
 		t.Fatalf("шапка файла: %+v", fileA)
 	}
 	if len(fileA.Products) != 2 || len(fileA.Purchases) != 2 || len(fileA.Movements) < 8 || len(fileA.Recipes) != 1 ||
@@ -147,6 +159,30 @@ func TestTransferRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(trBatchShape(t, fileA), trBatchShape(t, fileB)) {
 		t.Fatalf("группы движений не совпали: %v и %v", trBatchShape(t, fileA), trBatchShape(t, fileB))
+	}
+	if !reflect.DeepEqual(fileA.Purposes, fileB.Purposes) {
+		// id в базе другие: сравниваем по именам, порядку и архиву.
+		names := func(f transfer.File) []string {
+			var out []string
+			for _, p := range f.Purposes {
+				out = append(out, fmt.Sprintf("%s/%d/%v", p.Name, p.Sort, p.Archived))
+			}
+			return out
+		}
+		if !reflect.DeepEqual(names(fileA), names(fileB)) {
+			t.Fatalf("назначения: %v и %v", names(fileA), names(fileB))
+		}
+	}
+	for i := range fileA.Products {
+		x, y := fileA.Products[i], fileB.Products[i]
+		if len(x.PurposeIDs) != len(y.PurposeIDs) || !reflect.DeepEqual(x.PH, y.PH) || x.Incompatible != y.Incompatible ||
+			x.Instruction != y.Instruction || !reflect.DeepEqual(x.Rating, y.Rating) || x.DoNotBuy != y.DoNotBuy {
+			t.Fatalf("поля версии 2 позиции %q: %+v и %+v", x.Name, x, y)
+		}
+	}
+	if foam := fileA.Products[0]; len(foam.PurposeIDs) != 3 || foam.PH == nil || *foam.PH != 5.5 || foam.Rating == nil ||
+		*foam.Rating != 4 || !fileA.Products[1].DoNotBuy {
+		t.Fatalf("экспорт не содержит новых полей: %+v", fileA.Products)
 	}
 	if len(fileB.Categories) != len(fileA.Categories) {
 		t.Fatalf("категории слились неверно: %d и %d", len(fileB.Categories), len(fileA.Categories))
@@ -270,7 +306,7 @@ func TestImportRejectsBadFiles(t *testing.T) {
 		{"JSON с хвостом", append(append([]byte{}, raw...), []byte(" {}")...), 400, ""},
 		{"неверный тип поля", mutate(func(m map[string]any) { item(m, "products", 0)["name"] = 5 }), 400, "products.name"},
 		{"чужой формат", mutate(func(m map[string]any) { m["format"] = "other" }), 400, "format"},
-		{"версия 2", mutate(func(m map[string]any) { m["version"] = 2 }), 400, "version"},
+		{"версия 3", mutate(func(m map[string]any) { m["version"] = 3 }), 400, "version"},
 		{"без версии", mutate(func(m map[string]any) { delete(m, "version") }), 400, "version"},
 		{"пустое название позиции", mutate(func(m map[string]any) { item(m, "products", 1)["name"] = "  " }), 400, "products[1].name"},
 		{"слишком длинное название", mutate(func(m map[string]any) { item(m, "products", 0)["name"] = strings.Repeat("я", 81) }), 400, "products[0].name"},
@@ -446,4 +482,108 @@ func TestExportIsolationAndAccess(t *testing.T) {
 	noCSRF.noCSRF = true
 	expect(t, noCSRF.do(http.MethodPost, "/api/import", map[string]any{}), http.StatusForbidden, "импорт без CSRF")
 	expect(t, a.do(http.MethodGet, "/api/import", nil), http.StatusMethodNotAllowed, "GET /api/import")
+}
+
+// Файл версии 1 (без назначений и новых полей) импортируется: стартовые
+// назначения пользователя остаются, у позиций новые поля пусты.
+func TestImportVersion1File(t *testing.T) {
+	e := newEnv(t, false)
+	a := stkSignIn(e, "owner")
+	trSeed(t, a)
+	raw, _ := json.Marshal(trExport(t, a))
+	var m map[string]any
+	_ = json.Unmarshal(raw, &m)
+	m["version"] = 1
+	delete(m, "purposes")
+	for _, p := range m["products"].([]any) {
+		for _, k := range []string{"purpose_ids", "ph", "incompatible", "instruction", "rating", "do_not_buy"} {
+			delete(p.(map[string]any), k)
+		}
+	}
+	old, _ := json.Marshal(m)
+
+	b := stkSignIn(e, "friend")
+	expect(t, trRaw(b, "/api/import", old), http.StatusOK, "импорт файла версии 1")
+	got := trExport(t, b)
+	if len(got.Purposes) != 7 || got.Version != 2 {
+		t.Fatalf("назначения после импорта v1: %+v", got.Purposes)
+	}
+	for _, p := range got.Products {
+		if len(p.PurposeIDs) != 0 || p.PH != nil || p.Rating != nil || p.DoNotBuy || p.Incompatible != "" || p.Instruction != "" {
+			t.Fatalf("у позиции %q новые поля не пусты: %+v", p.Name, p)
+		}
+	}
+}
+
+// Новые поля файла проверяются так же, как ввод через API.
+func TestImportRejectsBadV2Fields(t *testing.T) {
+	e := newEnv(t, false)
+	a := stkSignIn(e, "owner")
+	trSeed(t, a)
+	raw, _ := json.Marshal(trExport(t, a))
+	mutate := func(fn func(p, m map[string]any)) []byte {
+		var m map[string]any
+		_ = json.Unmarshal(raw, &m)
+		fn(m["products"].([]any)[0].(map[string]any), m)
+		out, _ := json.Marshal(m)
+		return out
+	}
+	b := stkSignIn(e, "friend")
+	for name, tc := range map[string]struct {
+		body  []byte
+		field string
+	}{
+		"pH 15":           {mutate(func(p, _ map[string]any) { p["ph"] = 15 }), "products[0].ph"},
+		"pH два знака":    {mutate(func(p, _ map[string]any) { p["ph"] = 7.25 }), "products[0].ph"},
+		"оценка 6":        {mutate(func(p, _ map[string]any) { p["rating"] = 6 }), "products[0].rating"},
+		"длинная инстр.":  {mutate(func(p, _ map[string]any) { p["instruction"] = strings.Repeat("я", 2001) }), "products[0].instruction"},
+		"длинное несовм.": {mutate(func(p, _ map[string]any) { p["incompatible"] = strings.Repeat("я", 301) }), "products[0].incompatible"},
+		"назначение вне файла": {mutate(func(p, _ map[string]any) { p["purpose_ids"] = []int{987654} }),
+			"products[0].purpose_ids[0]"},
+		"повтор назначения": {mutate(func(p, m map[string]any) {
+			id := m["purposes"].([]any)[0].(map[string]any)["id"]
+			p["purpose_ids"] = []any{id, id}
+		}), "products[0].purpose_ids[1]"},
+		"повтор имени назначения": {mutate(func(_, m map[string]any) {
+			m["purposes"].([]any)[1].(map[string]any)["name"] = strings.ToUpper(m["purposes"].([]any)[0].(map[string]any)["name"].(string))
+		}), "purposes[1].name"},
+	} {
+		rec := trRaw(b, "/api/import", tc.body)
+		expect(t, rec, http.StatusBadRequest, name)
+		if got := decode[errBody](t, rec); got.Field != tc.field {
+			t.Fatalf("%s: поле %q, ожидалось %q (%s)", name, got.Field, tc.field, got.Error)
+		}
+	}
+}
+
+// CSV позиций: в конце колонки «Назначения», «pH», «Оценка», «Не брать больше».
+func TestCSVProductsNewColumns(t *testing.T) {
+	e := newEnv(t, false)
+	a := stkSignIn(e, "owner")
+	cat := catFirstCategory(t, a)
+	leather, glass := purposeByName(t, a, "кожа"), purposeByName(t, a, "стекло")
+	catProduct(t, a, map[string]any{"category_id": cat, "name": "Крем", "unit": "ml", "package_size": 100,
+		"purpose_ids": []int64{leather, glass}, "ph": 5.5, "rating": 4, "do_not_buy": true})
+	catProduct(t, a, map[string]any{"category_id": cat, "name": "Голая", "unit": "ml", "package_size": 100})
+
+	body := trGet(t, a, "/api/export/products.csv")
+	lines := strings.Split(strings.TrimSpace(body), "\r\n")
+	if !strings.HasSuffix(lines[0], ";В архиве;Назначения;pH;Оценка;Не брать больше") {
+		t.Fatalf("заголовок: %q", lines[0])
+	}
+	var cream, bare string
+	for _, l := range lines[1:] {
+		if strings.HasPrefix(l, "Крем;") {
+			cream = l
+		}
+		if strings.HasPrefix(l, "Голая;") {
+			bare = l
+		}
+	}
+	if !strings.HasSuffix(cream, ";нет;стекло, кожа;5,5;4;да") {
+		t.Fatalf("строка с полями: %q", cream)
+	}
+	if !strings.HasSuffix(bare, ";нет;;;;нет") {
+		t.Fatalf("строка без полей: %q", bare)
+	}
 }

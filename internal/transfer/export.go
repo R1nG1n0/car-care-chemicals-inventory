@@ -69,7 +69,7 @@ func (s *Service) Export(ctx context.Context, userID int64) (*File, error) {
 		Format:     FormatName,
 		Version:    FormatVersion,
 		ExportedAt: s.now().UTC().Format(time.RFC3339),
-		Categories: []Category{}, Locations: []Location{}, Stores: []Store{}, Products: []Product{},
+		Categories: []Category{}, Locations: []Location{}, Stores: []Store{}, Purposes: []Purpose{}, Products: []Product{},
 		Units: []Unit{}, Purchases: []Purchase{}, RecipeRuns: []RecipeRun{}, Movements: []Movement{},
 		Recipes: []Recipe{}, Shopping: []Shopping{},
 	}
@@ -130,7 +130,7 @@ func exportRefs(ctx context.Context, q querier, uid int64, f *File) error {
 	if err != nil {
 		return err
 	}
-	return each(ctx, q, "магазины", `SELECT id, name, url, archived FROM stores WHERE user_id = ? ORDER BY id`, u,
+	err = each(ctx, q, "магазины", `SELECT id, name, url, archived FROM stores WHERE user_id = ? ORDER BY id`, u,
 		func(r *sql.Rows) error {
 			var st Store
 			if err := r.Scan(&st.ID, &st.Name, &st.URL, &st.Archived); err != nil {
@@ -139,22 +139,61 @@ func exportRefs(ctx context.Context, q querier, uid int64, f *File) error {
 			f.Stores = append(f.Stores, st)
 			return nil
 		})
+	if err != nil {
+		return err
+	}
+	return each(ctx, q, "назначения", `SELECT id, name, sort, archived FROM purposes WHERE user_id = ? ORDER BY id`, u,
+		func(r *sql.Rows) error {
+			var p Purpose
+			if err := r.Scan(&p.ID, &p.Name, &p.Sort, &p.Archived); err != nil {
+				return err
+			}
+			f.Purposes = append(f.Purposes, p)
+			return nil
+		})
 }
 
 func exportProducts(ctx context.Context, q querier, uid int64, f *File) error {
-	return each(ctx, q, "позиции", `SELECT id, category_id, name, brand, unit, package_size, barcode, min_stock,
-		note, archived, created_at FROM products WHERE user_id = ? ORDER BY id`, []any{uid},
+	err := each(ctx, q, "позиции", `SELECT id, category_id, name, brand, unit, package_size, barcode, min_stock,
+		note, archived, created_at, ph_x10, incompatible, instruction, rating, do_not_buy
+		FROM products WHERE user_id = ? ORDER BY id`, []any{uid},
 		func(r *sql.Rows) error {
 			var p Product
-			var minStock sql.NullInt64
+			var minStock, phX10, rating sql.NullInt64
 			if err := r.Scan(&p.ID, &p.CategoryID, &p.Name, &p.Brand, &p.Unit, &p.PackageSize, &p.Barcode,
-				&minStock, &p.Note, &p.Archived, &p.CreatedAt); err != nil {
+				&minStock, &p.Note, &p.Archived, &p.CreatedAt, &phX10, &p.Incompatible, &p.Instruction,
+				&rating, &p.DoNotBuy); err != nil {
 				return err
 			}
-			p.MinStock = ptr(minStock)
+			p.MinStock, p.Rating = ptr(minStock), ptr(rating)
+			if phX10.Valid {
+				v := float64(phX10.Int64) / 10
+				p.PH = &v
+			}
+			p.PurposeIDs = []int64{}
 			f.Products = append(f.Products, p)
 			return nil
 		})
+	if err != nil {
+		return err
+	}
+	byID := make(map[int64]int, len(f.Products))
+	for i, p := range f.Products {
+		byID[p.ID] = i
+	}
+	return each(ctx, q, "назначения позиций", `SELECT product_id, purpose_id FROM product_purposes
+		WHERE user_id = ? ORDER BY product_id, purpose_id`, []any{uid}, func(r *sql.Rows) error {
+		var product, purpose int64
+		if err := r.Scan(&product, &purpose); err != nil {
+			return err
+		}
+		i, ok := byID[product]
+		if !ok {
+			return fmt.Errorf("назначение %d: нет позиции %d", purpose, product)
+		}
+		f.Products[i].PurposeIDs = append(f.Products[i].PurposeIDs, purpose)
+		return nil
+	})
 }
 
 func exportPurchases(ctx context.Context, q querier, uid int64, f *File) error {

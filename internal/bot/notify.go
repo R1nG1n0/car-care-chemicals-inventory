@@ -59,6 +59,7 @@ func (b *Bot) checkUserLow(ctx context.Context, l Link) error {
 	if err != nil {
 		return err
 	}
+	low = withoutDoNotBuy(low)
 	known, err := b.lowState(ctx, l.UserID)
 	if err != nil {
 		return err
@@ -96,6 +97,18 @@ func (b *Bot) checkUserLow(ctx context.Context, l Link) error {
 	return first
 }
 
+// withoutDoNotBuy убирает позиции «Не брать больше»: по ним нет уведомлений
+// и состояние не копится (ФТ-15.4.2).
+func withoutDoNotBuy(list []catalog.ProductSummary) []catalog.ProductSummary {
+	out := list[:0:0]
+	for _, p := range list {
+		if !p.DoNotBuy {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // terminalSendError — Telegram отказал насовсем: бот заблокирован или чата нет.
 func terminalSendError(err error) bool {
 	var ae *telegram.APIError
@@ -118,6 +131,14 @@ func (b *Bot) notifyLow(ctx context.Context, l Link, p catalog.ProductSummary) e
 		if lp.storeName != "" {
 			text += " · " + telegram.Esc(lp.storeName)
 		}
+	}
+	// «Есть дома для того же» (ФТ-15.5.3); сбой поиска аналогов не мешает уведомлению.
+	if an, err := b.cat.Analogs(ctx, l.UserID, p.ID, catalog.ShoppingAnalogsLimit); err == nil && len(an) > 0 {
+		names := make([]string, len(an))
+		for i, a := range an {
+			names[i] = telegram.Esc(productTitle(a.Name, a.Brand))
+		}
+		text += "\nЕсть дома для того же: " + strings.Join(names, ", ")
 	}
 	kb := &telegram.Keyboard{Rows: [][]telegram.Button{telegram.Row(telegram.Btn("Куплено", "b:"+strconv.FormatInt(p.ID, 10)))}}
 	_, err := b.api.SendMessage(ctx, l.ChatID, text, kb)
@@ -148,6 +169,7 @@ func (b *Bot) seedLow(ctx context.Context, userID int64) error {
 	if err != nil {
 		return err
 	}
+	low = withoutDoNotBuy(low)
 	return inTx(ctx, b.db, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM bot_low_state WHERE user_id = ?`, userID); err != nil {
 			return err

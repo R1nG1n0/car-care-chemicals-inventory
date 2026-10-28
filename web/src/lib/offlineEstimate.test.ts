@@ -15,6 +15,13 @@ const p = (over: Partial<ProductSummary> = {}): ProductSummary =>
   }) as ProductSummary;
 
 describe('оценка остатков', () => {
+  it('новые поля карточки средства (ФТ-15) сохраняются, старые снимки без них не ломаются', () => {
+    const full = estimateSummary(p({ purpose_ids: [1, 2], ph: 7.5, rating: 4, do_not_buy: true }), 100);
+    expect(full).toMatchObject({ purpose_ids: [1, 2], ph: 7.5, rating: 4, do_not_buy: true });
+    const old = estimateSummary(p(), 100);
+    expect(old.stock.total).toBe(900);
+    expect(old.purpose_ids).toBeUndefined();
+  });
   it('уменьшает общий остаток и вскрытую бутылку, пересчитывает «мало»', () => {
     const r = estimateSummary(p(), 150);
     expect(r.stock).toMatchObject({ total: 850, open_qty: 250 });

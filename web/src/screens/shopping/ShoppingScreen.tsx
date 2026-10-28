@@ -141,15 +141,28 @@ export function ShoppingScreen() {
           </h2>
           <div className="g-list">
             {low.map((l) => (
-              <div className="g-row" key={l.product.id}>
-                <Link to={`/items/${l.product.id}`} className="g-row__main shop-rowbtn">
-                  <span className="g-row__title">{l.product.name}</span>
-                  <span className="g-row__sub">{lowSub(l)}</span>
-                </Link>
+              <div className="g-row shop-low" key={l.product.id}>
+                <div className="g-row__main">
+                  <Link to={`/items/${l.product.id}`} className="shop-rowbtn">
+                    <span className="g-row__title">{l.product.name}</span>
+                    <span className="g-row__sub">{lowSub(l)}</span>
+                  </Link>
+                </div>
                 <span className="g-badge g-badge--danger">{qtyText(l.product.stock.total, l.product.unit)}</span>
                 <Link to={`/purchases/new?product=${l.product.id}`} className="g-btn g-btn--sm g-press" aria-label={`Купить ${l.product.name}`}>
                   Купить
                 </Link>
+                {l.analogs && l.analogs.length > 0 && (
+                  <div className="analog-line analog-line--row">
+                    Есть дома:{' '}
+                    {l.analogs.map((a, i) => (
+                      <span key={a.id}>
+                        {i > 0 && ', '}
+                        <Link to={`/items/${a.id}`}>{a.name}</Link>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -10,7 +10,7 @@ import { Link, useSearchParams } from 'react-router';
 import { DESKTOP, useMedia } from '../../components/hooks';
 import { catClass, useProducts, useStockRefs } from '../../components/refs';
 import { Empty, Ico, LoadError } from '../../components/ui';
-import { parseFilter, stockCounts, visibleProducts, type StockFilter } from '../../lib/stock';
+import { parseFilter, parsePurposeParam, stockCounts, visibleProducts, type StockFilter } from '../../lib/stock';
 import { ConsumeSheet } from './ConsumeSheet';
 import { ScanFlow } from './ScanFlow';
 import { StockList } from './StockList';
@@ -25,12 +25,17 @@ export function StockHome() {
   const [filter, setFilter] = useState<StockFilter>(() =>
     params.get('location') ? parseFilter(`loc:${params.get('location')}`) : parseFilter(params.get('filter')),
   );
+  const [purposeId, setPurposeId] = useState<number | null>(() => parsePurposeParam(params.get('purpose')));
   const [selected, setSelected] = useState<number | null>(null);
   const [swiped, setSwiped] = useState<number | null>(null);
   const [scanning, setScanning] = useState(false);
 
   const all = useMemo(() => products.data ?? [], [products.data]);
-  const items = useMemo(() => visibleProducts(all, q, filter), [all, q, filter]);
+  const purposeNames = useMemo(() => new Map(refs.purposeList.map((p) => [p.id, p.name])), [refs.purposeList]);
+  const items = useMemo(
+    () => visibleProducts(all, q, filter, { id: purposeId, names: purposeNames }),
+    [all, q, filter, purposeId, purposeNames],
+  );
   const counts = stockCounts(all);
   const picking = params.get('consume') === '1';
   const sheetOpen = picking || swiped !== null;
@@ -47,6 +52,8 @@ export function StockHome() {
 
   const places = refs.locationList.filter((l) => !l.archived && all.some((p) => p.location_ids.includes(l.id)));
   const cats = refs.categoryList.filter((c) => all.some((p) => p.category_id === c.id));
+  // Назначения: только те, что есть у позиций; выбранное остаётся в ряду, даже если позиций не осталось
+  const purposes = refs.purposeList.filter((x) => x.id === purposeId || (!x.archived && all.some((p) => p.purpose_ids?.includes(x.id))));
   const chip = (f: StockFilter, label: string, cls?: string, dot?: boolean) => (
     <button key={f} type="button" className={`g-filter${cls ? ` ${cls}` : ''}`} aria-pressed={filter === f} onClick={() => setFilter(f)}>
       {dot && <span className="g-catpick__dot stock-filters__dot" />}
@@ -111,7 +118,24 @@ export function StockHome() {
           {places.map((l) => chip(`loc:${l.id}`, l.name))}
           {cats.map((c) => chip(`cat:${c.id}`, c.name, catClass(c.color), true))}
         </div>
-        {items.length === 0 && <NotFound q={q.trim()} onAll={() => setFilter('all')} />}
+        {purposes.length > 0 && (
+          <div className="g-filters" role="group" aria-label="Назначение">
+            {purposes.map((x) => (
+              <button key={x.id} type="button" className="g-filter" aria-pressed={purposeId === x.id} onClick={() => setPurposeId(purposeId === x.id ? null : x.id)}>
+                {x.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {items.length === 0 && (
+          <NotFound
+            q={q.trim()}
+            onAll={() => {
+              setFilter('all');
+              setPurposeId(null);
+            }}
+          />
+        )}
         <StockList
           items={items}
           selectedId={current?.id}

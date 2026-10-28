@@ -24,6 +24,7 @@ import './styles/photo.css';
 import './styles/shopping.css';
 import './styles/scanner.css';
 import './styles/inventory.css';
+import './styles/about.css';
 import './styles/reports.css';
 import { App } from './App';
 import { listenInstallPrompt } from './app/install';

@@ -128,11 +128,30 @@ func (s *Service) ProductsCSV(ctx context.Context, userID int64) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
+	purposes := map[int64][]string{}
+	err = each(ctx, s.db, "назначения позиций", `
+		SELECT pp.product_id, c.name FROM product_purposes pp
+		JOIN purposes c ON c.user_id = pp.user_id AND c.id = pp.purpose_id
+		WHERE pp.user_id = ? ORDER BY c.sort, c.name, c.id`,
+		[]any{userID}, func(r *sql.Rows) error {
+			var id int64
+			var name string
+			if err := r.Scan(&id, &name); err != nil {
+				return err
+			}
+			purposes[id] = append(purposes[id], name)
+			return nil
+		})
+	if err != nil {
+		return nil, err
+	}
 	t := newCSV("Название", "Бренд", "Категория", "Единица", "Объём упаковки", "Остаток", "Экземпляров",
-		"Минимальный остаток", "Ниже минимума", "Места", "Штрихкод", "Заметка", "В архиве")
+		"Минимальный остаток", "Ниже минимума", "Места", "Штрихкод", "Заметка", "В архиве",
+		"Назначения", "pH", "Оценка", "Не брать больше")
 	err = each(ctx, s.db, "позиции", `
 		SELECT p.id, p.name, p.brand, c.name, p.unit, p.package_size,
-		       COALESCE(SUM(u.remaining_qty), 0), COUNT(u.id), p.min_stock, p.barcode, p.note, p.archived
+		       COALESCE(SUM(u.remaining_qty), 0), COUNT(u.id), p.min_stock, p.barcode, p.note, p.archived,
+		       p.ph_x10, p.rating, p.do_not_buy
 		FROM products p
 		JOIN categories c ON c.user_id = p.user_id AND c.id = p.category_id
 		LEFT JOIN units u ON u.user_id = p.user_id AND u.product_id = p.id AND u.status IN ('sealed', 'open')
@@ -141,10 +160,10 @@ func (s *Service) ProductsCSV(ctx context.Context, userID int64) ([]byte, error)
 		func(r *sql.Rows) error {
 			var id, size, total, count int64
 			var name, brand, category, unit, barcode, note string
-			var minStock sql.NullInt64
-			var archived bool
+			var minStock, phX10, rating sql.NullInt64
+			var archived, doNotBuy bool
 			if err := r.Scan(&id, &name, &brand, &category, &unit, &size, &total, &count, &minStock,
-				&barcode, &note, &archived); err != nil {
+				&barcode, &note, &archived, &phX10, &rating, &doNotBuy); err != nil {
 				return err
 			}
 			min, low := "", "нет"
@@ -152,9 +171,16 @@ func (s *Service) ProductsCSV(ctx context.Context, userID int64) ([]byte, error)
 				min = itoa(minStock.Int64)
 				low = yesNo(total < minStock.Int64)
 			}
+			ph, stars := "", ""
+			if phX10.Valid {
+				ph = fmt.Sprintf("%d,%d", phX10.Int64/10, phX10.Int64%10)
+			}
+			if rating.Valid {
+				stars = itoa(rating.Int64)
+			}
 			t.row(csvText(name), csvText(brand), csvText(category), unitName(unit), itoa(size), itoa(total),
 				itoa(count), min, low, csvText(strings.Join(places[id], ", ")), csvText(barcode), csvText(note),
-				yesNo(archived))
+				yesNo(archived), csvText(strings.Join(purposes[id], ", ")), ph, stars, yesNo(doNotBuy))
 			return nil
 		})
 	if err != nil {

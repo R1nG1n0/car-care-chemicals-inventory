@@ -19,11 +19,11 @@ export function normalize(s: string): string {
   return s.toLocaleLowerCase('ru-RU').replace(/ё/gu, 'е').replace(/\s+/gu, ' ').trim();
 }
 
-/** Поиск по названию, бренду и штрихкоду, без учёта регистра, с первой буквы (ФТ-6.1). */
-export function matchProduct(p: Pick<ProductSummary, 'name' | 'brand' | 'barcode'>, query: string): boolean {
+/** Поиск по названию, бренду, штрихкоду и (extra) названиям назначений, без учёта регистра (ФТ-6.1, ФТ-15.3.1). */
+export function matchProduct(p: Pick<ProductSummary, 'name' | 'brand' | 'barcode'>, query: string, extra = ''): boolean {
   const q = normalize(query);
   if (q === '') return true;
-  const hay = normalize(`${p.name} ${p.brand}`);
+  const hay = normalize(`${p.name} ${p.brand} ${extra}`);
   // Все слова запроса должны найтись: «koch gsf» находит «Koch Chemie Gsf»
   if (q.split(' ').every((w) => hay.includes(w))) return true;
   return p.barcode !== '' && p.barcode.includes(q.replace(/\s/gu, ''));
@@ -48,9 +48,27 @@ export function passesFilter(p: ProductSummary, f: StockFilter): boolean {
   return kind === 'loc' ? p.location_ids.includes(id) : p.category_id === id;
 }
 
-/** Видимые карточки: фильтр, затем поиск; порядок — как пришёл с сервера (по имени). */
-export function visibleProducts(list: readonly ProductSummary[], query: string, f: StockFilter): ProductSummary[] {
-  return list.filter((p) => passesFilter(p, f) && matchProduct(p, query));
+/** Назначение из ?purpose=: целое больше нуля, иначе null. */
+export function parsePurposeParam(s: string | null | undefined): number | null {
+  return /^[1-9]\d*$/u.test(s ?? '') ? Number(s) : null;
+}
+
+/** Фильтр по назначению (ФТ-15.3.2) — отдельно от чипов выше, сочетается с ними. */
+export type PurposeScope = { id: number | null; names: ReadonlyMap<number, string> };
+
+const purposeNames = (p: Pick<ProductSummary, 'purpose_ids'>, names: ReadonlyMap<number, string>): string =>
+  (p.purpose_ids ?? []).map((id) => names.get(id) ?? '').join(' ');
+
+/** Видимые карточки: фильтр и назначение, затем поиск (в том числе по назначениям); порядок — как пришёл с сервера (по имени). */
+export function visibleProducts(list: readonly ProductSummary[], query: string, f: StockFilter, purpose?: PurposeScope): ProductSummary[] {
+  const names = purpose?.names;
+  const pid = purpose?.id ?? null;
+  return list.filter(
+    (p) =>
+      passesFilter(p, f) &&
+      (pid === null || (p.purpose_ids ?? []).includes(pid)) &&
+      matchProduct(p, query, names ? purposeNames(p, names) : ''),
+  );
 }
 
 export type StockCounts = { all: number; low: number; out: number };

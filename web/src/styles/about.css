@@ -1,0 +1,54 @@
+/* Карточка средства (ФТ-15): оценка, «О средстве», аналоги, выбор назначений */
+
+/* ---------- Звёзды оценки ---------- */
+.g-rating { display: flex; gap: var(--sp-1); }
+.g-star {
+  display: inline-grid; place-items: center; width: var(--tap); height: var(--tap);
+  border: 0; border-radius: var(--r-control); background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.g-star.is-on { color: var(--text); }
+.g-star[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+.g-star .ti { display: block; }
+.g-star.is-pop .ti { animation: g-star-pop 160ms var(--ease-out) both; }
+@keyframes g-star-pop { from { transform: scale(0.9); } to { transform: scale(1); } }
+
+.g-rating-mini { display: inline-flex; align-items: center; gap: 2px; font-size: var(--fs-12); font-weight: var(--fw-bold); }
+
+/* Блок оценки: подпись, звёзды, переключатель «Не брать больше» */
+.about-rate { display: grid; gap: var(--sp-2); }
+.about-rate__row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); }
+.g-badge--dnb { background: var(--danger); color: var(--on-danger); }
+
+/* ---------- «О средстве» ---------- */
+.about { display: grid; gap: var(--sp-3); }
+.about__chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.about__more { justify-self: start; padding-inline: 0; }
+.about__ph { font-size: var(--fs-13); font-weight: var(--fw-semibold); color: var(--text-muted); }
+.about__warn {
+  display: flex; gap: var(--sp-2); align-items: flex-start; padding: var(--sp-2) var(--sp-3);
+  border: var(--bw) solid var(--danger-text); border-radius: var(--r-control); color: var(--danger-text);
+  font-size: var(--fs-13); font-weight: var(--fw-bold); line-height: var(--lh-tight);
+}
+.about__warn .ti { flex: none; }
+.about__warn span { overflow-wrap: anywhere; }
+.about__text { margin: 0; white-space: pre-line; overflow-wrap: anywhere; font-size: var(--fs-14, 14px); }
+.about__text--fold { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; line-clamp: 5; overflow: hidden; }
+
+/* ---------- Аналоги ---------- */
+.analog-link { color: inherit; text-decoration: none; }
+.analog-line { font-size: var(--fs-12); font-weight: var(--fw-semibold); color: var(--text-muted); }
+/* В списке покупок — отдельной строкой под позицией, не между значком и кнопкой */
+.shop-low { flex-wrap: wrap; }
+.analog-line--row { flex-basis: 100%; margin-top: calc(-1 * var(--sp-2)); }
+.analog-line a { display: inline-block; padding-block: 14px; color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+
+/* ---------- Назначения чипами в форме ---------- */
+.g-purpick__opt .ti { flex: none; }
+.g-purpick__arch { font-size: var(--fs-12); font-weight: var(--fw-semibold); opacity: 0.75; }
+
+@media (prefers-reduced-motion: reduce) {
+  .g-star.is-pop .ti { animation: none; }
+}
+
+/* Теги в карточке позиции на главной: оценка, «не брать», «не отправлено» */
+.stock-card__tags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-1); }

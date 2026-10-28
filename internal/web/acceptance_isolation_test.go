@@ -52,13 +52,22 @@ func TestAccIsolationAllStage2(t *testing.T) {
 	recipeB := stkCreate(b, "/api/recipes", map[string]any{"name": "Свой рецепт",
 		"items": []any{map[string]any{"product_id": prodB, "qty": 1}}})
 
+	// v1.5 (ФТ-15): назначения владельца и его позиция с аналогом.
+	purA := stkCreate(a, "/api/purposes", map[string]any{"name": "Тайное назначение"})
+	expect(t, a.do(http.MethodPatch, stkPath("/api/products/", prodA, ""), map[string]any{"purpose_ids": []int64{purA},
+		"ph": 7.5, "instruction": "Тайная инструкция", "rating": 5}), http.StatusOK, "назначение позиции владельца")
+	stkProduct(a, catA, "Секретный аналог", "ml", 100)
+	purB := stkCreate(b, "/api/purposes", map[string]any{"name": "Своё назначение"})
+
 	// Фото владельца (ФТ-10.4): чужой не может ни прочитать, ни заменить, ни удалить.
 	photoA := phJPEG(t, 33, 22)
 	phPut(t, a, prodA, photoA)
 
 	ownerGets := []string{
 		stkPath("/api/products/", prodA, "/photo"),
-		"/api/categories?archived=1", "/api/locations?archived=1", "/api/stores?archived=1",
+		"/api/categories?archived=1", "/api/purposes?archived=1", stkPath("/api/products/", prodA, "/analogs"),
+		stkPath("/api/products?purpose_id=", purA, ""), "/api/products?q=Тайное",
+		"/api/locations?archived=1", "/api/stores?archived=1",
 		"/api/products", "/api/products?archived=1", stkPath("/api/products/", prodA, ""), "/api/brands",
 		"/api/shopping", "/api/purchases", stkPath("/api/purchases/", purchaseA.ID, ""),
 		"/api/movements", stkPath("/api/movements?product_id=", prodA, ""),
@@ -98,6 +107,18 @@ func TestAccIsolationAllStage2(t *testing.T) {
 		{"порядок: своё и чужое место", http.MethodPost, "/api/locations/reorder", map[string]any{"ids": []int64{locB, locA}}, 400},
 		{"переименование магазина", http.MethodPatch, stkPath("/api/stores/", storeA, ""), map[string]any{"name": "Взлом"}, 404},
 		{"архив магазина", http.MethodPatch, stkPath("/api/stores/", storeA, ""), map[string]any{"archived": true}, 404},
+		// Назначения, оценка, аналоги (v1.5).
+		{"переименование назначения", http.MethodPatch, stkPath("/api/purposes/", purA, ""), map[string]any{"name": "Взлом"}, 404},
+		{"архив назначения", http.MethodPatch, stkPath("/api/purposes/", purA, ""), map[string]any{"archived": true}, 404},
+		{"порядок: чужое назначение", http.MethodPost, "/api/purposes/reorder", map[string]any{"ids": []int64{purA}}, 400},
+		{"порядок: своё и чужое назначение", http.MethodPost, "/api/purposes/reorder", map[string]any{"ids": []int64{purB, purA}}, 400},
+		{"новая позиция с чужим назначением", http.MethodPost, "/api/products",
+			map[string]any{"category_id": catB, "name": "X", "unit": "ml", "package_size": 1, "purpose_ids": []int64{purA}}, 404},
+		{"своя позиция с чужим назначением", http.MethodPatch, stkPath("/api/products/", prodB, ""),
+			map[string]any{"purpose_ids": []int64{purB, purA}}, 404},
+		{"оценка чужой позиции", http.MethodPatch, stkPath("/api/products/", prodA, "/rating"),
+			map[string]any{"rating": 1, "do_not_buy": true}, 404},
+		{"аналоги чужой позиции", http.MethodGet, stkPath("/api/products/", prodA, "/analogs"), nil, 404},
 		// Позиции.
 		{"карточка позиции", http.MethodGet, stkPath("/api/products/", prodA, ""), nil, 404},
 		{"правка позиции", http.MethodPatch, stkPath("/api/products/", prodA, ""), map[string]any{"name": "Взлом"}, 404},
@@ -151,6 +172,21 @@ func TestAccIsolationAllStage2(t *testing.T) {
 			}
 		})
 	}
+	// Чужое назначение в фильтре и поиске не находит ничего, а в списках второго нет чужих названий.
+	for _, target := range []string{stkPath("/api/products?purpose_id=", purA, ""), "/api/products?q=Тайное"} {
+		if list := decode[catProducts](t, b.do(http.MethodGet, target, nil)).Products; len(list) != 0 {
+			t.Fatalf("%s: чужие позиции %+v", target, list)
+		}
+	}
+	for _, p := range decode[purposeList](t, b.do(http.MethodGet, "/api/purposes?archived=1", nil)).Purposes {
+		if p.ID == purA || strings.Contains(p.Name, "Тайн") {
+			t.Fatalf("в назначениях второго чужое: %+v", p)
+		}
+	}
+	if body := b.do(http.MethodGet, "/api/export.json", nil).Body.String(); strings.Contains(body, "Тайн") {
+		t.Fatal("в экспорте второго есть чужое назначение или инструкция")
+	}
+
 	// Импорт проверяет файл раньше, чем содержимое склада, но непустой склад отказывает
 	// ещё раньше (409): ссылки на чужие id проверяем от имени пользователя с пустым складом.
 	fresh := stkSignIn(e, "newbie")

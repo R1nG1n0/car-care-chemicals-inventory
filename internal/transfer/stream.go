@@ -51,6 +51,7 @@ func (s *Service) WriteJSON(ctx context.Context, userID int64, w io.Writer, f *F
 	field("categories", f.Categories)
 	field("locations", f.Locations)
 	field("stores", f.Stores)
+	field("purposes", f.Purposes)
 	if werr == nil {
 		werr = s.writeProducts(ctx, userID, bw, enc, f.Products, withPhoto)
 	}

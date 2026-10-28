@@ -23,6 +23,13 @@ func (s *Server) catalogRoutes() {
 	s.api("/api/categories/reorder", signedIn, methods{http.MethodPost: h.reorder(h.cat.ReorderCategories)})
 	s.api("/api/categories/{id}", signedIn, methods{http.MethodPatch: h.updateCategory})
 
+	s.api("/api/purposes", signedIn, methods{
+		http.MethodGet:  h.listPurposes,
+		http.MethodPost: h.createPurpose,
+	})
+	s.api("/api/purposes/reorder", signedIn, methods{http.MethodPost: h.reorder(h.cat.ReorderPurposes)})
+	s.api("/api/purposes/{id}", signedIn, methods{http.MethodPatch: h.updatePurpose})
+
 	s.api("/api/locations", signedIn, methods{
 		http.MethodGet:  h.listLocations,
 		http.MethodPost: h.createLocation,
@@ -46,6 +53,8 @@ func (s *Server) catalogRoutes() {
 		http.MethodGet:   h.getProduct,
 		http.MethodPatch: h.updateProduct,
 	})
+	s.api("/api/products/{id}/rating", signedIn, methods{http.MethodPatch: h.rateProduct})
+	s.api("/api/products/{id}/analogs", signedIn, methods{http.MethodGet: h.productAnalogs})
 	h.photoRoutes()
 	s.api("/api/brands", signedIn, methods{http.MethodGet: h.listBrands})
 
@@ -182,6 +191,31 @@ func (h *catalogHandlers) reorder(fn func(ctx context.Context, userID int64, ids
 	}
 }
 
+func (h *catalogHandlers) listPurposes(w http.ResponseWriter, r *http.Request) {
+	list, err := h.cat.Purposes(r.Context(), h.uid(r), catArchived(r))
+	h.respond(w, r, http.StatusOK, map[string]any{"purposes": list}, err)
+}
+
+func (h *catalogHandlers) createPurpose(w http.ResponseWriter, r *http.Request) {
+	var b catRefBody
+	if !decodeJSON(w, r, &b) {
+		return
+	}
+	c, err := h.cat.CreatePurpose(r.Context(), h.uid(r), catStr(b.Name))
+	h.respond(w, r, http.StatusCreated, c, err)
+}
+
+func (h *catalogHandlers) updatePurpose(w http.ResponseWriter, r *http.Request) {
+	id, ok := catPathID(w, r, "Назначение не найдено")
+	var b catRefBody
+	if !ok || !decodeJSON(w, r, &b) {
+		return
+	}
+	b.Color, b.URL = nil, nil
+	c, err := h.cat.UpdatePurpose(r.Context(), h.uid(r), id, b.patch())
+	h.respond(w, r, http.StatusOK, c, err)
+}
+
 func (h *catalogHandlers) listLocations(w http.ResponseWriter, r *http.Request) {
 	list, err := h.cat.Locations(r.Context(), h.uid(r), catArchived(r))
 	h.respond(w, r, http.StatusOK, map[string]any{"locations": list}, err)
@@ -244,6 +278,51 @@ type catProductBody struct {
 	MinStock    json.RawMessage `json:"min_stock"`
 	Note        *string         `json:"note"`
 	Archived    *bool           `json:"archived"`
+	// Поля v1.5 (ФТ-15).
+	PurposeIDs   *[]int64        `json:"purpose_ids"`
+	PH           json.RawMessage `json:"ph"`
+	Incompatible *string         `json:"incompatible"`
+	Instruction  *string         `json:"instruction"`
+	Rating       json.RawMessage `json:"rating"`
+	DoNotBuy     *bool           `json:"do_not_buy"`
+}
+
+// optNumber разбирает необязательное число: set — поле передано; nil — null.
+func optNumber[T int64 | float64](raw json.RawMessage) (set bool, v *T, ok bool) {
+	if len(raw) == 0 {
+		return false, nil, true
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return true, nil, true
+	}
+	var n T
+	if err := json.Unmarshal(raw, &n); err != nil {
+		return true, nil, false
+	}
+	return true, &n, true
+}
+
+// phAndRating разбирает ph (в десятые доли) и rating; при ошибке пишет 400.
+func (b catProductBody) phAndRating(w http.ResponseWriter) (phSet bool, phX10 *int64, ratingSet bool, rating *int64, ok bool) {
+	phSet, ph, ok1 := optNumber[float64](b.PH)
+	if !ok1 {
+		writeFieldError(w, http.StatusBadRequest, "ph", "pH — число от 0 до 14 с одним знаком после запятой или пусто")
+		return
+	}
+	if ph != nil {
+		x, err := catalog.PhX10(*ph)
+		if err != nil {
+			writeFieldError(w, http.StatusBadRequest, "ph", err.(*catalog.Error).Message)
+			return
+		}
+		phX10 = &x
+	}
+	ratingSet, rating, ok2 := optNumber[int64](b.Rating)
+	if !ok2 {
+		writeFieldError(w, http.StatusBadRequest, "rating", "Оценка — от 1 до 5 или пусто")
+		return
+	}
+	return phSet, phX10, ratingSet, rating, true
 }
 
 // minStock разбирает min_stock: set — поле передано; nil — null.
@@ -274,9 +353,14 @@ func (h *catalogHandlers) listProducts(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	purpose, ok := catQueryID(w, r, "purpose_id")
+	if !ok {
+		return
+	}
 	q := r.URL.Query()
 	list, err := h.cat.Products(r.Context(), h.uid(r), catalog.ProductFilter{
 		Query: q.Get("q"), CategoryID: cat, LocationID: loc, Filter: q.Get("filter"), Archived: catArchived(r),
+		PurposeID: purpose,
 	})
 	h.respond(w, r, http.StatusOK, map[string]any{"products": list}, err)
 }
@@ -295,13 +379,34 @@ func (h *catalogHandlers) createProduct(w http.ResponseWriter, r *http.Request) 
 		writeFieldError(w, http.StatusBadRequest, "category_id", "Выберите категорию")
 		return
 	}
+	_, phX10, _, rating, ok := b.phAndRating(w)
+	if !ok {
+		return
+	}
 	in := catalog.ProductInput{CategoryID: *b.CategoryID, Name: catStr(b.Name), Brand: catStr(b.Brand), Unit: catStr(b.Unit),
-		Barcode: catStr(b.Barcode), MinStock: minStock, Note: catStr(b.Note)}
+		Barcode: catStr(b.Barcode), MinStock: minStock, Note: catStr(b.Note),
+		PhX10: phX10, Incompatible: catStr(b.Incompatible), Instruction: catStr(b.Instruction), Rating: rating}
+	if b.PurposeIDs != nil {
+		in.PurposeIDs = *b.PurposeIDs
+	}
+	if b.DoNotBuy != nil {
+		in.DoNotBuy = *b.DoNotBuy
+	}
 	if b.PackageSize != nil {
 		in.PackageSize = *b.PackageSize
 	}
 	p, err := h.cat.CreateProduct(r.Context(), h.uid(r), in, h.s.now().Unix())
-	h.respond(w, r, http.StatusCreated, p, err)
+	h.respondCard(w, r, http.StatusCreated, p.ID, err)
+}
+
+// respondCard пишет карточку позиции id (сводка + incompatible + instruction).
+func (h *catalogHandlers) respondCard(w http.ResponseWriter, r *http.Request, code int, id int64, err error) {
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	c, err := h.cat.Card(r.Context(), h.uid(r), id)
+	h.respond(w, r, code, c, err)
 }
 
 func (h *catalogHandlers) getProduct(w http.ResponseWriter, r *http.Request) {
@@ -324,11 +429,47 @@ func (h *catalogHandlers) updateProduct(w http.ResponseWriter, r *http.Request) 
 		catBadMinStock(w)
 		return
 	}
+	phSet, phX10, ratingSet, rating, ok := b.phAndRating(w)
+	if !ok {
+		return
+	}
 	p, err := h.cat.UpdateProduct(r.Context(), h.uid(r), id, catalog.ProductPatch{
 		CategoryID: b.CategoryID, Name: b.Name, Brand: b.Brand, Unit: b.Unit, PackageSize: b.PackageSize,
 		Barcode: b.Barcode, MinStockSet: set, MinStock: minStock, Note: b.Note, Archived: b.Archived,
+		PurposeIDs: b.PurposeIDs, PhSet: phSet, PhX10: phX10, Incompatible: b.Incompatible,
+		Instruction: b.Instruction, RatingSet: ratingSet, Rating: rating, DoNotBuy: b.DoNotBuy,
 	})
-	h.respond(w, r, http.StatusOK, p, err)
+	h.respondCard(w, r, http.StatusOK, p.ID, err)
+}
+
+// rateProduct — PATCH /api/products/{id}/rating {rating, do_not_buy}: звёзды
+// и «Не брать больше» без открытия формы (ФТ-15.4.1). Оба поля необязательны.
+func (h *catalogHandlers) rateProduct(w http.ResponseWriter, r *http.Request) {
+	id, ok := catPathID(w, r, "Позиция не найдена")
+	var b struct {
+		Rating   json.RawMessage `json:"rating"`
+		DoNotBuy *bool           `json:"do_not_buy"`
+	}
+	if !ok || !decodeJSON(w, r, &b) {
+		return
+	}
+	ratingSet, rating, ok := optNumber[int64](b.Rating)
+	if !ok {
+		writeFieldError(w, http.StatusBadRequest, "rating", "Оценка — от 1 до 5 или пусто")
+		return
+	}
+	p, err := h.cat.SetRating(r.Context(), h.uid(r), id, ratingSet, rating, b.DoNotBuy)
+	h.respondCard(w, r, http.StatusOK, p.ID, err)
+}
+
+// productAnalogs — GET /api/products/{id}/analogs: до 5 аналогов из имеющегося (ФТ-15.5).
+func (h *catalogHandlers) productAnalogs(w http.ResponseWriter, r *http.Request) {
+	id, ok := catPathID(w, r, "Позиция не найдена")
+	if !ok {
+		return
+	}
+	list, err := h.cat.Analogs(r.Context(), h.uid(r), id, catalog.AnalogsLimit)
+	h.respond(w, r, http.StatusOK, map[string]any{"analogs": list}, err)
 }
 
 func (h *catalogHandlers) listBrands(w http.ResponseWriter, r *http.Request) {

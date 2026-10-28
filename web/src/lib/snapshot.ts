@@ -1,5 +1,5 @@
 // Последние данные на телефоне (ФТ-12.2): после каждой успешной загрузки
-// сессия, список позиций, карточки, шаблоны, категории и места сохраняются
+// сессия, список позиций, карточки, шаблоны, категории, назначения и места сохраняются
 // в localStorage; без связи экраны показывают их. Ключи содержат id пользователя,
 // данные одного пользователя другому не показываются.
 import type { Session } from '../api';
@@ -22,6 +22,7 @@ export function isPersistableKey(key: readonly unknown[]): boolean {
     case 'recipes':
     case 'recipe':
     case 'categories':
+    case 'purposes':
     case 'locations':
       return true;
     default:

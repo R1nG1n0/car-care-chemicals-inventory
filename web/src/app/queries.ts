@@ -6,6 +6,8 @@ import type { ProductQuery } from '../api';
 
 export const keys = {
   categories: (archived = false) => ['categories', archived] as const,
+  purposes: (archived = false) => ['purposes', archived] as const,
+  analogs: (id: number) => ['analogs', id] as const,
   locations: (archived = false) => ['locations', archived] as const,
   stores: (archived = false) => ['stores', archived] as const,
   locationUnits: (id: number) => ['locationUnits', id] as const,
@@ -25,7 +27,7 @@ export const keys = {
 export function invalidateStock(qc: QueryClient): Promise<void> {
   return qc.invalidateQueries({
     predicate: (q) =>
-      ['products', 'product', 'brands', 'shopping', 'purchases', 'purchase', 'movements', 'recipes', 'recipe', 'locations', 'locationUnits', 'report'].includes(
+      ['products', 'product', 'analogs', 'brands', 'shopping', 'purchases', 'purchase', 'movements', 'recipes', 'recipe', 'locations', 'locationUnits', 'report'].includes(
         q.queryKey[0] as string,
       ),
   });
@@ -35,6 +37,6 @@ export function invalidateStock(qc: QueryClient): Promise<void> {
 export function invalidateRefs(qc: QueryClient): Promise<void> {
   return qc.invalidateQueries({
     predicate: (q) =>
-      ['categories', 'locations', 'locationUnits', 'stores', 'products', 'product', 'shopping', 'purchases', 'purchase'].includes(q.queryKey[0] as string),
+      ['categories', 'purposes', 'analogs', 'locations', 'locationUnits', 'stores', 'products', 'product', 'shopping', 'purchases', 'purchase'].includes(q.queryKey[0] as string),
   });
 }

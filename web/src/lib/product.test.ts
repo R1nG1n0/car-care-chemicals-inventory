@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { unitPriceText } from './money';
 import { canRevert, movementTitle } from './movements';
-import { allBrands, suggestBrands, validateProduct, type ProductFields } from './product';
+import { allBrands, parsePh, phInput, suggestBrands, validateProduct, type ProductFields } from './product';
 import { purchaseDay } from './text';
 
 const norm = (s: string | null) => (s ?? '').replace(/\s/gu, ' ');
@@ -44,6 +44,10 @@ const fields = (o: Partial<ProductFields> = {}): ProductFields => ({
   min_stock: '',
   barcode: '',
   note: '',
+  purpose_ids: [],
+  ph: '',
+  incompatible: '',
+  instruction: '',
   ...o,
 });
 
@@ -52,7 +56,7 @@ describe('форма позиции', () => {
     const r = validateProduct(fields({ min_stock: '500' }));
     expect(r).toEqual({
       ok: true,
-      value: { name: 'Green Star', brand: 'Koch Chemie', category_id: 3, unit: 'ml', package_size: 1000, min_stock: 500, barcode: '', note: '' },
+      value: { name: 'Green Star', brand: 'Koch Chemie', category_id: 3, unit: 'ml', package_size: 1000, min_stock: 500, barcode: '', note: '', purpose_ids: [], ph: null, incompatible: '', instruction: '' },
     });
     const empty = validateProduct(fields());
     expect(empty.ok && empty.value.min_stock).toBeNull();
@@ -81,5 +85,47 @@ describe('выпадающий список брендов', () => {
     expect(allBrands(all)).toEqual(['Чистый Кот', 'grass', 'Gyeon', 'Koch Chemie', 'sonax']);
     expect(all[0]).toBe('sonax');
     expect(allBrands([])).toEqual([]);
+  });
+});
+
+describe('карточка средства в форме (ФТ-15.2.1)', () => {
+  it('pH: пусто, запятая и точка, один знак, 0–14', () => {
+    expect(parsePh('')).toBeNull();
+    expect(parsePh('  ')).toBeNull();
+    expect(parsePh('7,5')).toBe(7.5);
+    expect(parsePh('7.5')).toBe(7.5);
+    expect(parsePh('0')).toBe(0);
+    expect(parsePh('14')).toBe(14);
+    expect(parsePh('14,0')).toBe(14);
+    expect(parsePh('14,1')).toBeUndefined();
+    expect(parsePh('15')).toBeUndefined();
+    expect(parsePh('7,55')).toBeUndefined();
+    expect(parsePh('-1')).toBeUndefined();
+    expect(parsePh('кисл')).toBeUndefined();
+    expect(parsePh('7,')).toBeUndefined();
+  });
+  it('pH в поле: запятая, пусто для null', () => {
+    expect(phInput(7.5)).toBe('7,5');
+    expect(phInput(null)).toBe('');
+    expect(phInput(undefined)).toBe('');
+  });
+  it('в значение попадают назначения без повторов, pH числом, тексты обрезаны', () => {
+    const r = validateProduct(fields({ purpose_ids: [2, 5, 2], ph: '9,5', incompatible: ' кислоты ', instruction: ' Развести 1:10 ' }));
+    expect(r.ok && r.value).toMatchObject({ purpose_ids: [2, 5], ph: 9.5, incompatible: 'кислоты', instruction: 'Развести 1:10' });
+  });
+  it('ошибка pH', () => {
+    const r = validateProduct(fields({ ph: '20' }));
+    expect(!r.ok && r.errors.ph).toBeTruthy();
+  });
+  it('«Не смешивать с» — до 300 символов, инструкция — до 2000', () => {
+    expect(validateProduct(fields({ incompatible: 'я'.repeat(300) })).ok).toBe(true);
+    const a = validateProduct(fields({ incompatible: 'я'.repeat(301) }));
+    expect(!a.ok && a.errors.incompatible).toBe('Не длиннее 300 символов');
+    expect(validateProduct(fields({ instruction: 'я'.repeat(2000) })).ok).toBe(true);
+    const b = validateProduct(fields({ instruction: 'я'.repeat(2001) }));
+    expect(!b.ok && b.errors.instruction).toBe('Не длиннее 2000 символов');
+  });
+  it('эмодзи считается за один символ', () => {
+    expect(validateProduct(fields({ incompatible: '🧪'.repeat(300) })).ok).toBe(true);
   });
 });

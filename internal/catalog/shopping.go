@@ -13,6 +13,8 @@ type LowItem struct {
 	LastPrice     *int64         `json:"last_price"`
 	LastStore     *string        `json:"last_store"`
 	CheapestStore *string        `json:"cheapest_store"`
+	// Analogs — до 3 аналогов «есть дома для того же» (ФТ-15.5.3).
+	Analogs []AnalogBrief `json:"analogs"`
 }
 
 // ShoppingItem — пункт, добавленный вручную.
@@ -44,6 +46,9 @@ func (s *Service) Shopping(ctx context.Context, userID, now int64) (ShoppingList
 		return ShoppingList{}, err
 	}
 	for _, p := range low {
+		if p.DoNotBuy { // «Не брать больше» не покупаем автоматически (ФТ-15.4.2)
+			continue
+		}
 		item, err := s.lowItem(ctx, userID, p)
 		if err != nil {
 			return ShoppingList{}, err
@@ -84,9 +89,13 @@ func (s *Service) Shopping(ctx context.Context, userID, now int64) (ShoppingList
 // за 100 мл / за штуку (по объёму упаковки строки, см. lineSizeExpr).
 func (s *Service) lowItem(ctx context.Context, userID int64, p ProductSummary) (LowItem, error) {
 	item := LowItem{Product: p}
+	var err error
+	if item.Analogs, err = s.AnalogBriefs(ctx, userID, p.ID, ShoppingAnalogsLimit); err != nil {
+		return LowItem{}, err
+	}
 	var price sql.NullInt64
 	var store sql.NullString
-	err := s.q.QueryRowContext(ctx, `SELECT l.price_per_package, st.name
+	err = s.q.QueryRowContext(ctx, `SELECT l.price_per_package, st.name
 		FROM purchase_lines l
 		JOIN purchases pu ON pu.user_id = l.user_id AND pu.id = l.purchase_id
 		LEFT JOIN stores st ON st.user_id = pu.user_id AND st.id = pu.store_id

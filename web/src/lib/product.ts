@@ -13,6 +13,11 @@ export type ProductFields = {
   min_stock: string;
   barcode: string;
   note: string;
+  purpose_ids: number[];
+  /** Ввод как есть: допускает запятую. */
+  ph: string;
+  incompatible: string;
+  instruction: string;
 };
 
 export type ProductErrors = FieldErrors<keyof ProductInput | 'form'>;
@@ -20,7 +25,22 @@ export type ProductErrors = FieldErrors<keyof ProductInput | 'form'>;
 type Result = { ok: true; value: ProductInput } | { ok: false; errors: ProductErrors };
 
 /** Поля формы позиции, которые сервер может назвать в field ошибки. */
-export const PRODUCT_FIELDS = ['name', 'brand', 'category_id', 'unit', 'package_size', 'min_stock', 'barcode', 'note'] as const;
+export const PRODUCT_FIELDS = ['name', 'brand', 'category_id', 'unit', 'package_size', 'min_stock', 'barcode', 'note', 'purpose_ids', 'ph', 'incompatible', 'instruction'] as const;
+
+export const MAX_INCOMPATIBLE = 300;
+export const MAX_INSTRUCTION = 2000;
+
+/** pH из ввода: пусто — null (не указан), «7,5» и «7.5» — число 0–14 с одним знаком; иначе undefined. */
+export function parsePh(raw: string): number | null | undefined {
+  const t = raw.trim();
+  if (t === '') return null;
+  if (!/^\d{1,2}([.,]\d)?$/u.test(t)) return undefined;
+  const n = Number(t.replace(',', '.'));
+  return n >= 0 && n <= 14 ? n : undefined;
+}
+
+/** pH в поле ввода: «7,5». */
+export const phInput = (ph: number | null | undefined): string => (ph == null ? '' : String(ph).replace('.', ','));
 
 /** Форма позиции — те же правила, что на сервере (POST /api/products). */
 export function validateProduct(f: ProductFields): Result {
@@ -41,10 +61,29 @@ export function validateProduct(f: ProductFields): Result {
   }
   if (!/^\d{0,32}$/u.test(barcode)) e.barcode = 'Только цифры, до 32';
   if (charCount(f.note) > 500) e.note = 'Не длиннее 500 символов';
+  const ph = parsePh(f.ph);
+  if (ph === undefined) e.ph = 'От 0 до 14, один знак после запятой';
+  const incompatible = f.incompatible.trim();
+  const instruction = f.instruction.trim();
+  if (charCount(incompatible) > MAX_INCOMPATIBLE) e.incompatible = `Не длиннее ${MAX_INCOMPATIBLE} символов`;
+  if (charCount(instruction) > MAX_INSTRUCTION) e.instruction = `Не длиннее ${MAX_INSTRUCTION} символов`;
   if (Object.keys(e).length > 0) return { ok: false, errors: e };
   return {
     ok: true,
-    value: { name, brand, category_id: f.category_id!, unit: f.unit, package_size: size!, min_stock: min, barcode, note: f.note.trim() },
+    value: {
+      name,
+      brand,
+      category_id: f.category_id!,
+      unit: f.unit,
+      package_size: size!,
+      min_stock: min,
+      barcode,
+      note: f.note.trim(),
+      purpose_ids: [...new Set(f.purpose_ids)],
+      ph: ph ?? null,
+      incompatible,
+      instruction,
+    },
   };
 }
 

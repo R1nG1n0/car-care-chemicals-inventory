@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 )
@@ -19,6 +20,13 @@ type ProductInput struct {
 	Barcode     string
 	MinStock    *int64
 	Note        string
+	// Поля v1.5 (ФТ-15), все необязательные.
+	PurposeIDs   []int64
+	PhX10        *int64 // pH в десятых долях, 0…140
+	Incompatible string
+	Instruction  string
+	Rating       *int64 // 1…5
+	DoNotBuy     bool
 }
 
 // ProductPatch — изменение позиции; nil — поле не меняется. MinStockSet
@@ -34,6 +42,16 @@ type ProductPatch struct {
 	MinStock    *int64
 	Note        *string
 	Archived    *bool
+	// Поля v1.5: PurposeIDs nil — не менять, пустой список — снять все;
+	// PhSet и RatingSet отличают «не передан» от «null».
+	PurposeIDs   *[]int64
+	PhSet        bool
+	PhX10        *int64
+	Incompatible *string
+	Instruction  *string
+	RatingSet    bool
+	Rating       *int64
+	DoNotBuy     *bool
 }
 
 // ProductFilter — параметры списка позиций (GET /api/products).
@@ -42,7 +60,8 @@ type ProductFilter struct {
 	CategoryID int64 // 0 — любая
 	LocationID int64 // 0 — любое
 	Filter     string
-	Archived   bool // только архивные
+	Archived   bool  // только архивные
+	PurposeID  int64 // 0 — любое
 }
 
 // Значения ProductFilter.Filter.
@@ -53,12 +72,20 @@ const (
 	FilterIn  = "in"
 )
 
+// ProductCard — сводка и поля, которые не нужны в списке: «Не смешивать с» и
+// инструкция (ФТ-15.2). Поля сводки в JSON остаются на том же уровне.
+type ProductCard struct {
+	ProductSummary
+	Incompatible string `json:"incompatible"`
+	Instruction  string `json:"instruction"`
+}
+
 // ProductDetail — карточка позиции.
 type ProductDetail struct {
-	Product   ProductSummary `json:"product"`
-	Units     []Unit         `json:"units"`
-	Purchases []PurchaseRow  `json:"purchases"`
-	Movements []Movement     `json:"movements"`
+	Product   ProductCard   `json:"product"`
+	Units     []Unit        `json:"units"`
+	Purchases []PurchaseRow `json:"purchases"`
+	Movements []Movement    `json:"movements"`
 }
 
 const (
@@ -90,7 +117,31 @@ func (in *ProductInput) validate() error {
 	if in.Note, err = optText("note", in.Note, 500, "Заметка"); err != nil {
 		return err
 	}
+	if in.PhX10 != nil && (*in.PhX10 < 0 || *in.PhX10 > 140) {
+		return invalid("ph", errPhText)
+	}
+	if in.Incompatible, err = optText("incompatible", in.Incompatible, 300, "«Не смешивать с»"); err != nil {
+		return err
+	}
+	if in.Instruction, err = optText("instruction", in.Instruction, 2000, "Инструкция"); err != nil {
+		return err
+	}
+	if in.Rating != nil && (*in.Rating < 1 || *in.Rating > 5) {
+		return invalid("rating", "Оценка — от 1 до 5 или пусто")
+	}
 	return nil
+}
+
+const errPhText = "pH — число от 0 до 14 с одним знаком после запятой или пусто"
+
+// PhX10 переводит pH в десятые доли: 7,3 → 73. Число вне 0…14 или с
+// большим числом знаков — ошибка проверки (поле ph).
+func PhX10(v float64) (int64, error) {
+	x := math.Round(v * 10)
+	if math.IsNaN(v) || v < 0 || v > 14 || math.Abs(v*10-x) > 1e-6 {
+		return 0, invalid("ph", errPhText)
+	}
+	return int64(x), nil
 }
 
 // checkCategory: категория своя (иначе 404) и действующая (иначе 400).
@@ -117,15 +168,29 @@ func (s *Service) CreateProduct(ctx context.Context, userID int64, in ProductInp
 	if err := s.checkCategory(ctx, userID, in.CategoryID); err != nil {
 		return ProductSummary{}, err
 	}
-	res, err := s.q.ExecContext(ctx, `INSERT INTO products
-		(user_id, category_id, name, brand, unit, package_size, barcode, min_stock, note, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		userID, in.CategoryID, in.Name, in.Brand, in.Unit, in.PackageSize, in.Barcode, in.MinStock, in.Note, at)
-	if err != nil {
-		return ProductSummary{}, fmt.Errorf("создание позиции: %w", err)
-	}
-	id, _ := res.LastInsertId()
-	return s.Summary(ctx, userID, id)
+	var out ProductSummary
+	err := s.inTxSvc(ctx, func(t *Service) error {
+		purposes, err := t.checkPurposeIDs(ctx, userID, 0, in.PurposeIDs)
+		if err != nil {
+			return err
+		}
+		res, err := t.q.ExecContext(ctx, `INSERT INTO products
+			(user_id, category_id, name, brand, unit, package_size, barcode, min_stock, note, created_at,
+			 ph_x10, incompatible, instruction, rating, do_not_buy)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			userID, in.CategoryID, in.Name, in.Brand, in.Unit, in.PackageSize, in.Barcode, in.MinStock, in.Note, at,
+			in.PhX10, in.Incompatible, in.Instruction, in.Rating, in.DoNotBuy)
+		if err != nil {
+			return fmt.Errorf("создание позиции: %w", err)
+		}
+		id, _ := res.LastInsertId()
+		if err := t.setProductPurposes(ctx, userID, id, purposes); err != nil {
+			return err
+		}
+		out, err = t.Summary(ctx, userID, id)
+		return err
+	})
+	return out, err
 }
 
 // UpdateProduct меняет поля позиции. Единицу нельзя менять, когда у позиции
@@ -145,8 +210,17 @@ func (s *Service) updateProduct(ctx context.Context, userID, id int64, p Product
 	if err != nil {
 		return ProductSummary{}, err
 	}
+	card, err := s.Card(ctx, userID, id)
+	if err != nil {
+		return ProductSummary{}, err
+	}
 	in := ProductInput{CategoryID: cur.CategoryID, Name: cur.Name, Brand: cur.Brand, Unit: cur.Unit,
-		PackageSize: cur.PackageSize, Barcode: cur.Barcode, MinStock: cur.MinStock, Note: cur.Note}
+		PackageSize: cur.PackageSize, Barcode: cur.Barcode, MinStock: cur.MinStock, Note: cur.Note,
+		Incompatible: card.Incompatible, Instruction: card.Instruction, Rating: cur.Rating, DoNotBuy: cur.DoNotBuy}
+	if cur.PH != nil {
+		v := int64(math.Round(*cur.PH * 10))
+		in.PhX10 = &v
+	}
 	set := func(dst *string, v *string) {
 		if v != nil {
 			*dst = *v
@@ -157,6 +231,17 @@ func (s *Service) updateProduct(ctx context.Context, userID, id int64, p Product
 	set(&in.Unit, p.Unit)
 	set(&in.Barcode, p.Barcode)
 	set(&in.Note, p.Note)
+	set(&in.Incompatible, p.Incompatible)
+	set(&in.Instruction, p.Instruction)
+	if p.PhSet {
+		in.PhX10 = p.PhX10
+	}
+	if p.RatingSet {
+		in.Rating = p.Rating
+	}
+	if p.DoNotBuy != nil {
+		in.DoNotBuy = *p.DoNotBuy
+	}
 	if p.PackageSize != nil {
 		in.PackageSize = *p.PackageSize
 	}
@@ -186,11 +271,25 @@ func (s *Service) updateProduct(ctx context.Context, userID, id int64, p Product
 	if p.Archived != nil {
 		archived = *p.Archived
 	}
+	var purposes []int64
+	if p.PurposeIDs != nil {
+		if purposes, err = s.checkPurposeIDs(ctx, userID, id, *p.PurposeIDs); err != nil {
+			return ProductSummary{}, err
+		}
+	}
 	if _, err := s.q.ExecContext(ctx, `UPDATE products SET category_id = ?, name = ?, brand = ?, unit = ?,
-		package_size = ?, barcode = ?, min_stock = ?, note = ?, archived = ? WHERE user_id = ? AND id = ?`,
+		package_size = ?, barcode = ?, min_stock = ?, note = ?, archived = ?,
+		ph_x10 = ?, incompatible = ?, instruction = ?, rating = ?, do_not_buy = ?
+		WHERE user_id = ? AND id = ?`,
 		in.CategoryID, in.Name, in.Brand, in.Unit, in.PackageSize, in.Barcode, in.MinStock, in.Note, archived,
+		in.PhX10, in.Incompatible, in.Instruction, in.Rating, in.DoNotBuy,
 		userID, id); err != nil {
 		return ProductSummary{}, fmt.Errorf("изменение позиции: %w", err)
+	}
+	if p.PurposeIDs != nil {
+		if err := s.setProductPurposes(ctx, userID, id, purposes); err != nil {
+			return ProductSummary{}, err
+		}
 	}
 	return s.Summary(ctx, userID, id)
 }
@@ -229,10 +328,20 @@ func (s *Service) Products(ctx context.Context, userID int64, f ProductFilter) (
 		return nil, err
 	}
 	q := strings.ToLower(strings.TrimSpace(f.Query))
+	var purposeNames map[int64]string
+	if q != "" {
+		if purposeNames, err = s.purposeNames(ctx, userID); err != nil {
+			return nil, err
+		}
+	}
 	out := []ProductSummary{}
 	for _, p := range all {
 		if q != "" && !strings.Contains(strings.ToLower(p.Name), q) &&
-			!strings.Contains(strings.ToLower(p.Brand), q) && !strings.Contains(p.Barcode, q) {
+			!strings.Contains(strings.ToLower(p.Brand), q) && !strings.Contains(p.Barcode, q) &&
+			!purposeMatches(p.PurposeIDs, purposeNames, q) {
+			continue
+		}
+		if f.PurposeID != 0 && !containsID(p.PurposeIDs, f.PurposeID) {
 			continue
 		}
 		if f.LocationID != 0 && !containsID(p.LocationIDs, f.LocationID) {
@@ -248,6 +357,16 @@ func (s *Service) Products(ctx context.Context, userID int64, f ProductFilter) (
 	}
 	sortByName(out)
 	return out, nil
+}
+
+// purposeMatches — в имени какого-нибудь назначения позиции есть q (нижний регистр).
+func purposeMatches(ids []int64, names map[int64]string, q string) bool {
+	for _, id := range ids {
+		if strings.Contains(strings.ToLower(names[id]), q) {
+			return true
+		}
+	}
+	return false
 }
 
 func containsID(ids []int64, id int64) bool {
@@ -272,11 +391,12 @@ func sortByName(list []ProductSummary) {
 
 // Product — карточка позиции: сводка, экземпляры, покупки, движения.
 func (s *Service) Product(ctx context.Context, userID, id int64) (ProductDetail, error) {
-	sum, err := s.Summary(ctx, userID, id)
+	card, err := s.Card(ctx, userID, id)
 	if err != nil {
 		return ProductDetail{}, err
 	}
-	d := ProductDetail{Product: sum}
+	sum := card.ProductSummary
+	d := ProductDetail{Product: card}
 	if d.Units, err = s.productUnits(ctx, userID, id); err != nil {
 		return ProductDetail{}, err
 	}
@@ -357,4 +477,24 @@ func (s *Service) Brands(ctx context.Context, userID int64) ([]string, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i]) < strings.ToLower(out[j]) })
 	return out, nil
+}
+
+// Card — сводка позиции с «Не смешивать с» и инструкцией; чужая — ErrNotFound.
+func (s *Service) Card(ctx context.Context, userID, id int64) (ProductCard, error) {
+	sum, err := s.Summary(ctx, userID, id)
+	if err != nil {
+		return ProductCard{}, err
+	}
+	c := ProductCard{ProductSummary: sum}
+	if err := s.q.QueryRowContext(ctx, `SELECT incompatible, instruction FROM products WHERE user_id = ? AND id = ?`,
+		userID, id).Scan(&c.Incompatible, &c.Instruction); err != nil {
+		return ProductCard{}, fmt.Errorf("карточка позиции: %w", err)
+	}
+	return c, nil
+}
+
+// SetRating меняет оценку и/или «Не брать больше» (ФТ-15.4): звёзды прямо
+// в карточке. ratingSet — оценка передана (nil — снять); doNotBuy nil — не менять.
+func (s *Service) SetRating(ctx context.Context, userID, id int64, ratingSet bool, rating *int64, doNotBuy *bool) (ProductSummary, error) {
+	return s.UpdateProduct(ctx, userID, id, ProductPatch{RatingSet: ratingSet, Rating: rating, DoNotBuy: doNotBuy})
 }

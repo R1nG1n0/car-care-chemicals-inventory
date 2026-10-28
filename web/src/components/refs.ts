@@ -3,13 +3,16 @@
 // (ключи app/queries.ts).
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { inventory, type CatColor, type Category, type Location, type ProductSummary } from '../api';
+import { inventory, type CatColor, type Category, type Location, type ProductSummary, type Purpose } from '../api';
 import { keys } from '../app/queries';
 
 export type StockRefs = {
   categories: ReadonlyMap<number, Category>;
   locations: ReadonlyMap<number, Location>;
+  /** Назначения (ФТ-15.1), с архивными: у старой позиции назначение может быть в архиве. */
+  purposes: ReadonlyMap<number, Purpose>;
   categoryList: Category[];
+  purposeList: Purpose[];
   locationList: Location[];
 };
 
@@ -17,16 +20,20 @@ export function useStockRefs(): StockRefs {
   // С архивными: у старой позиции категория или место могут быть в архиве
   const cats = useQuery({ queryKey: keys.categories(true), queryFn: ({ signal }) => inventory.categories(true, signal), staleTime: 60_000 });
   const locs = useQuery({ queryKey: keys.locations(true), queryFn: ({ signal }) => inventory.locations(true, signal), staleTime: 60_000 });
+  const purs = useQuery({ queryKey: keys.purposes(true), queryFn: ({ signal }) => inventory.purposes(true, signal), staleTime: 60_000 });
   return useMemo(() => {
     const categoryList = cats.data ?? [];
+    const purposeList = purs.data ?? [];
     const locationList = locs.data ?? [];
     return {
       categories: new Map(categoryList.map((c) => [c.id, c])),
       locations: new Map(locationList.map((l) => [l.id, l])),
+      purposes: new Map(purposeList.map((p) => [p.id, p])),
       categoryList,
+      purposeList,
       locationList,
     };
-  }, [cats.data, locs.data]);
+  }, [cats.data, locs.data, purs.data]);
 }
 
 /** Список позиций (без архивных) — один кэш на главную, выбор позиции и шторку расхода. */

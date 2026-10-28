@@ -14,11 +14,14 @@ import { BackLink } from '../../components/BackLink';
 import { catClassOf, useStockRefs } from '../../components/refs';
 import { Empty, Ico, LoadError } from '../../components/ui';
 import { formatQty } from '../../lib/format';
+import { DO_NOT_BUY_TEXT } from '../../lib/purposes';
 import { productMeta, stickerText, unitLabel } from '../../lib/stock';
 import { AddUnitSheet } from './AddUnitSheet';
 import { ConsumeSheet } from './ConsumeSheet';
+import { ProductAbout, ProductAnalogs } from './ProductAbout';
 import { ProductHistory } from './ProductHistory';
 import { ProductPhoto } from './ProductPhoto';
+import { ProductRating } from './ProductRating';
 import { UnitRows } from './UnitRows';
 import { UnitSheet } from './UnitSheet';
 
@@ -91,6 +94,7 @@ function ProductView({ detail, back }: { detail: ProductDetail; back: ReactNode 
         <div className="g-card__head">
           <span>{head || 'Без категории'}</span>
           {p.archived && <span className="g-badge">в архиве</span>}
+          {p.do_not_buy && <span className="g-badge g-badge--dnb">{DO_NOT_BUY_TEXT}</span>}
         </div>
         <div className="g-card__body">
           <h1 className="g-card__name stock-name-lg">
@@ -126,6 +130,10 @@ function ProductView({ detail, back }: { detail: ProductDetail; back: ReactNode 
         </p>
       )}
       {p.note && <p className="g-muted">{p.note}</p>}
+
+      <ProductRating product={p} />
+      <ProductAnalogs detail={detail} />
+      <ProductAbout detail={detail} />
 
       <ProductPhoto product={p} />
 

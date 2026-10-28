@@ -1,6 +1,6 @@
 // Ещё — меню, профиль, места, категории, магазины, инвентаризация, отчёты, данные, история покупок.
 // Адреса раздела разбирает вложенный <Routes>.
-import { IconBox, IconBuildingStore, IconChartBar, IconChevronRight, IconClipboardCheck, IconCloudUpload, IconDatabase, IconReceipt, IconTags, IconUser, type TablerIcon } from '@tabler/icons-react';
+import { IconBox, IconBuildingStore, IconChartBar, IconChevronRight, IconClipboardCheck, IconCloudUpload, IconDatabase, IconReceipt, IconTags, IconTargetArrow, IconUser, type TablerIcon } from '@tabler/icons-react';
 import { Link, Route, Routes, type Location } from 'react-router';
 import { usePendingOps } from '../../app/useOffline';
 import { Ico } from '../../components/ui';
@@ -18,6 +18,7 @@ const MENU: { to: string; icon: TablerIcon; title: string; sub: string }[] = [
   { to: '/profile', icon: IconUser, title: 'Профиль', sub: 'Пароль, шаги кнопок, приглашения, выход' },
   { to: '/more/places', icon: IconBox, title: 'Места', sub: 'Где лежит: полки, коробки, багажник' },
   { to: '/more/categories', icon: IconTags, title: 'Категории', sub: 'Названия и цвета' },
+  { to: '/more/purposes', icon: IconTargetArrow, title: 'Назначения', sub: 'ЛКП, стекло, кожа: для чего средство' },
   { to: '/more/stores', icon: IconBuildingStore, title: 'Магазины', sub: 'Где покупаете' },
   { to: '/more/inventory', icon: IconClipboardCheck, title: 'Инвентаризация', sub: 'Сверить места с тем, что в учёте' },
   { to: '/more/reports', icon: IconChartBar, title: 'Отчёты', sub: 'Сколько потратили и сколько ушло' },
@@ -64,6 +65,7 @@ export function MoreSection({ location }: { location: Location }) {
       />
       <Route path="/more/places" element={<RefsScreen key="places" kind="places" />} />
       <Route path="/more/categories" element={<RefsScreen key="categories" kind="categories" />} />
+      <Route path="/more/purposes" element={<RefsScreen key="purposes" kind="purposes" />} />
       <Route path="/more/stores" element={<StoresScreen />} />
       <Route path="/more/inventory" element={<InventoryScreen />} />
       <Route path="/more/inventory/:id" element={<InventoryPlace />} />

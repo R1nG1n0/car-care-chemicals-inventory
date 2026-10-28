@@ -7,15 +7,16 @@ import { IconBarcode } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-import { fieldErrors, inventory, type ProductInput, type ProductSummary } from '../../api';
+import { fieldErrors, inventory, type ProductDetail, type ProductInput } from '../../api';
 import { invalidateRefs, invalidateStock, keys } from '../../app/queries';
 import { BackLink } from '../../components/BackLink';
-import { BrandField, CategoryPick } from '../../components/ProductFields';
+import { AreaField, BrandField, CategoryPick, PurposePick } from '../../components/ProductFields';
 import { Scanner } from '../../components/Scanner';
 import { useStockRefs } from '../../components/refs';
 import { busyProps, Field, Ico, LoadError } from '../../components/ui';
 import { parseManual } from '../../lib/barcode';
-import { PRODUCT_FIELDS, validateProduct, type ProductErrors, type ProductFields } from '../../lib/product';
+import { MAX_INCOMPATIBLE, MAX_INSTRUCTION, PRODUCT_FIELDS, phInput, validateProduct, type ProductErrors, type ProductFields } from '../../lib/product';
+import { aboutOf } from '../../lib/purposes';
 import { unitLabel } from '../../lib/stock';
 
 /** ?barcode= из ссылки «Создать позицию»: как при ручном вводе, мусор отбрасывается. */
@@ -48,10 +49,12 @@ export function ProductForm() {
       </div>
     );
   }
-  return <FormBody key={id ?? 'new'} product={detail.data?.product} hasUnits={(detail.data?.units.length ?? 0) > 0} />;
+  return <FormBody key={id ?? 'new'} detail={detail.data} />;
 }
 
-function FormBody({ product, hasUnits }: { product: ProductSummary | undefined; hasUnits: boolean }) {
+function FormBody({ detail }: { detail: ProductDetail | undefined }) {
+  const product = detail?.product;
+  const hasUnits = (detail?.units.length ?? 0) > 0;
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [search] = useSearchParams();
@@ -65,9 +68,14 @@ function FormBody({ product, hasUnits }: { product: ProductSummary | undefined; 
     min_stock: product?.min_stock != null ? String(product.min_stock) : '',
     barcode: product?.barcode ?? barcodeParam(search.get('barcode')),
     note: product?.note ?? '',
+    purpose_ids: product?.purpose_ids ?? [],
+    ph: phInput(product?.ph),
+    incompatible: detail ? aboutOf(detail).incompatible : '',
+    instruction: detail ? aboutOf(detail).instruction : '',
   }));
   const [errors, setErrors] = useState<ProductErrors>({});
   const [scanning, setScanning] = useState(false);
+  const purposes = refs.purposeList;
   const cats = refs.categoryList.filter((c) => !c.archived || c.id === f.category_id);
   const u = unitLabel(f.unit);
   const backTo = product ? `/items/${product.id}` : '/';
@@ -129,6 +137,7 @@ function FormBody({ product, hasUnits }: { product: ProductSummary | undefined; 
             )}
             {errors.unit && <span className="g-field__error">{errors.unit}</span>}
           </div>
+          <PurposePick purposes={purposes} value={f.purpose_ids} onChange={(v) => set('purpose_ids', v)} />
           <div className="app-two">
             <Field id="np-package_size" label={`Размер упаковки, ${u}`} inputMode="numeric" value={f.package_size} onChange={(e) => set('package_size', e.target.value)} error={errors.package_size} />
             <Field id="np-min_stock" label={`Мин. остаток, ${u}`} inputMode="numeric" value={f.min_stock} placeholder="не задан" onChange={(e) => set('min_stock', e.target.value)} error={errors.min_stock} />
@@ -174,6 +183,19 @@ function FormBody({ product, hasUnits }: { product: ProductSummary | undefined; 
             />
             {errors.note && <span className="g-field__error">{errors.note}</span>}
           </div>
+          <Field
+            id="np-ph"
+            label="pH · необязательно"
+            inputMode="decimal"
+            autoComplete="off"
+            maxLength={4}
+            placeholder="от 0 до 14, например 7,5"
+            value={f.ph}
+            onChange={(e) => set('ph', e.target.value)}
+            error={errors.ph}
+          />
+          <AreaField id="np-incompatible" label="Не смешивать с" max={MAX_INCOMPATIBLE} placeholder="Кислотные средства, хлор" value={f.incompatible} onChange={(v) => set('incompatible', v)} error={errors.incompatible} hint={`До ${MAX_INCOMPATIBLE} символов`} />
+          <AreaField id="np-instruction" label="Инструкция" max={MAX_INSTRUCTION} rows={5} placeholder="Разведение, время выдержки, как наносить" value={f.instruction} onChange={(v) => set('instruction', v)} error={errors.instruction} hint={`До ${MAX_INSTRUCTION} символов`} />
         </div>
         {errors.form && (
           <p className="g-field__error" role="alert">

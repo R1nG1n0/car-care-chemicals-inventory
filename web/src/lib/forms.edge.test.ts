@@ -15,6 +15,10 @@ const fields = (f: Partial<ProductFields> = {}): ProductFields => ({
   min_stock: '500',
   barcode: '',
   note: '',
+  purpose_ids: [],
+  ph: '',
+  incompatible: '',
+  instruction: '',
   ...f,
 });
 const errs = (f: Partial<ProductFields>) => {

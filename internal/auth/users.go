@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+// defaultPurposes — стартовый набор назначений (ФТ-15.1.2); тот же набор
+// миграция 008 засевает существующим пользователям.
+var defaultPurposes = []string{"ЛКП", "стекло", "пластик", "кожа", "диски", "шины", "текстиль"}
+
 // defaultCategories — начальный набор категорий (ФТ-2.1, API.md).
 var defaultCategories = []struct{ name, color string }{
 	{"Шампуни", "blue"},
@@ -90,6 +94,12 @@ func (s *Service) createUserTx(ctx context.Context, tx *sql.Tx, login, hash stri
 			`INSERT INTO categories (user_id, name, color, sort) VALUES (?, ?, ?, ?)`,
 			id, c.name, c.color, i+1); err != nil {
 			return User{}, fmt.Errorf("создание категорий по умолчанию: %w", err)
+		}
+	}
+	for i, name := range defaultPurposes {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO purposes (user_id, name, sort) VALUES (?, ?, ?)`, id, name, i+1); err != nil {
+			return User{}, fmt.Errorf("создание назначений по умолчанию: %w", err)
 		}
 	}
 	return User{ID: id, Login: login, IsOwner: owner, CreatedAt: time.Unix(now.Unix(), 0)}, nil

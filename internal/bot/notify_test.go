@@ -220,3 +220,65 @@ func TestLinkSeedNotRacingWithLowCheck(t *testing.T) {
 		}
 	}
 }
+
+// linkPurpose даёт позиции назначение с таким именем (создаёт, если нет).
+func (e *env) linkPurpose(u user, product int64, name string) {
+	e.t.Helper()
+	e.exec(`INSERT OR IGNORE INTO purposes (user_id, name) VALUES (?, ?)`, u.id, name)
+	e.exec(`INSERT INTO product_purposes (user_id, product_id, purpose_id)
+		SELECT ?, ?, id FROM purposes WHERE user_id = ? AND name = ?`, u.id, product, u.id, name)
+}
+
+// ФТ-15.4.2: по «Не брать больше» уведомления нет и состояние не копится;
+// после снятия пометки позиция, всё ещё ниже минимума, вызывает уведомление.
+func TestLowNotificationSkipsDoNotBuy(t *testing.T) {
+	e := newEnv(t)
+	a := e.linked("owner", 1001)
+	p := e.product(a, "Шампунь", "", "ml", 500, ptr(int64(800)), "")
+	e.buy(a, p, 1, 1000, nil, nil)
+	e.exec(`UPDATE products SET do_not_buy = 1 WHERE id = ?`, p)
+
+	e.bot.CheckLow(e.ctx)
+	if len(notifications(e, 1001)) != 0 {
+		t.Fatal("по «Не брать больше» пришло уведомление")
+	}
+	if e.count(`SELECT COUNT(*) FROM bot_low_state`) != 0 {
+		t.Fatal("состояние минимумов копится по «Не брать больше»")
+	}
+	e.exec(`UPDATE products SET do_not_buy = 0 WHERE id = ?`, p)
+	e.bot.CheckLow(e.ctx)
+	if len(notifications(e, 1001)) != 1 {
+		t.Fatal("после снятия пометки ожидалось уведомление")
+	}
+	// Пометили после уведомления — состояние очищается.
+	e.exec(`UPDATE products SET do_not_buy = 1 WHERE id = ?`, p)
+	e.bot.CheckLow(e.ctx)
+	if e.count(`SELECT COUNT(*) FROM bot_low_state`) != 0 {
+		t.Fatal("состояние должно очищаться, когда позиция помечена")
+	}
+}
+
+// ФТ-15.5.3: в уведомлении — «Есть дома для того же» с аналогами.
+func TestLowNotificationAnalogs(t *testing.T) {
+	e := newEnv(t)
+	a := e.linked("owner", 1001)
+	low := e.product(a, "Кондиционер кожи", "", "ml", 500, ptr(int64(500)), "")
+	e.linkPurpose(a, low, "кожа")
+	e.buy(a, low, 1, 1000, nil, nil)
+	home := e.product(a, "Крем для кожи", "Chemical Guys", "ml", 250, nil, "")
+	e.linkPurpose(a, home, "кожа")
+	e.buy(a, home, 1, 500, nil, nil)
+	empty := e.product(a, "Пустой", "", "ml", 250, nil, "") // нет в наличии
+	e.linkPurpose(a, empty, "кожа")
+
+	e.exec(`UPDATE products SET min_stock = 800 WHERE id = ?`, low)
+	e.bot.CheckLow(e.ctx)
+	n := notifications(e, 1001)
+	if len(n) != 1 {
+		t.Fatalf("уведомлений %d, ожидалось 1", len(n))
+	}
+	contains(t, n[0].Text, "Есть дома для того же: Крем для кожи (Chemical Guys)")
+	if strings.Contains(n[0].Text, "Пустой") {
+		t.Fatalf("в аналогах позиция без остатка: %q", n[0].Text)
+	}
+}

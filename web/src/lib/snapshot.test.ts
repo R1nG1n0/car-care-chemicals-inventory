@@ -20,6 +20,8 @@ describe('снимки данных', () => {
     expect(isPersistableKey(['recipes'])).toBe(true);
     expect(isPersistableKey(['categories', true])).toBe(true);
     expect(isPersistableKey(['locations', false])).toBe(true);
+    expect(isPersistableKey(['purposes', true])).toBe(true);
+    expect(isPersistableKey(['analogs', 3])).toBe(false);
     expect(isPersistableKey(['movements', null])).toBe(false);
     expect(isPersistableKey(['report', 'spending', 'a', 'b'])).toBe(false);
   });
