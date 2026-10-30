@@ -106,9 +106,9 @@ export function SideNav({ section, onAdd }: { section: SectionKey; onAdd: () => 
 
   return (
     <nav className="g-side app-side" aria-label="Разделы">
-      <div className="app-side__logo">
+      <Link to="/" className="app-side__logo" aria-label="garage — на главный экран">
         <Logo />
-      </div>
+      </Link>
       <Link to="/" aria-current={current('stock')}>
         <Ico icon={IconPackage} />
         Остатки

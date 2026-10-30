@@ -88,7 +88,15 @@ a.g-btn { text-decoration: none; }
 @media (min-width: 1024px) {
   .app { display: grid; grid-template-columns: 220px minmax(0, 1fr); }
   .app-side { display: grid; position: sticky; top: 0; height: 100dvh; }
-  .app-side__logo { margin: 0 0 var(--sp-3) var(--sp-2); }
+  /* Логотип — ссылка на главную: без заливки и рамки пункта меню */
+  .g-side a.app-side__logo {
+    align-self: flex-start; margin: 0 0 var(--sp-3); padding: var(--sp-1) var(--sp-2); font-weight: inherit;
+    transition: transform 160ms var(--ease-out), background-color var(--dur-fast) ease;
+  }
+  .g-side a.app-side__logo:active { transform: scale(0.97); }
+  @media (hover: hover) and (pointer: fine) {
+    .g-side a.app-side__logo:hover { background: var(--surface-raised); }
+  }
   .app-side__plus { margin-top: var(--sp-3); }
   /* Меню на всю высоту: разделы сверху, профиль и связь прижаты к низу */
   .app-side { display: flex; flex-direction: column; overflow-y: auto; }

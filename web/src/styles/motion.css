@@ -222,6 +222,8 @@
   .g-meter__fill { transition: background-color var(--dur-fast) ease; }
   .g-stagger > * { animation-name: g-fade; }
   .g-enter { animation-name: g-fade; }
+  .g-side a.app-side__logo { transition: none; }
+  .g-side a.app-side__logo:active { transform: none; }
   .g-suggest { animation-name: g-fade; }
   .g-brand__toggle .ti { transition: none; }
 
