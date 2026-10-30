@@ -26,6 +26,9 @@ web/node_modules/
 web/dist/*
 !web/dist/.keep
 
+# Граф проекта graphify (строится локально, в репозиторий не входит)
+graphify-out/
+
 # Тестовые данные (make dev / make run)
 .dev/
 
