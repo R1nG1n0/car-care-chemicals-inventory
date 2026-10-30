@@ -49,6 +49,7 @@ type Server struct {
 	weather         *weather.Service
 	placeLimiter    *auth.Limiter
 	locationLimiter *auth.Limiter
+	previewLimiter  *auth.Limiter
 	mux             *http.ServeMux
 }
 
@@ -78,6 +79,7 @@ func New(opt Options) *Server {
 	}
 	s.placeLimiter = auth.NewLimiter(placeSearchLimit, time.Minute, s.now)
 	s.locationLimiter = auth.NewLimiter(locationSetLimit, time.Minute, s.now)
+	s.previewLimiter = auth.NewLimiter(previewLimit, time.Minute, s.now)
 	s.routes()
 	return s
 }

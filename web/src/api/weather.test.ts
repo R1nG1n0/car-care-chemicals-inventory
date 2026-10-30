@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { reportConnection } from './connection';
-import { weather } from './index';
+import { weather, weatherPointQuery } from './index';
 
 type Call = { url: string; init: RequestInit };
 
@@ -20,6 +20,20 @@ beforeEach(() => reportConnection(true));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('weather', () => {
+  it('get с городом — ?lat&lon&name, имя кодируется', async () => {
+    const calls = stubFetch(() => json(200, { enabled: true, preview: true }));
+    await weather.get(undefined, { name: 'Ростов-на-Дону & Co', lat: 47.23, lon: 39.72 });
+    const url = new URL(calls[0]!.url, 'http://x');
+    expect(url.pathname).toBe('/api/weather');
+    expect(url.searchParams.get('lat')).toBe('47.23');
+    expect(url.searchParams.get('lon')).toBe('39.72');
+    expect(url.searchParams.get('name')).toBe('Ростов-на-Дону & Co');
+  });
+
+  it('weatherPointQuery — все три параметра', () => {
+    expect(new URLSearchParams(weatherPointQuery({ name: 'Донецк', lat: 48.023, lon: 37.802 })).get('name')).toBe('Донецк');
+  });
+
   it('get — GET /api/weather', async () => {
     const body = { enabled: false, location: null, fetched_at: null, stale: false, days: [], today_hours: [], best: { wash: null, coat: null } };
     const calls = stubFetch(() => json(200, body));

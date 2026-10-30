@@ -1,11 +1,17 @@
 // Экран «Погода» (ФТ-16.3.2): место и время обновления, 7 дней с оценками, сегодня по часам.
-import { IconCloudOff, IconMapPin } from '@tabler/icons-react';
+// «Другой город» — прогноз любого города (адрес ?lat=&lon=&name=), город по умолчанию
+// при этом не меняется; его можно сделать городом по умолчанию одной кнопкой.
+import { IconCloudOff, IconMapPin, IconMapSearch } from '@tabler/icons-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
-import { isApiError } from '../../api';
+import { Link, useSearchParams } from 'react-router';
+import { errorText, isApiError, weather, weatherPointQuery, type WeatherPlace, type WeatherPoint } from '../../api';
+import { keys } from '../../app/queries';
+import { useNeedsOnline } from '../../app/useOffline';
+import { CitySearch } from '../../components/CitySearch';
 import { useOnline } from '../../app/session';
 import { BackLink } from '../../components/BackLink';
-import { Empty, Ico, LoadError, SkelList } from '../../components/ui';
+import { busyProps, Empty, Ico, LoadError, SkelList } from '../../components/ui';
 import { hasForecast, hoursToday, isOutdated, liveWeather, placeNow, updatedText, WEATHER_UNAVAILABLE } from '../../lib/weather';
 import { formatDay, formatTime } from '../../lib/text';
 import { WeatherDays } from './WeatherDays';
@@ -22,8 +28,37 @@ function useNow(): number {
   return now;
 }
 
+/** Город из адреса экрана; неполные или неверные параметры — город по умолчанию. */
+function pointFrom(params: URLSearchParams): WeatherPoint | null {
+  const lat = Number.parseFloat(params.get('lat') ?? '');
+  const lon = Number.parseFloat(params.get('lon') ?? '');
+  const name = (params.get('name') ?? '').trim();
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || !name) return null;
+  return { name, lat, lon };
+}
+
 export function WeatherScreen() {
-  const q = useWeather();
+  const [params, setParams] = useSearchParams();
+  const point = pointFrom(params);
+  const q = useWeather(point);
+  const client = useQueryClient();
+  const needs = useNeedsOnline();
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState('');
+  const show = (p: WeatherPlace) => {
+    setSearching(false);
+    setError('');
+    setParams(new URLSearchParams(weatherPointQuery({ name: p.name, lat: p.lat, lon: p.lon })));
+  };
+  const makeDefault = useMutation({
+    mutationFn: (p: WeatherPoint) => weather.setLocation(p),
+    onSuccess: () => {
+      setError('');
+      void client.invalidateQueries({ queryKey: keys.weather });
+      setParams(new URLSearchParams());
+    },
+    onError: (err) => setError(errorText(err)),
+  });
   const online = useOnline();
   const now = useNow();
   const raw = q.data;
@@ -52,7 +87,7 @@ export function WeatherScreen() {
             <span className="wx-meta__place">
               <Ico icon={IconMapPin} size={18} />
               {w.location.name}
-              {w.location.custom ? '' : ' (по умолчанию)'}
+              {w.preview ? '' : ' (по умолчанию)'}
             </span>
           )}
           <span className="wx-meta__upd" role="status">
@@ -73,6 +108,43 @@ export function WeatherScreen() {
     <div className="app-stack wx-screen">
       <BackLink to="/more" label="Назад" history />
       <h1 className="g-title">Погода</h1>
+      <div className="wx-city">
+        {searching ? (
+          <>
+            <CitySearch label="Город для прогноза" offlineText="другой город можно посмотреть только онлайн." onPick={show} autoFocus />
+            <button type="button" className="g-btn g-btn--ghost g-btn--sm" onClick={() => setSearching(false)}>
+              Отмена
+            </button>
+          </>
+        ) : (
+          <div className="wx-city__actions">
+            <button type="button" className="g-btn g-btn--sm g-press" {...needs.props} onClick={needs.guard(() => setSearching(true))}>
+              <Ico icon={IconMapSearch} /> Другой город
+            </button>
+            {point && (
+              <>
+                <button
+                  type="button"
+                  className="g-btn g-btn--sm g-press"
+                  {...needs.props}
+                  {...busyProps(makeDefault.isPending)}
+                  onClick={needs.guard(() => !makeDefault.isPending && makeDefault.mutate(point))}
+                >
+                  Сделать городом по умолчанию
+                </button>
+                <button type="button" className="g-btn g-btn--ghost g-btn--sm" onClick={() => setParams(new URLSearchParams())}>
+                  К городу по умолчанию
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        {error && (
+          <p className="g-field__error" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
       {body}
     </div>
   );

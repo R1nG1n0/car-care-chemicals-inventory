@@ -87,3 +87,7 @@
 .wx-hour__time { font-size: var(--fs-12); color: var(--text-muted); font-weight: var(--fw-semibold); }
 .wx-hour__temp { font-size: var(--fs-16); }
 .wx-hour__row { display: inline-flex; align-items: center; gap: 2px; font-size: var(--fs-12); white-space: nowrap; color: var(--text-muted); }
+
+/* Выбор города на экране погоды: кнопки переносятся, поиск — во всю ширину */
+.wx-city { display: grid; gap: var(--sp-2); }
+.wx-city__actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }

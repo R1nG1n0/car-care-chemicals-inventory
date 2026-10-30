@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -119,6 +120,7 @@ type weatherBody struct {
 	FetchedAt *int64 `json:"fetched_at"`
 	Stale     bool   `json:"stale"`
 	UTCOffset int    `json:"utc_offset"`
+	Preview   bool   `json:"preview"`
 	Days      []struct {
 		Date    string  `json:"date"`
 		Weekday string  `json:"weekday"`
@@ -155,7 +157,7 @@ func TestWeatherDisabledWithoutPlace(t *testing.T) {
 	rec := c.do(http.MethodGet, "/api/weather", nil)
 	expect(t, rec, http.StatusOK, "погода выключена")
 	if got := strings.TrimSpace(rec.Body.String()); got !=
-		`{"enabled":false,"location":null,"fetched_at":null,"stale":false,"utc_offset":0,"days":[],"today_hours":[],"best":{"wash":null,"coat":null}}` {
+		`{"enabled":false,"location":null,"fetched_at":null,"stale":false,"utc_offset":0,"preview":false,"days":[],"today_hours":[],"best":{"wash":null,"coat":null}}` {
 		t.Fatalf("тело: %s", got)
 	}
 	if f, _ := up.counts(); f != 0 {
@@ -394,4 +396,29 @@ func TestWeatherLocationRateLimit(t *testing.T) {
 	expect(t, b.do(http.MethodPut, "/api/weather/location", body), http.StatusOK, "смена места вторым")
 	e.clock.Add(61 * time.Second)
 	expect(t, a.do(http.MethodPut, "/api/weather/location", body), http.StatusOK, "после минуты")
+}
+
+// Просмотр другого города (?lat&lon&name): прогноз этого города, место по
+// умолчанию не меняется; неверные параметры — 400; частые запросы — 429.
+func TestWeatherPreviewCity(t *testing.T) {
+	e, _, _ := newWeatherEnv(t, donetsk)
+	c := stkSignIn(e, "owner")
+	rec := c.do(http.MethodGet, "/api/weather?lat=47.23&lon=39.72&name="+url.QueryEscape("Ростов-на-Дону"), nil)
+	expect(t, rec, http.StatusOK, "просмотр города")
+	w := decode[weatherBody](t, rec)
+	if !w.Enabled || !w.Preview || w.Location == nil || w.Location.Name != "Ростов-на-Дону" || w.Location.Custom || len(w.Days) == 0 {
+		t.Fatalf("просмотр: %+v", w)
+	}
+	if def := getWeather(t, c); def.Preview || def.Location == nil || def.Location.Name != "Донецк" {
+		t.Fatalf("место по умолчанию изменилось: %+v", def.Location)
+	}
+	for _, bad := range []string{"lat=91&lon=10&name=X", "lat=10&lon=181&name=X", "lat=a&lon=1&name=X", "lat=10&lon=10", "lat=10&name=X"} {
+		expect(t, c.do(http.MethodGet, "/api/weather?"+bad, nil), http.StatusBadRequest, bad)
+	}
+	for i := 1; i < previewLimit; i++ {
+		expect(t, c.do(http.MethodGet, "/api/weather?lat=47.23&lon=39.72&name=R", nil), http.StatusOK, "просмотр "+strconv.Itoa(i))
+	}
+	expect(t, c.do(http.MethodGet, "/api/weather?lat=47.23&lon=39.72&name=R", nil), http.StatusTooManyRequests, "лимит просмотров")
+	// Место по умолчанию лимитом просмотров не ограничено.
+	expect(t, c.do(http.MethodGet, "/api/weather", nil), http.StatusOK, "место по умолчанию после лимита")
 }

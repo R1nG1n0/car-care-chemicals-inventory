@@ -15,10 +15,12 @@ import (
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/weather"
 )
 
-// placeSearchLimit и locationSetLimit — поисков города и смен места в минуту на пользователя.
+// placeSearchLimit, locationSetLimit и previewLimit — поисков города, смен места
+// и просмотров прогноза другого города в минуту на пользователя.
 const (
 	placeSearchLimit = 30
 	locationSetLimit = 10
+	previewLimit     = 30
 )
 
 const (
@@ -37,22 +39,33 @@ func (s *Server) weatherRoutes() {
 }
 
 type weatherResponse struct {
-	Enabled    bool               `json:"enabled"`
-	Location   *weather.Place     `json:"location"`
-	FetchedAt  *int64             `json:"fetched_at"`
-	Stale      bool               `json:"stale"`
-	UTCOffset  int                `json:"utc_offset"`
+	Enabled   bool           `json:"enabled"`
+	Location  *weather.Place `json:"location"`
+	FetchedAt *int64         `json:"fetched_at"`
+	Stale     bool           `json:"stale"`
+	UTCOffset int            `json:"utc_offset"`
+	// Preview — прогноз другого города по запросу (?lat&lon&name), а не места по умолчанию.
+	Preview    bool               `json:"preview"`
 	Days       []weather.DayView  `json:"days"`
 	TodayHours []weather.HourView `json:"today_hours"`
 	Best       weather.Best       `json:"best"`
 }
 
 // GET /api/weather — прогноз и оценка дней для места пользователя.
+// С ?lat=&lon=&name= — для любого города (просмотр на экране погоды, место по
+// умолчанию не меняется).
 func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
-	place, ok, err := s.weather.PlaceFor(r.Context(), currentFrom(r).user.ID)
-	if err != nil {
-		s.internalError(w, r, err)
+	place, preview, ok := s.previewPlace(w, r)
+	if !ok {
 		return
+	}
+	var err error
+	if !preview {
+		place, ok, err = s.weather.PlaceFor(r.Context(), currentFrom(r).user.ID)
+		if err != nil {
+			s.internalError(w, r, err)
+			return
+		}
 	}
 	if !ok {
 		writeJSON(w, http.StatusOK, weatherResponse{Days: []weather.DayView{}, TodayHours: []weather.HourView{}})
@@ -70,8 +83,38 @@ func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
 	fetched := res.FetchedAt.Unix()
 	writeJSON(w, http.StatusOK, weatherResponse{
 		Enabled: true, Location: &place, FetchedAt: &fetched, Stale: res.Stale, UTCOffset: res.Forecast.UTCOffset,
-		Days: view.Days, TodayHours: view.TodayHours, Best: view.Best,
+		Preview: preview, Days: view.Days, TodayHours: view.TodayHours, Best: view.Best,
 	})
+}
+
+// previewPlace разбирает ?lat=&lon=&name= — город для просмотра. Нет lat и lon —
+// preview=false (место по умолчанию). ok=false — ответ с ошибкой уже записан.
+func (s *Server) previewPlace(w http.ResponseWriter, r *http.Request) (place weather.Place, preview, ok bool) {
+	q := r.URL.Query()
+	if !q.Has("lat") && !q.Has("lon") {
+		return weather.Place{}, false, true
+	}
+	lat, errLat := strconv.ParseFloat(q.Get("lat"), 64)
+	lon, errLon := strconv.ParseFloat(q.Get("lon"), 64)
+	name := strings.TrimSpace(q.Get("name"))
+	switch {
+	case errLat != nil || errLon != nil || !weather.ValidCoord(lat, lon):
+		field := "lat"
+		if errLat == nil && math.Abs(lat) <= 90 {
+			field = "lon"
+		}
+		writeFieldError(w, http.StatusBadRequest, field, "Координаты места указаны неверно")
+		return weather.Place{}, false, false
+	case !weather.ValidName(name):
+		writeFieldError(w, http.StatusBadRequest, "name",
+			fmt.Sprintf("Название места — от 1 до %d символов", weather.MaxNameRunes))
+		return weather.Place{}, false, false
+	}
+	// Каждый новый город — запрос к Open-Meteo: ограничиваем, как и поиск.
+	if !s.allowPerUser(w, r, s.previewLimiter, "preview:") {
+		return weather.Place{}, false, false
+	}
+	return weather.Place{Name: name, Lat: lat, Lon: lon}, true, true
 }
 
 // GET /api/weather/places?q= — поиск города для выбора своего места.

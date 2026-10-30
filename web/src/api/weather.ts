@@ -44,6 +44,8 @@ export type WeatherHour = {
 };
 
 export type Weather = {
+  /** Прогноз другого города по запросу, а не места по умолчанию. */
+  preview?: boolean;
   /** false — погода не настроена: плашек и экрана нет. */
   enabled: boolean;
   location: WeatherLocation | null;
@@ -69,8 +71,15 @@ export type WeatherPlace = {
 
 export type WeatherPoint = { name: string; lat: number; lon: number };
 
+/** Параметры запроса города: ?lat=&lon=&name= (их же держит адрес экрана погоды). */
+export function weatherPointQuery(p: WeatherPoint): string {
+  return new URLSearchParams({ lat: String(p.lat), lon: String(p.lon), name: p.name }).toString();
+}
+
 export const weather = {
-  get: (signal?: AbortSignal) => request<Weather>('/api/weather', { signal }),
+  /** Прогноз места по умолчанию; с point — любого города (место по умолчанию не меняется). */
+  get: (signal?: AbortSignal, point?: WeatherPoint) =>
+    request<Weather>(point ? `/api/weather?${weatherPointQuery(point)}` : '/api/weather', { signal }),
   places: async (q: string, signal?: AbortSignal) =>
     (await request<{ places: WeatherPlace[] }>(`/api/weather/places?q=${encodeURIComponent(q)}`, { signal })).places,
   setLocation: (point: WeatherPoint) => request<WeatherLocation>('/api/weather/location', { method: 'PUT', body: point }),

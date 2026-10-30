@@ -23,6 +23,8 @@ export const keys = {
   recipe: (id: number) => ['recipe', id] as const,
   weather: ['weather'] as const,
   weatherPlaces: (q: string) => ['weatherPlaces', q] as const,
+  // Просмотр другого города: отдельный корень — в снимки без связи не сохраняется.
+  weatherAt: (lat: number, lon: number, name: string) => ['weatherAt', lat, lon, name] as const,
 };
 
 /** После любого изменения остатков. */
