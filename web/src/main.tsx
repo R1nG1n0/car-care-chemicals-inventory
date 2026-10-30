@@ -27,6 +27,7 @@ import './styles/inventory.css';
 import './styles/about.css';
 import './styles/reports.css';
 import './styles/weather.css';
+import './styles/dilution.css';
 import { App } from './App';
 import { listenInstallPrompt } from './app/install';
 import { registerServiceWorker } from './app/registerSw';

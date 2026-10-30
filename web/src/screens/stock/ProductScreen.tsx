@@ -13,6 +13,7 @@ import { Sheet } from '../../components/Sheet';
 import { BackLink } from '../../components/BackLink';
 import { catClassOf, useStockRefs } from '../../components/refs';
 import { Empty, Ico, LoadError } from '../../components/ui';
+import { dilutionsOf, dilutionsText } from '../../lib/dilution';
 import { formatQty } from '../../lib/format';
 import { DO_NOT_BUY_TEXT } from '../../lib/purposes';
 import { productMeta, stickerText, unitLabel } from '../../lib/stock';
@@ -130,6 +131,17 @@ function ProductView({ detail, back }: { detail: ProductDetail; back: ReactNode 
         </p>
       )}
       {p.note && <p className="g-muted">{p.note}</p>}
+      {p.unit === 'ml' && dilutionsOf(p).length > 0 && (
+        <div className="dil-card">
+          <p className="dil-card__text">
+            <span className="g-label">Разбавление</span>
+            <span className="shop-block">{dilutionsText(dilutionsOf(p))}</span>
+          </p>
+          <Link className="g-btn g-btn--sm g-press" to={`/more/calculator?product=${p.id}`}>
+            Посчитать
+          </Link>
+        </div>
+      )}
 
       <ProductRating product={p} />
       <ProductAnalogs detail={detail} />

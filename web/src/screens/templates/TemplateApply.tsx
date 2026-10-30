@@ -13,15 +13,17 @@ import { useToast } from '../../app/toast';
 import { useRevert } from '../../app/useRevert';
 import { BackLink } from '../../components/BackLink';
 import { busyProps, Empty, HeadRow, Ico, LoadError, SkelList } from '../../components/ui';
+import { concentrateOf, parseSolution } from '../../lib/dilution';
 import { formatMoney } from '../../lib/format';
-import { applyItems, parseRowQty, qtyChanged, shortageReport, shortageText } from '../../lib/recipeApply';
+import { applyItems, draftOfItem, parseRowQty, qtyChanged, shortageReport, shortageText, type ApplyRow, type RecipeRowDraft } from '../../lib/recipeApply';
 import { qtyText } from '../../lib/stock';
 import { formatDay } from '../../lib/text';
-import { RecipeQty } from './RecipeQty';
+import { RecipeLine } from './RecipeLine';
 
-type Row = { product_id: number; qty: string };
+// Строка: key = product_id; у строки раствором — объём и пропорция (ФТ-17.2.4)
+type Row = RecipeRowDraft & { product_id: number };
 
-const toRows = (r: Recipe): Row[] => r.items.map((i) => ({ product_id: i.product_id, qty: String(i.qty) }));
+const toRows = (r: Recipe): Row[] => r.items.map((i) => ({ ...draftOfItem(i.product_id, i), product_id: i.product_id }));
 
 function Apply({ recipe, report, setReport }: { recipe: Recipe; report: string; setReport: (s: string) => void }) {
   const qc = useQueryClient();
@@ -48,10 +50,14 @@ function Apply({ recipe, report, setReport }: { recipe: Recipe; report: string; 
     const it = recipe.items.find((x) => x.product_id === r.product_id);
     return it ? [{ row: r, it }] : [];
   });
-  const parsed = shown.map(({ row }) => ({ product_id: row.product_id, qty: parseRowQty(row.qty) ?? 0 }));
+  const parsed: ApplyRow[] = shown.map(({ row }) => {
+    if (row.mode !== 'solution') return { product_id: row.product_id, qty: parseRowQty(row.qty) ?? 0 };
+    const solution = parseSolution(row.volume ?? '', row.ratio ?? '');
+    return { product_id: row.product_id, qty: solution ? concentrateOf(solution) : 0, solution };
+  });
   const items = applyItems(parsed);
   const changed = qtyChanged(parsed, recipe.items);
-  const setQty = (id: number, qty: string) => setRows((rs) => rs.map((x) => (x.product_id === id ? { ...x, qty } : x)));
+  const setLine = (id: number, patch: Partial<RecipeRowDraft>) => setRows((rs) => rs.map((x) => (x.product_id === id ? { ...x, ...patch, product_id: id } : x)));
 
   const apply = useMutation({
     mutationFn: () => applyOrQueue(qc, recipe, items),
@@ -83,6 +89,7 @@ function Apply({ recipe, report, setReport }: { recipe: Recipe; report: string; 
 
   const submit = () => {
     if (apply.isPending) return;
+    if (shown.some(({ row }) => row.mode === 'solution' && !parseSolution(row.volume ?? '', row.ratio ?? ''))) return setError('Проверьте объём раствора (до 100 000 мл) и пропорцию (1:1 — 1:1000)');
     if (parsed.some((r) => r.qty > 100_000)) return setError('В строке — не больше 100 000');
     if (items.length === 0) return setError('Нечего списывать: все количества равны нулю');
     apply.mutate();
@@ -129,14 +136,7 @@ function Apply({ recipe, report, setReport }: { recipe: Recipe; report: string; 
                     <Ico icon={IconX} />
                   </button>
                 </div>
-                <RecipeQty
-                  id={`ta-q-${r.product_id}`}
-                  name={it.product.name}
-                  unit={it.product.unit}
-                  value={r.qty}
-                  describedBy={warn ? warnId : undefined}
-                  onChange={(v) => setQty(r.product_id, v)}
-                />
+                <RecipeLine id={`ta-q-${r.product_id}`} product={it.product} value={r} describedBy={warn ? warnId : undefined} onChange={(patch) => setLine(r.product_id, patch)} />
               </div>
             );
           })}

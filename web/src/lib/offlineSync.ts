@@ -2,13 +2,13 @@
 // Успех — запись удаляется; нехватка и отказ сервера — запись остаётся с пометкой,
 // отправка идёт дальше; 401 и пропавшая связь — отправка останавливается, очередь цела.
 import { ApiError, isApiError, isNetworkError } from '../api/client';
-import type { ApplyResult, ConsumeResult } from '../api/inventory';
-import { shortageMessage, type OfflineQueue, type QueueOp } from './offlineQueue';
+import type { ApplyResult, ConsumeResult, RecipeLineInput, Solution } from '../api/inventory';
+import { shortageMessage, type ApplyItem, type ConsumeOp, type OfflineQueue, type QueueOp } from './offlineQueue';
 
 /** То, чем очередь ходит на сервер (подменяется в тестах). */
 export type SendApi = {
-  consume(b: { product_id: number; qty: number; unit_id?: number; client_op_id: string; occurred_at: number }): Promise<ConsumeResult>;
-  applyRecipe(id: number, items: { product_id: number; qty: number }[], op: { client_op_id: string; occurred_at: number }): Promise<ApplyResult>;
+  consume(b: { product_id: number; qty?: number; solution?: Solution; unit_id?: number; client_op_id: string; occurred_at: number }): Promise<ConsumeResult>;
+  applyRecipe(id: number, items: RecipeLineInput[], op: { client_op_id: string; occurred_at: number }): Promise<ApplyResult>;
 };
 
 export type FlushResult = {
@@ -55,16 +55,20 @@ export function judge(err: unknown, op: QueueOp): Verdict {
   return { kind: 'stop', reason: 'network' };
 }
 
+/** Тело расхода: раствор (сервер сам считает концентрат) либо количество — не оба сразу. */
+export function consumeBodyOf(op: ConsumeOp): Parameters<SendApi['consume']>[0] {
+  const amount = op.solution ? { solution: { volume_ml: op.solution.volume_ml, ratio: op.solution.ratio } } : { qty: op.qty };
+  return { product_id: op.product_id, ...amount, ...(op.unit_id !== undefined ? { unit_id: op.unit_id } : {}), client_op_id: op.op_id, occurred_at: op.occurred_at };
+}
+
+/** Строки применения: строка раствором уходит как раствор. */
+export function applyLinesOf(items: readonly ApplyItem[]): RecipeLineInput[] {
+  return items.map((i) => (i.solution ? { product_id: i.product_id, solution: { volume_ml: i.solution.volume_ml, ratio: i.solution.ratio } } : { product_id: i.product_id, qty: i.qty }));
+}
+
 async function sendOne(op: QueueOp, api: SendApi): Promise<ConsumeResult | ApplyResult> {
-  const idem = { client_op_id: op.op_id, occurred_at: op.occurred_at };
-  if (op.kind === 'consume') {
-    return api.consume({ product_id: op.product_id, qty: op.qty, ...(op.unit_id !== undefined ? { unit_id: op.unit_id } : {}), ...idem });
-  }
-  return api.applyRecipe(
-    op.recipe_id,
-    op.items.map((i) => ({ product_id: i.product_id, qty: i.qty })),
-    idem,
-  );
+  if (op.kind === 'consume') return api.consume(consumeBodyOf(op));
+  return api.applyRecipe(op.recipe_id, applyLinesOf(op.items), { client_op_id: op.op_id, occurred_at: op.occurred_at });
 }
 
 const running = new WeakMap<OfflineQueue, Promise<FlushResult>>();

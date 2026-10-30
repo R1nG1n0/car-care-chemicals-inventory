@@ -8,7 +8,8 @@ import { useStockRefs } from '../../components/refs';
 import { busyProps } from '../../components/ui';
 import { formatMoney } from '../../lib/format';
 import { unitPriceText } from '../../lib/money';
-import { canRevert, movementTitle, revertQuestion } from '../../lib/movements';
+import { qtyText } from '../../lib/stock';
+import { canRevert, movementTitle, revertQuestion, solutionTotals } from '../../lib/movements';
 import { formatDay, formatTime, purchaseDay } from '../../lib/text';
 import { useNeedsOnline } from '../../app/useOffline';
 import { useRevert } from '../../app/useRevert';
@@ -24,10 +25,15 @@ export function ProductHistory({ detail }: { detail: ProductDetail }) {
   if (ask && ask !== last) setLast(ask);
   const shown = ask ?? last;
 
+  // Расход раствором из двух бутылок — два движения: в заголовке общий концентрат, в подписи — доля бутылки
+  const totals = solutionTotals(movements);
+  const title = (m: Movement) => movementTitle(m, p.unit, totals.get(m.batch_id));
   const place = (id: number | null) => (id === null ? 'без места' : (refs.locations.get(id)?.name ?? 'место'));
   const sub = (m: Movement) => {
     const parts = [`${formatDay(m.created_at)} ${formatTime(m.created_at * 1000)}`];
     if (m.type === 'move') parts.push(`${place(m.from_location_id)} → ${place(m.to_location_id)}`);
+    const whole = totals.get(m.batch_id);
+    if (whole !== undefined && whole !== Math.abs(m.qty_delta)) parts.push(`из этой бутылки ${qtyText(Math.abs(m.qty_delta), p.unit)}`);
     if (m.reason && m.reason !== 'Начальный остаток') parts.push(m.reason);
     if (m.cost !== null && m.cost !== 0) parts.push(formatMoney(Math.abs(m.cost)));
     return parts.join(' · ');
@@ -76,11 +82,11 @@ export function ProductHistory({ detail }: { detail: ProductDetail }) {
           {movements.map((m) => (
             <div key={m.id} className="g-row">
               <div className="g-row__main">
-                <div className="g-row__title">{movementTitle(m, p.unit)}</div>
+                <div className="g-row__title">{title(m)}</div>
                 <div className="g-row__sub">{sub(m)}</div>
               </div>
               {canRevert(m) && (
-                <button type="button" className="g-btn g-btn--sm g-btn--ghost" {...online.props} onClick={online.guard(() => setAsk(m))} aria-label={`Отменить: ${movementTitle(m, p.unit)}`}>
+                <button type="button" className="g-btn g-btn--sm g-btn--ghost" {...online.props} onClick={online.guard(() => setAsk(m))} aria-label={`Отменить: ${title(m)}`}>
                   Отменить
                 </button>
               )}

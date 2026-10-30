@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/barcode"
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/catalog"
+	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/stock"
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/telegram"
 )
 
@@ -118,6 +120,10 @@ func (b *Bot) loginSuffix(ctx context.Context, userID int64) string {
 
 var consumeRe = regexp.MustCompile(`^(.*\S)\s+(\d{1,6})$`)
 
+// solutionRe — «название 1000 1:10» или «название 1000 1/10»: объём раствора
+// и пропорция в конце фразы (ФТ-17.2.5).
+var solutionRe = regexp.MustCompile(`^(.*\S)\s+(\d{1,6})\s+1\s*[:/]\s*(\d{1,4})$`)
+
 // handleText разбирает обычный текст: цена, штрихкод цифрами, «название число», поиск.
 func (b *Bot) handleText(ctx context.Context, link Link, chatID int64, text string) {
 	if key, ok := b.pend.awaitingKey(chatID); ok {
@@ -132,9 +138,16 @@ func (b *Bot) handleText(ctx context.Context, link Link, chatID int64, text stri
 	}
 	// «Название число» — расход, но только если фраза целиком не является
 	// названием или брендом позиции («Мойка 2 в 1» — это поиск, а не расход 1 мл).
+	if m := solutionRe.FindStringSubmatch(text); m != nil {
+		ratio, _ := strconv.ParseInt(m[3], 10, 64)
+		whole, err := b.cat.Products(ctx, link.UserID, catalog.ProductFilter{Query: text})
+		if err == nil && len(whole) == 0 && b.quickConsume(ctx, link, chatID, m[1], m[2], &stock.Solution{Ratio: ratio}) {
+			return
+		}
+	}
 	if m := consumeRe.FindStringSubmatch(text); m != nil {
 		whole, err := b.cat.Products(ctx, link.UserID, catalog.ProductFilter{Query: text})
-		if err == nil && len(whole) == 0 && b.quickConsume(ctx, link, chatID, m[1], m[2]) {
+		if err == nil && len(whole) == 0 && b.quickConsume(ctx, link, chatID, m[1], m[2], nil) {
 			return
 		}
 	}

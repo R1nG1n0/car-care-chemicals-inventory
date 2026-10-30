@@ -27,6 +27,8 @@ type ProductInput struct {
 	Instruction  string
 	Rating       *int64 // 1…5
 	DoNotBuy     bool
+	// Dilutions — пропорции разбавления (ФТ-17.1), только для позиций в мл.
+	Dilutions []DilutionInput
 }
 
 // ProductPatch — изменение позиции; nil — поле не меняется. MinStockSet
@@ -52,6 +54,8 @@ type ProductPatch struct {
 	RatingSet    bool
 	Rating       *int64
 	DoNotBuy     *bool
+	// Dilutions nil — не менять, пустой список — удалить все (ФТ-17.1).
+	Dilutions *[]DilutionInput
 }
 
 // ProductFilter — параметры списка позиций (GET /api/products).
@@ -129,7 +133,8 @@ func (in *ProductInput) validate() error {
 	if in.Rating != nil && (*in.Rating < 1 || *in.Rating > 5) {
 		return invalid("rating", "Оценка — от 1 до 5 или пусто")
 	}
-	return nil
+	in.Dilutions, err = validateDilutions(in.Unit, in.Dilutions)
+	return err
 }
 
 const errPhText = "pH — число от 0 до 14 с одним знаком после запятой или пусто"
@@ -187,6 +192,9 @@ func (s *Service) CreateProduct(ctx context.Context, userID int64, in ProductInp
 		if err := t.setProductPurposes(ctx, userID, id, purposes); err != nil {
 			return err
 		}
+		if err := t.setDilutions(ctx, userID, id, in.Dilutions); err != nil {
+			return err
+		}
 		out, err = t.Summary(ctx, userID, id)
 		return err
 	})
@@ -242,6 +250,11 @@ func (s *Service) updateProduct(ctx context.Context, userID, id int64, p Product
 	if p.DoNotBuy != nil {
 		in.DoNotBuy = *p.DoNotBuy
 	}
+	// Пропорции: переданный список проверяется целиком; не переданный
+	// остаётся, но при смене единицы на шт снимается.
+	if p.Dilutions != nil {
+		in.Dilutions = *p.Dilutions
+	}
 	if p.PackageSize != nil {
 		in.PackageSize = *p.PackageSize
 	}
@@ -288,6 +301,15 @@ func (s *Service) updateProduct(ctx context.Context, userID, id int64, p Product
 	}
 	if p.PurposeIDs != nil {
 		if err := s.setProductPurposes(ctx, userID, id, purposes); err != nil {
+			return ProductSummary{}, err
+		}
+	}
+	if p.Dilutions != nil {
+		if err := s.setDilutions(ctx, userID, id, in.Dilutions); err != nil {
+			return ProductSummary{}, err
+		}
+	} else if in.Unit == "pcs" && len(cur.Dilutions) > 0 {
+		if err := s.setDilutions(ctx, userID, id, nil); err != nil {
 			return ProductSummary{}, err
 		}
 	}

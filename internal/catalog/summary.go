@@ -43,6 +43,8 @@ type ProductSummary struct {
 	PhotoUpdatedAt *int64 `json:"photo_updated_at"`
 	// PurposeIDs — назначения позиции по возрастанию id, в том числе архивные (ФТ-15.1).
 	PurposeIDs []int64 `json:"purpose_ids"`
+	// Dilutions — пропорции разбавления в порядке владельца; у позиций в шт всегда [] (ФТ-17.1).
+	Dilutions []Dilution `json:"dilutions"`
 	// PH — кислотность 0…14 с одним знаком; null — не задана (ФТ-15.2).
 	PH *float64 `json:"ph"`
 	// Rating — оценка 1…5; null — без оценки (ФТ-15.4).
@@ -82,6 +84,10 @@ type Movement struct {
 	// Cost — |qty_delta| × цена упаковки ÷ initial_qty, к ближайшему; null — нет цены.
 	Cost      *int64 `json:"cost"`
 	CreatedAt int64  `json:"created_at"`
+	// SolutionML и SolutionRatio — раствор, из которого посчитан расход (ФТ-17.2.3);
+	// null — расход обычным количеством. QtyDelta хранит концентрат.
+	SolutionML    *int64 `json:"solution_ml"`
+	SolutionRatio *int64 `json:"solution_ratio"`
 }
 
 // PurchaseRow — строка истории покупок позиции.
@@ -112,6 +118,7 @@ func scanProduct(sc interface{ Scan(...any) error }) (ProductSummary, error) {
 	}
 	p.LocationIDs = []int64{}
 	p.PurposeIDs = []int64{}
+	p.Dilutions = []Dilution{}
 	return p, err
 }
 
@@ -150,6 +157,9 @@ func (s *Service) Summaries(ctx context.Context, userID int64, ids []int64) ([]P
 		return nil, err
 	}
 	if err := s.fillPurposes(ctx, userID, in, args, byID); err != nil {
+		return nil, err
+	}
+	if err := s.fillDilutions(ctx, userID, in, args, byID); err != nil {
 		return nil, err
 	}
 
@@ -333,7 +343,7 @@ func (s *Service) productUnits(ctx context.Context, userID, productID int64) ([]
 
 const movementSelect = `SELECT m.id, m.unit_id, u.product_id, m.type, m.qty_delta,
 	m.from_location_id, m.to_location_id, m.reason, m.recipe_run_id, COALESCE(m.batch_id, m.id), m.created_at,
-	u.initial_qty, l.price_per_package
+	u.initial_qty, l.price_per_package, m.solution_ml, m.solution_ratio
 	FROM movements m
 	JOIN units u ON u.user_id = m.user_id AND u.id = m.unit_id
 	LEFT JOIN purchase_lines l ON l.user_id = u.user_id AND l.id = u.purchase_line_id `
@@ -347,13 +357,14 @@ func (s *Service) queryMovements(ctx context.Context, query string, args ...any)
 	out := []Movement{}
 	for rows.Next() {
 		var m Movement
-		var from, to, run, price sql.NullInt64
+		var from, to, run, price, solML, solRatio sql.NullInt64
 		var initial int64
 		if err := rows.Scan(&m.ID, &m.UnitID, &m.ProductID, &m.Type, &m.QtyDelta, &from, &to,
-			&m.Reason, &run, &m.BatchID, &m.CreatedAt, &initial, &price); err != nil {
+			&m.Reason, &run, &m.BatchID, &m.CreatedAt, &initial, &price, &solML, &solRatio); err != nil {
 			return nil, fmt.Errorf("движения: %w", err)
 		}
 		m.FromLocationID, m.ToLocationID, m.RecipeRunID = nullInt(from), nullInt(to), nullInt(run)
+		m.SolutionML, m.SolutionRatio = nullInt(solML), nullInt(solRatio)
 		if price.Valid {
 			qty := m.QtyDelta
 			if qty < 0 {

@@ -10,11 +10,13 @@ import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { fieldErrors, inventory, type ProductDetail, type ProductInput } from '../../api';
 import { invalidateRefs, invalidateStock, keys } from '../../app/queries';
 import { BackLink } from '../../components/BackLink';
+import { DilutionsEditor } from '../../components/DilutionsEditor';
 import { AreaField, BrandField, CategoryPick, PurposePick } from '../../components/ProductFields';
 import { Scanner } from '../../components/Scanner';
 import { useStockRefs } from '../../components/refs';
 import { busyProps, Field, Ico, LoadError } from '../../components/ui';
 import { parseManual } from '../../lib/barcode';
+import { dilutionsOf, draftsOf, validateDilutions } from '../../lib/dilution';
 import { MAX_INCOMPATIBLE, MAX_INSTRUCTION, PRODUCT_FIELDS, phInput, validateProduct, type ProductErrors, type ProductFields } from '../../lib/product';
 import { aboutOf } from '../../lib/purposes';
 import { unitLabel } from '../../lib/stock';
@@ -72,12 +74,15 @@ function FormBody({ detail }: { detail: ProductDetail | undefined }) {
     ph: phInput(product?.ph),
     incompatible: detail ? aboutOf(detail).incompatible : '',
     instruction: detail ? aboutOf(detail).instruction : '',
+    dilutions: product ? draftsOf(dilutionsOf(product)) : [],
   }));
   const [errors, setErrors] = useState<ProductErrors>({});
   const [scanning, setScanning] = useState(false);
   const purposes = refs.purposeList;
   const cats = refs.categoryList.filter((c) => !c.archived || c.id === f.category_id);
   const u = unitLabel(f.unit);
+  // Подсветка строк пропорций — только после попытки сохранить (errors.dilutions выставляет проверка)
+  const dilRows = errors.dilutions !== undefined && f.dilutions ? validateDilutions(f.dilutions) : null;
   const backTo = product ? `/items/${product.id}` : '/';
 
   const set = <K extends keyof ProductFields>(k: K, v: ProductFields[K]) => {
@@ -138,6 +143,14 @@ function FormBody({ detail }: { detail: ProductDetail | undefined }) {
             {errors.unit && <span className="g-field__error">{errors.unit}</span>}
           </div>
           <PurposePick purposes={purposes} value={f.purpose_ids} onChange={(v) => set('purpose_ids', v)} />
+          {f.unit === 'ml' && (
+            <DilutionsEditor
+              value={f.dilutions ?? []}
+              onChange={(v) => set('dilutions', v)}
+              errors={dilRows && !dilRows.ok ? dilRows.rows : {}}
+              formError={dilRows && !dilRows.ok ? dilRows.form : errors.dilutions}
+            />
+          )}
           <div className="app-two">
             <Field id="np-package_size" label={`Размер упаковки, ${u}`} inputMode="numeric" value={f.package_size} onChange={(e) => set('package_size', e.target.value)} error={errors.package_size} />
             <Field id="np-min_stock" label={`Мин. остаток, ${u}`} inputMode="numeric" value={f.min_stock} placeholder="не задан" onChange={(e) => set('min_stock', e.target.value)} error={errors.min_stock} />

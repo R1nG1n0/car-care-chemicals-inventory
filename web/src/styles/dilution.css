@@ -1,0 +1,56 @@
+/*
+ * Разбавление концентратов (ФТ-17): переключатель режима, раствор в шторке и шаблоне,
+ * редактор пропорций, калькулятор. Только токены. Анимация — transform и opacity;
+ * при reduced-motion остаётся прозрачность.
+ */
+
+/* Раствор: поля одним столбцом */
+.dil { display: grid; gap: var(--sp-3); }
+.dil-quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-2); }
+.dil-quick .g-btn { padding: 0; min-height: var(--tap); font-size: var(--fs-14); }
+.dil-quick .g-btn[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--line-key); }
+.dil-own { display: grid; gap: var(--sp-1); margin-top: var(--sp-2); }
+.dil-own .g-qty__value { max-width: 160px; }
+.dil-own .g-qty__value input, .dil-row .g-qty__value input { height: var(--tap); font-size: var(--fs-20); }
+.dil-own .g-qty__value b, .dil-row .g-qty__value b { font: var(--fw-heavy) var(--fs-20) var(--font-display); }
+.g-qty.app-qty--compact .g-qty__value b { font-size: var(--fs-16); }
+
+/* «Концентрат 91 мл + вода 909 мл» */
+.dil-mix { margin: 0; font-size: var(--fs-16); font-weight: var(--fw-bold); }
+.dil-mix .dil-num, .dil-big .dil-num { font-family: var(--font-display); font-weight: var(--fw-heavy); font-variant-numeric: tabular-nums; }
+
+/* Смена числа: проявляется и чуть поднимается */
+.dil-num { display: inline-block; }
+.dil-num.is-swap { animation: dil-swap var(--dur-fast) var(--ease-out); }
+@keyframes dil-swap {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+/* Редактор пропорций позиции */
+.dil-rows { display: grid; gap: var(--sp-3); }
+.dil-row { display: grid; gap: var(--sp-2); padding: var(--sp-3); border: var(--bw) solid var(--line); border-radius: var(--r-card); background: var(--surface); }
+.dil-row__line { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.dil-row__ratio { max-width: 140px; }
+.dil-row__tools { display: flex; gap: var(--sp-1); }
+
+/* Пропорции в карточке позиции */
+.dil-card { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+.dil-card__text { flex: 1; min-width: 0; }
+
+/* Калькулятор */
+.dil-calc { display: grid; gap: var(--sp-4); }
+.dil-result { display: grid; gap: var(--sp-2); padding: var(--sp-4); border: var(--bw) solid var(--line); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--sh-lg); }
+.dil-result__row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); }
+.dil-result__name { color: var(--text-muted); font-weight: var(--fw-bold); }
+.dil-big { font-size: var(--fs-32); line-height: 1.2; white-space: nowrap; }
+.dil-big small { font: var(--fw-bold) var(--fs-16) var(--font-body); margin-left: 4px; }
+.dil-from { display: grid; gap: var(--sp-1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .dil-num.is-swap { animation-name: g-fade; }
+}
+
+/* Строка шаблона: переключатель и поля одним столбцом */
+.dil-line { display: grid; gap: var(--sp-2); min-width: 0; }
+.shop-tpl-row > .dil-line { flex-basis: 100%; }
+.shop-tpl-qty > .dil-line { flex: 1; }

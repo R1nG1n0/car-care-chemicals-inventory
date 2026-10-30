@@ -13,6 +13,7 @@ import (
 type stkRecipeItemJSON struct {
 	ProductID int64                  `json:"product_id"`
 	Qty       int64                  `json:"qty"`
+	Solution  *stock.Solution        `json:"solution"`
 	Product   catalog.ProductSummary `json:"product"`
 	Available int64                  `json:"available"`
 	Short     bool                   `json:"short"`
@@ -48,7 +49,7 @@ func (s *Server) recipesJSON(r *http.Request, list []stock.Recipe) ([]stkRecipeJ
 		j := stkRecipeJSON{ID: rc.ID, Name: rc.Name, Sort: rc.Sort, LastUsedAt: rc.LastUsedAt, Cost: rc.Cost,
 			Items: make([]stkRecipeItemJSON, 0, len(rc.Items))}
 		for _, it := range rc.Items {
-			j.Items = append(j.Items, stkRecipeItemJSON{ProductID: it.ProductID, Qty: it.Qty,
+			j.Items = append(j.Items, stkRecipeItemJSON{ProductID: it.ProductID, Qty: it.Qty, Solution: it.Solution,
 				Product: byID[it.ProductID], Available: it.Available, Short: it.Short})
 		}
 		out = append(out, j)

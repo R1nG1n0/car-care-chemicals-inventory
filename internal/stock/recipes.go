@@ -14,10 +14,12 @@ type RecipeInput struct {
 	Items []ItemInput `json:"items"`
 }
 
-// ItemInput — строка «позиция — количество».
+// ItemInput — строка «позиция — количество». Вместо qty можно передать
+// Solution (ФТ-17.2.4): тогда qty игнорируется и считается из раствора.
 type ItemInput struct {
-	ProductID int64 `json:"product_id"`
-	Qty       int64 `json:"qty"`
+	ProductID int64     `json:"product_id"`
+	Qty       int64     `json:"qty"`
+	Solution  *Solution `json:"solution"`
 }
 
 // Recipe — шаблон расхода. Сводку позиции к строкам добавляет обработчик.
@@ -33,13 +35,15 @@ type Recipe struct {
 // RecipeItem — строка шаблона с доступным остатком.
 type RecipeItem struct {
 	ProductID int64
-	Qty       int64
+	Qty       int64     // для строки-раствора — рассчитанный концентрат
+	Solution  *Solution // nil — строка задана количеством
 	Available int64
 	Short     bool
 }
 
 // validateItems проверяет строки: позиции свои и без повторов, qty в
 // пределах; zeroOK — допускается qty 0 (применение: строка пропускается).
+// У строки с раствором qty заменяется рассчитанным концентратом (в items).
 func validateItems(ctx context.Context, q querier, userID int64, items []ItemInput, zeroOK bool) ([]productInfo, error) {
 	if len(items) > maxLines || (!zeroOK && len(items) < 1) {
 		return nil, &ValidationError{Field: "items", Message: "В шаблоне — от 1 до 30 строк"}
@@ -50,8 +54,9 @@ func validateItems(ctx context.Context, q querier, userID int64, items []ItemInp
 	}
 	seen := map[int64]bool{}
 	out := make([]productInfo, 0, len(items))
-	for _, it := range items {
-		if it.Qty < minQty || it.Qty > maxQty {
+	for i := range items {
+		it := &items[i]
+		if it.Solution == nil && (it.Qty < minQty || it.Qty > maxQty) {
 			return nil, &ValidationError{Field: "qty", Message: fmt.Sprintf("Количество — от %d до 100 000", minQty)}
 		}
 		if seen[it.ProductID] {
@@ -61,6 +66,11 @@ func validateItems(ctx context.Context, q querier, userID int64, items []ItemInp
 		p, err := product(ctx, q, userID, it.ProductID)
 		if err != nil {
 			return nil, err
+		}
+		if it.Solution != nil {
+			if it.Qty, err = it.Solution.resolve(p); err != nil {
+				return nil, err
+			}
 		}
 		out = append(out, p)
 	}
@@ -131,9 +141,11 @@ func (s *Service) CreateRecipe(ctx context.Context, userID int64, in RecipeInput
 
 func insertItems(ctx context.Context, tx *sql.Tx, userID, recipeID int64, items []ItemInput) error {
 	for i, it := range items {
+		ml, ratio := it.Solution.nulls()
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO recipe_items (user_id, recipe_id, product_id, qty, sort) VALUES (?, ?, ?, ?, ?)`,
-			userID, recipeID, it.ProductID, it.Qty, i); err != nil {
+			INSERT INTO recipe_items (user_id, recipe_id, product_id, qty, sort, solution_ml, solution_ratio)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			userID, recipeID, it.ProductID, it.Qty, i, ml, ratio); err != nil {
 			return fmt.Errorf("запись строки шаблона: %w", err)
 		}
 	}
@@ -263,7 +275,7 @@ func (s *Service) Recipes(ctx context.Context, userID, id int64) ([]Recipe, erro
 // fillItems читает строки шаблона, остатки и оценку себестоимости.
 func (s *Service) fillItems(ctx context.Context, userID int64, r *Recipe) error {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT i.product_id, i.qty, p.unit, p.package_size, p.name FROM recipe_items i
+		SELECT i.product_id, i.qty, p.unit, p.package_size, p.name, i.solution_ml, i.solution_ratio FROM recipe_items i
 		JOIN products p ON p.user_id = i.user_id AND p.id = i.product_id
 		WHERE i.user_id = ? AND i.recipe_id = ? ORDER BY i.sort, i.id`, userID, r.ID)
 	if err != nil {
@@ -274,9 +286,11 @@ func (s *Service) fillItems(ctx context.Context, userID int64, r *Recipe) error 
 	for rows.Next() {
 		var it RecipeItem
 		var p productInfo
-		if err := rows.Scan(&it.ProductID, &it.Qty, &p.Unit, &p.PackageSize, &p.Name); err != nil {
+		var solML, solRatio sql.NullInt64
+		if err := rows.Scan(&it.ProductID, &it.Qty, &p.Unit, &p.PackageSize, &p.Name, &solML, &solRatio); err != nil {
 			return err
 		}
+		it.Solution = solutionFrom(solML, solRatio)
 		p.ID = it.ProductID
 		r.Items = append(r.Items, it)
 		infos = append(infos, p)
@@ -347,7 +361,7 @@ func (s *Service) ApplyRecipeOp(ctx context.Context, userID, recipeID int64, ite
 			if it.Qty == 0 {
 				continue
 			}
-			c, err := consumeTx(ctx, tx, userID, infos[i], it.Qty, nil, run, &batch, now, true)
+			c, err := consumeTx(ctx, tx, userID, infos[i], it.Qty, nil, run, &batch, now, true, it.Solution)
 			if err != nil {
 				return res, err
 			}

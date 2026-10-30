@@ -11,12 +11,22 @@ import (
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/telegram"
 )
 
-// quickConsume — «шампунь 50» (ФТ-11.5.1). Возвращает false, если по началу
-// фразы позиций нет — тогда вся фраза ищется как обычный запрос.
-func (b *Bot) quickConsume(ctx context.Context, link Link, chatID int64, query, qtyText string) bool {
+// solutionText — «Раствор 1 000 мл 1:10».
+func solutionText(s stock.Solution) string {
+	return fmt.Sprintf("Раствор %s 1:%d", qty("ml", s.VolumeML), s.Ratio)
+}
+
+// quickConsume — «шампунь 50» (ФТ-11.5.1) или «шампунь 1000 1:10» — расход
+// раствора (ФТ-17.2.5; sol != nil, qtyText — объём раствора). Возвращает
+// false, если по началу фразы позиций нет — тогда вся фраза ищется как
+// обычный запрос.
+func (b *Bot) quickConsume(ctx context.Context, link Link, chatID int64, query, qtyText string, sol *stock.Solution) bool {
 	n, err := strconv.ParseInt(qtyText, 10, 64)
 	if err != nil {
 		return false
+	}
+	if sol != nil {
+		sol.VolumeML = n
 	}
 	found, err := b.cat.Products(ctx, link.UserID, catalog.ProductFilter{Query: query})
 	if err != nil {
@@ -27,21 +37,25 @@ func (b *Bot) quickConsume(ctx context.Context, link Link, chatID int64, query, 
 	case 0:
 		return false
 	case 1:
-		b.consume(ctx, link, chatID, found[0].ID, n)
+		b.consume(ctx, link, chatID, found[0].ID, n, sol)
 	default:
-		b.askWhich(ctx, link, chatID, found, n)
+		b.askWhich(ctx, link, chatID, found, n, sol)
 	}
 	return true
 }
 
 // askWhich — несколько совпадений: кнопки выбора позиции для списания n.
-func (b *Bot) askWhich(ctx context.Context, link Link, chatID int64, found []catalog.ProductSummary, n int64) {
+func (b *Bot) askWhich(ctx context.Context, link Link, chatID int64, found []catalog.ProductSummary, n int64, sol *stock.Solution) {
 	// Выбор одноразовый: повторное нажатие по той же кнопке не спишет ещё раз.
-	key := b.pend.add(pendingEntry{kind: pendChoice, userID: link.UserID, qty: n})
+	key := b.pend.add(pendingEntry{kind: pendChoice, userID: link.UserID, qty: n, solution: sol})
 	shown := found[:min(len(found), maxResults)]
 	var rows [][]telegram.Button
 	for _, p := range shown {
-		text := fmt.Sprintf("%s — %s", label(productTitle(p.Name, p.Brand), 34), qty(p.Unit, n))
+		what := qty(p.Unit, n)
+		if sol != nil {
+			what = strings.ToLower(solutionText(*sol))
+		}
+		text := fmt.Sprintf("%s — %s", label(productTitle(p.Name, p.Brand), 34), what)
 		rows = append(rows, telegram.Row(telegram.Btn(text, fmt.Sprintf("w:%s:%d", key, p.ID))))
 	}
 	msg := "Нашлось несколько позиций. Что списать?"
@@ -58,13 +72,17 @@ func (b *Bot) chooseProduct(ctx context.Context, link Link, chatID, msgID int64,
 		return staleToast
 	}
 	b.edit(ctx, chatID, msgID, "Выбрано, списываю…", nil)
-	return b.consume(ctx, link, chatID, productID, e.qty)
+	return b.consume(ctx, link, chatID, productID, e.qty, e.solution)
 }
 
 // consume списывает n и отвечает: сколько списано, остаток, себестоимость и
-// кнопка «Отменить» (ФТ-11.5.3).
-func (b *Bot) consume(ctx context.Context, link Link, chatID, productID, n int64) string {
-	res, err := b.stk.Consume(ctx, link.UserID, stock.ConsumeInput{ProductID: productID, Qty: n})
+// кнопка «Отменить» (ФТ-11.5.3). sol != nil — расход раствором (n не используется).
+func (b *Bot) consume(ctx context.Context, link Link, chatID, productID, n int64, sol *stock.Solution) string {
+	in := stock.ConsumeInput{ProductID: productID, Qty: n}
+	if sol != nil {
+		in = stock.ConsumeInput{ProductID: productID, Solution: sol}
+	}
+	res, err := b.stk.Consume(ctx, link.UserID, in)
 	if err != nil {
 		b.send(ctx, chatID, b.userError(err), nil)
 		return "Не получилось"
@@ -77,6 +95,9 @@ func (b *Bot) consume(ctx context.Context, link Link, chatID, productID, n int64
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Списано %s — %s\nОстаток: %s", qty(sum.Unit, res.Consumed), bold(productTitle(sum.Name, sum.Brand)),
 		qty(sum.Unit, sum.Stock.Total))
+	if res.Solution != nil {
+		fmt.Fprintf(&sb, "\n%s → %s концентрата", solutionText(*sol), qty("ml", res.Solution.Concentrate))
+	}
 	if res.Cost != nil {
 		sb.WriteString("\nСебестоимость: " + money(*res.Cost))
 	}

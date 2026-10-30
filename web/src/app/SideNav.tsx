@@ -5,6 +5,7 @@
 import {
   IconBox,
   IconBuildingStore,
+  IconCalculator,
   IconChartBar,
   IconClipboardCheck,
   IconCloud,
@@ -41,6 +42,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     title: 'Учёт',
     items: [
       { to: '/more/inventory', icon: IconClipboardCheck, title: 'Инвентаризация' },
+      { to: '/more/calculator', icon: IconCalculator, title: 'Калькулятор' },
       { to: '/more/reports', icon: IconChartBar, title: 'Отчёты' },
       { to: '/purchases', icon: IconReceipt, title: 'История покупок' },
       { to: '/weather', icon: IconCloud, title: 'Погода' },

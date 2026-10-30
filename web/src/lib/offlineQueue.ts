@@ -1,7 +1,8 @@
 // Очередь расхода без связи (ФТ-12.3): записи лежат в localStorage телефона
 // отдельно для каждого пользователя и переживают закрытие приложения.
 // Логика не зависит от React и браузера: хранилище передаётся снаружи.
-import type { ProductSummary, Recipe, Unit } from '../api';
+import type { ProductSummary, Recipe, Solution, Unit } from '../api';
+import { concentrateOf, solutionQueueText, validRatio, validVolume } from './dilution';
 import { qtyText } from './stock';
 
 export type StorageLike = {
@@ -41,13 +42,16 @@ export type ConsumeOp = OpBase & {
   kind: 'consume';
   product_id: number;
   unit_id?: number;
+  /** Сколько списать; у раствора — посчитанный концентрат (по нему оценивается остаток). */
   qty: number;
+  /** Раствор (ФТ-17.2.3): на сервер уходит он, а не qty. Нет поля — обычный расход. */
+  solution?: Solution;
   /** Снимок названия и единицы — для показа, пока позиция не перечитана. */
   name: string;
   unit: Unit;
 };
 
-export type ApplyItem = { product_id: number; qty: number; name: string; unit: Unit };
+export type ApplyItem = { product_id: number; qty: number; solution?: Solution; name: string; unit: Unit };
 
 export type ApplyOp = OpBase & {
   kind: 'apply';
@@ -70,13 +74,15 @@ export function newOpId(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export function makeConsumeOp(product: Pick<ProductSummary, 'id' | 'name' | 'unit'>, qty: number, unitId?: number, id = newOpId(), at = nowSec()): ConsumeOp {
-  const op: ConsumeOp = { op_id: id, kind: 'consume', occurred_at: at, status: 'pending', product_id: product.id, qty, name: product.name, unit: product.unit };
+/** Раствор задан — qty считается из него, переданное число не берётся. */
+export function makeConsumeOp(product: Pick<ProductSummary, 'id' | 'name' | 'unit'>, qty: number, unitId?: number, id = newOpId(), at = nowSec(), solution?: Solution): ConsumeOp {
+  const op: ConsumeOp = { op_id: id, kind: 'consume', occurred_at: at, status: 'pending', product_id: product.id, qty: solution ? concentrateOf(solution) : qty, name: product.name, unit: product.unit };
   if (unitId !== undefined) op.unit_id = unitId;
+  if (solution) op.solution = { volume_ml: solution.volume_ml, ratio: solution.ratio };
   return op;
 }
 
-export function makeApplyOp(recipe: Pick<Recipe, 'id' | 'name' | 'items'>, items: { product_id: number; qty: number }[], id = newOpId(), at = nowSec()): ApplyOp {
+export function makeApplyOp(recipe: Pick<Recipe, 'id' | 'name' | 'items'>, items: { product_id: number; qty: number; solution?: Solution | null | undefined }[], id = newOpId(), at = nowSec()): ApplyOp {
   const info = new Map(recipe.items.map((i) => [i.product_id, i.product]));
   return {
     op_id: id,
@@ -85,7 +91,11 @@ export function makeApplyOp(recipe: Pick<Recipe, 'id' | 'name' | 'items'>, items
     status: 'pending',
     recipe_id: recipe.id,
     recipe_name: recipe.name,
-    items: items.map((i) => ({ product_id: i.product_id, qty: i.qty, name: info.get(i.product_id)?.name ?? `№${i.product_id}`, unit: info.get(i.product_id)?.unit ?? 'ml' })),
+    items: items.map((i) => {
+      const item: ApplyItem = { product_id: i.product_id, qty: i.solution ? concentrateOf(i.solution) : i.qty, name: info.get(i.product_id)?.name ?? `№${i.product_id}`, unit: info.get(i.product_id)?.unit ?? 'ml' };
+      if (i.solution) item.solution = { volume_ml: i.solution.volume_ml, ratio: i.solution.ratio };
+      return item;
+    }),
   };
 }
 
@@ -95,10 +105,14 @@ export function opTitle(op: QueueOp): string {
   return op.kind === 'consume' ? op.name : `Шаблон «${op.recipe_name}»`;
 }
 
-/** Количество для строки: «40 мл» или «3 строки: …» для шаблона. */
+/** Количество строки: «40 мл» или «Раствор 1 000 мл 1:10 (91 мл)»; у шаблона — через запятую. */
+export function itemQtyText(i: { qty: number; unit: Unit; solution?: Solution | undefined }): string {
+  return i.solution ? solutionQueueText(i.solution, i.qty) : qtyText(i.qty, i.unit);
+}
+
 export function opQtyText(op: QueueOp): string {
-  if (op.kind === 'consume') return qtyText(op.qty, op.unit);
-  return op.items.map((i) => `${i.name} ${qtyText(i.qty, i.unit)}`).join(', ');
+  if (op.kind === 'consume') return itemQtyText(op);
+  return op.items.map((i) => `${i.name} ${itemQtyText(i)}`).join(', ');
 }
 
 export function shortageMessage(available: number, unit: Unit): string {
@@ -119,19 +133,25 @@ export function opProductIds(ops: readonly QueueOp[]): Set<number> {
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isUnit = (v: unknown): v is Unit => v === 'ml' || v === 'pcs';
+/** Раствор в записи необязателен (старые записи без него), но если есть — целый и в границах. */
+const okSolution = (v: unknown): boolean => {
+  if (v === undefined) return true;
+  const s = v as Partial<Solution> | null;
+  return typeof s === 'object' && s !== null && validVolume(s.volume_ml ?? null) && validRatio(s.ratio ?? null);
+};
 
 function validOp(o: unknown): o is QueueOp {
   if (typeof o !== 'object' || o === null) return false;
   const r = o as Record<string, unknown>;
   if (typeof r.op_id !== 'string' || r.op_id === '' || !isNum(r.occurred_at)) return false;
   if (r.status !== 'pending' && r.status !== 'error') return false;
-  if (r.kind === 'consume') return isNum(r.product_id) && isNum(r.qty) && typeof r.name === 'string' && isUnit(r.unit);
+  if (r.kind === 'consume') return isNum(r.product_id) && isNum(r.qty) && typeof r.name === 'string' && isUnit(r.unit) && okSolution(r.solution);
   if (r.kind === 'apply') {
     return (
       isNum(r.recipe_id) &&
       typeof r.recipe_name === 'string' &&
       Array.isArray(r.items) &&
-      r.items.every((i: unknown) => typeof i === 'object' && i !== null && isNum((i as ApplyItem).product_id) && isNum((i as ApplyItem).qty) && isUnit((i as ApplyItem).unit))
+      r.items.every((i: unknown) => typeof i === 'object' && i !== null && isNum((i as ApplyItem).product_id) && isNum((i as ApplyItem).qty) && isUnit((i as ApplyItem).unit) && okSolution((i as ApplyItem).solution))
     );
   }
   return false;
@@ -268,11 +288,12 @@ export class OfflineQueue {
    * Новое количество (строки шаблона — по productId): запись снова ждёт отправки.
    * Только у записей с ошибкой: их сервер не запомнил. У ждущих номер операции мог
    * уже сработать (ответ потерян) — повтор с ним вернёт старый результат; такие только удаляются.
+   * Число вместо раствора: раствор у записи снимается (списывается ровно столько мл).
    */
   setQty(id: string, qty: number, productId?: number): boolean {
     if (this.get(id)?.status !== 'error') return false;
     return this.update(id, (o) => {
-      const base: QueueOp = o.kind === 'consume' ? { ...o, qty } : { ...o, items: o.items.map((i) => (i.product_id === productId ? { ...i, qty } : i)) };
+      const base: QueueOp = o.kind === 'consume' ? withoutSolution({ ...o, qty }) : { ...o, items: o.items.map((i) => (i.product_id === productId ? withoutSolution({ ...i, qty }) : i)) };
       return resetOp(base);
     });
   }
@@ -332,6 +353,12 @@ export class OfflineQueue {
     for (const l of this.listeners) l();
     for (const l of anyListeners) l();
   }
+}
+
+function withoutSolution<T extends { solution?: Solution }>(x: T): T {
+  const next = { ...x };
+  delete next.solution;
+  return next;
 }
 
 function resetOp(o: QueueOp): QueueOp {

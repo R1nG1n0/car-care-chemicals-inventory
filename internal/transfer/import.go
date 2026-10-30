@@ -298,6 +298,11 @@ func (im *importer) productsStep(f *File) error {
 	if err != nil {
 		return err
 	}
+	dil, err := im.prepare("пропорция позиции", `INSERT INTO product_dilutions (user_id, product_id, name, ratio, sort)
+		VALUES (?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
 	ph, err := im.prepare("фото позиции", `INSERT INTO product_photos
 		(user_id, product_id, mime, data, width, height, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
@@ -318,6 +323,11 @@ func (im *importer) productsStep(f *File) error {
 		im.products[p.ID] = id
 		for _, pid := range p.PurposeIDs {
 			if _, err := im.run(link, "назначение позиции", im.uid, id, im.purposes[pid]); err != nil {
+				return err
+			}
+		}
+		for j, d := range p.Dilutions {
+			if _, err := im.run(dil, "пропорция позиции", im.uid, id, d.Name, d.Ratio, j); err != nil {
 				return err
 			}
 		}
@@ -382,8 +392,8 @@ func (im *importer) recipesStep(f *File) error {
 	if err != nil {
 		return err
 	}
-	insItem, err := im.prepare("строка шаблона", `INSERT INTO recipe_items (user_id, recipe_id, product_id, qty, sort)
-		VALUES (?, ?, ?, ?, ?)`)
+	insItem, err := im.prepare("строка шаблона", `INSERT INTO recipe_items
+		(user_id, recipe_id, product_id, qty, sort, solution_ml, solution_ratio) VALUES (?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -398,7 +408,8 @@ func (im *importer) recipesStep(f *File) error {
 		}
 		im.recipes[r.ID] = id
 		for _, it := range r.Items {
-			if _, err := im.run(insItem, "строка шаблона", im.uid, id, im.products[it.ProductID], it.Qty, it.Sort); err != nil {
+			if _, err := im.run(insItem, "строка шаблона", im.uid, id, im.products[it.ProductID], it.Qty, it.Sort,
+				it.SolutionML, it.SolutionRatio); err != nil {
 				return err
 			}
 		}
@@ -423,15 +434,16 @@ func (im *importer) recipesStep(f *File) error {
 
 func (im *importer) movementsStep(f *File) error {
 	ins, err := im.prepare("движение", `INSERT INTO movements
-		(user_id, unit_id, type, qty_delta, from_location_id, to_location_id, reason, recipe_run_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		(user_id, unit_id, type, qty_delta, from_location_id, to_location_id, reason, recipe_run_id, created_at,
+		 solution_ml, solution_ratio)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 	for _, m := range f.Movements {
 		id, err := im.run(ins, "движение", im.uid, im.units[m.UnitID], m.Type, m.QtyDelta,
 			mapped(im.locations, m.FromLocationID), mapped(im.locations, m.ToLocationID), m.Reason,
-			mapped(im.runs, m.RecipeRunID), m.CreatedAt)
+			mapped(im.runs, m.RecipeRunID), m.CreatedAt, m.SolutionML, m.SolutionRatio)
 		if err != nil {
 			return err
 		}

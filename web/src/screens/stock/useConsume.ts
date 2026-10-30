@@ -1,7 +1,7 @@
 // Расход (ФТ-5.1, ФТ-5.6): POST /api/consume, уведомление «Списано 40 мл · …»
 // с «Отменить» на 10 секунд (общий useRevert), обновление кэша.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { ProductSummary } from '../../api';
+import type { ProductSummary, Solution } from '../../api';
 import { consumeOrQueue, toastQueued } from '../../app/offline';
 import { invalidateStock } from '../../app/queries';
 import { useToast } from '../../app/toast';
@@ -11,7 +11,8 @@ import { consumeToastText } from '../../lib/stockQty';
 /** Пауза перед сменой шкалы и наклейки: шторка уже уходит (прототип, --dur-fast). */
 const PAINT_DELAY = 160;
 
-export type ConsumeVars = { product: ProductSummary; qty: number; unitId?: number | undefined };
+/** solution — расход раствором: qty тогда посчитанный концентрат (для показа и оценки без связи). */
+export type ConsumeVars = { product: ProductSummary; qty: number; unitId?: number | undefined; solution?: Solution | undefined };
 
 export function useConsume(onDone?: () => void) {
   const qc = useQueryClient();
@@ -30,7 +31,7 @@ export function useConsume(onDone?: () => void) {
       }, PAINT_DELAY);
       const ids = r.movements.map((m) => m.id);
       toast.show({
-        text: consumeToastText(v.product.name, v.product.unit, v.qty, r),
+        text: consumeToastText(v.product.name, v.product.unit, r.solution?.concentrate ?? v.qty, r),
         action: { label: 'Отменить', onClick: () => void revert(ids, 'Расход отменён').catch(() => undefined) },
       });
     },

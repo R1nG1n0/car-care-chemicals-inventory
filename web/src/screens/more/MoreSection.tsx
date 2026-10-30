@@ -1,9 +1,10 @@
 // Ещё — меню, профиль, места, категории, магазины, инвентаризация, отчёты, данные, история покупок.
 // Адреса раздела разбирает вложенный <Routes>.
-import { IconBox, IconBuildingStore, IconChartBar, IconChevronRight, IconClipboardCheck, IconCloud, IconCloudUpload, IconDatabase, IconReceipt, IconTags, IconTargetArrow, IconUser, type TablerIcon } from '@tabler/icons-react';
+import { IconBox, IconBuildingStore, IconCalculator, IconChartBar, IconChevronRight, IconClipboardCheck, IconCloud, IconCloudUpload, IconDatabase, IconReceipt, IconTags, IconTargetArrow, IconUser, type TablerIcon } from '@tabler/icons-react';
 import { Link, Route, Routes, type Location } from 'react-router';
 import { usePendingOps } from '../../app/useOffline';
 import { Ico } from '../../components/ui';
+import { CalculatorScreen } from './CalculatorScreen';
 import { PendingScreen } from './PendingScreen';
 import { ProfileScreen } from '../profile/ProfileScreen';
 import { RefsScreen } from './RefsScreen';
@@ -23,6 +24,7 @@ const MENU: { to: string; icon: TablerIcon; title: string; sub: string }[] = [
   { to: '/more/stores', icon: IconBuildingStore, title: 'Магазины', sub: 'Где покупаете' },
   { to: '/weather', icon: IconCloud, title: 'Погода', sub: 'Когда мыть машину и наносить покрытия' },
   { to: '/more/inventory', icon: IconClipboardCheck, title: 'Инвентаризация', sub: 'Сверить места с тем, что в учёте' },
+  { to: '/more/calculator', icon: IconCalculator, title: 'Калькулятор', sub: 'Сколько концентрата и воды на нужный объём' },
   { to: '/more/reports', icon: IconChartBar, title: 'Отчёты', sub: 'Сколько потратили и сколько ушло' },
   { to: '/more/data', icon: IconDatabase, title: 'Данные', sub: 'Скачать копию, таблицы для Excel, загрузить из файла' },
   { to: '/purchases', icon: IconReceipt, title: 'История покупок', sub: 'Все покупки, новые сверху' },
@@ -72,6 +74,7 @@ export function MoreSection({ location }: { location: Location }) {
       <Route path="/more/inventory" element={<InventoryScreen />} />
       <Route path="/more/inventory/:id" element={<InventoryPlace />} />
       <Route path="/more/reports" element={<ReportsScreen />} />
+      <Route path="/more/calculator" element={<CalculatorScreen />} />
       <Route path="/more/pending" element={<PendingScreen />} />
       <Route path="/weather" element={<WeatherScreen />} />
       <Route path="/more/data" element={<DataScreen />} />

@@ -258,9 +258,10 @@ func insertMovement(ctx context.Context, q querier, m movementRow) (int64, error
 	}
 	res, err := q.ExecContext(ctx, `
 		INSERT INTO movements (user_id, unit_id, type, qty_delta, from_location_id, to_location_id,
-		                       reason, recipe_run_id, batch_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, 0), ?)`,
-		m.userID, m.unitID, m.typ, m.delta, m.from, m.to, m.reason, m.runID, *m.batch, m.at)
+		                       reason, recipe_run_id, batch_id, created_at, solution_ml, solution_ratio)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, 0), ?, ?, ?)`,
+		m.userID, m.unitID, m.typ, m.delta, m.from, m.to, m.reason, m.runID, *m.batch, m.at,
+		m.solML, m.solRatio)
 	if err != nil {
 		return 0, fmt.Errorf("запись движения: %w", err)
 	}
@@ -287,6 +288,8 @@ type movementRow struct {
 	runID          sql.NullInt64
 	batch          *int64 // группа запроса, см. insertMovement
 	at             int64
+	solML          sql.NullInt64 // раствор, из которого посчитан расход (ФТ-17)
+	solRatio       sql.NullInt64
 }
 
 // validLimit — размер страницы: 0 — по умолчанию, иначе 1–100.

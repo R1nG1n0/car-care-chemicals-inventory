@@ -219,10 +219,10 @@ func (s *Service) PurchasesCSV(ctx context.Context, userID int64) ([]byte, error
 // MovementsCSV — журнал движений; время — в часовом поясе клиента (tz, минуты).
 func (s *Service) MovementsCSV(ctx context.Context, userID int64, tz int) ([]byte, error) {
 	t := newCSV("Дата и время", "Тип", "Позиция", "Бренд", "Изменение", "Единица", "Откуда", "Куда", "Причина",
-		"Стоимость, руб")
+		"Стоимость, руб", "Раствор, мл", "Пропорция 1:N")
 	err := each(ctx, s.db, "движения", `
 		SELECT m.created_at, m.type, p.name, p.brand, p.unit, m.qty_delta, lf.name, lt.name, m.reason,
-		       pl.price_per_package, u.initial_qty
+		       pl.price_per_package, u.initial_qty, m.solution_ml, m.solution_ratio
 		FROM movements m
 		JOIN units u ON u.user_id = m.user_id AND u.id = m.unit_id
 		JOIN products p ON p.user_id = u.user_id AND p.id = u.product_id
@@ -235,9 +235,9 @@ func (s *Service) MovementsCSV(ctx context.Context, userID int64, tz int) ([]byt
 			var typ, product, brand, unit, reason string
 			var from, to sql.NullString
 			var price sql.NullInt64
-			var initialQty sql.NullInt64
+			var initialQty, solML, solRatio sql.NullInt64
 			if err := r.Scan(&at, &typ, &product, &brand, &unit, &delta, &from, &to, &reason, &price,
-				&initialQty); err != nil {
+				&initialQty, &solML, &solRatio); err != nil {
 				return err
 			}
 			cost := ""
@@ -248,8 +248,13 @@ func (s *Service) MovementsCSV(ctx context.Context, userID int64, tz int) ([]byt
 				}
 				cost = rubles((abs*price.Int64 + initialQty.Int64/2) / initialQty.Int64)
 			}
+			solution, ratio := "", ""
+			if solML.Valid && solRatio.Valid {
+				// Только N: «1:10» Excel и Numbers читают как время 01:10
+				solution, ratio = itoa(solML.Int64), itoa(solRatio.Int64)
+			}
 			t.row(ruDateTime(at, tz), movementType(typ), csvText(product), csvText(brand), itoa(delta),
-				unitName(unit), nullText(from), nullText(to), csvText(reason), cost)
+				unitName(unit), nullText(from), nullText(to), csvText(reason), cost, solution, ratio)
 			return nil
 		})
 	if err != nil {

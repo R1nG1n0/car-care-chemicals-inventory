@@ -171,6 +171,7 @@ func exportProducts(ctx context.Context, q querier, uid int64, f *File) error {
 				p.PH = &v
 			}
 			p.PurposeIDs = []int64{}
+			p.Dilutions = []Dilution{}
 			f.Products = append(f.Products, p)
 			return nil
 		})
@@ -180,6 +181,23 @@ func exportProducts(ctx context.Context, q querier, uid int64, f *File) error {
 	byID := make(map[int64]int, len(f.Products))
 	for i, p := range f.Products {
 		byID[p.ID] = i
+	}
+	err = each(ctx, q, "пропорции позиций", `SELECT product_id, name, ratio FROM product_dilutions
+		WHERE user_id = ? ORDER BY product_id, sort, id`, []any{uid}, func(r *sql.Rows) error {
+		var product int64
+		var d Dilution
+		if err := r.Scan(&product, &d.Name, &d.Ratio); err != nil {
+			return err
+		}
+		i, ok := byID[product]
+		if !ok {
+			return fmt.Errorf("пропорция: нет позиции %d", product)
+		}
+		f.Products[i].Dilutions = append(f.Products[i].Dilutions, d)
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	return each(ctx, q, "назначения позиций", `SELECT product_id, purpose_id FROM product_purposes
 		WHERE user_id = ? ORDER BY product_id, purpose_id`, []any{uid}, func(r *sql.Rows) error {
@@ -261,15 +279,17 @@ func exportMovements(ctx context.Context, q querier, uid int64, f *File) error {
 		return err
 	}
 	return each(ctx, q, "движения", `SELECT id, unit_id, type, qty_delta, from_location_id, to_location_id,
-		reason, recipe_run_id, batch_id, created_at FROM movements WHERE user_id = ? ORDER BY id`,
+		reason, recipe_run_id, batch_id, created_at, solution_ml, solution_ratio
+		FROM movements WHERE user_id = ? ORDER BY id`,
 		[]any{uid}, func(r *sql.Rows) error {
 			var m Movement
-			var from, to, run, batch sql.NullInt64
+			var from, to, run, batch, solML, solRatio sql.NullInt64
 			if err := r.Scan(&m.ID, &m.UnitID, &m.Type, &m.QtyDelta, &from, &to, &m.Reason, &run, &batch,
-				&m.CreatedAt); err != nil {
+				&m.CreatedAt, &solML, &solRatio); err != nil {
 				return err
 			}
 			m.FromLocationID, m.ToLocationID, m.RecipeRunID, m.BatchID = ptr(from), ptr(to), ptr(run), ptr(batch)
+			m.SolutionML, m.SolutionRatio = ptr(solML), ptr(solRatio)
 			f.Movements = append(f.Movements, m)
 			return nil
 		})
@@ -290,13 +310,15 @@ func exportRecipes(ctx context.Context, q querier, uid int64, f *File) error {
 	if err != nil {
 		return err
 	}
-	return each(ctx, q, "строки шаблонов", `SELECT recipe_id, product_id, qty, sort FROM recipe_items
+	return each(ctx, q, "строки шаблонов", `SELECT recipe_id, product_id, qty, sort, solution_ml, solution_ratio FROM recipe_items
 		WHERE user_id = ? ORDER BY recipe_id, sort, id`, []any{uid}, func(r *sql.Rows) error {
 		var it RecipeItem
 		var recipe int64
-		if err := r.Scan(&recipe, &it.ProductID, &it.Qty, &it.Sort); err != nil {
+		var solML, solRatio sql.NullInt64
+		if err := r.Scan(&recipe, &it.ProductID, &it.Qty, &it.Sort, &solML, &solRatio); err != nil {
 			return err
 		}
+		it.SolutionML, it.SolutionRatio = ptr(solML), ptr(solRatio)
 		i, ok := byID[recipe]
 		if !ok {
 			return fmt.Errorf("строка шаблона: нет шаблона %d", recipe)

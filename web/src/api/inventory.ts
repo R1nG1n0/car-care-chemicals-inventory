@@ -21,6 +21,11 @@ export type Store = { id: number; name: string; url: string; archived: boolean }
 
 export type Unit = 'ml' | 'pcs';
 
+/** Пропорция разбавления позиции в мл (ФТ-17.1): 1:ratio. */
+export type Dilution = { id: number; name: string; ratio: number; sort: number };
+/** Раствор в расходе (ФТ-17.2): объём готового раствора, мл, и N пропорции 1:N. */
+export type Solution = { volume_ml: number; ratio: number };
+
 export type Stock = {
   total: number;
   open_qty: number | null;
@@ -54,6 +59,8 @@ export type ProductSummary = {
   rating: number | null;
   /** «Не брать больше» (ФТ-15.4.2). */
   do_not_buy: boolean;
+  /** Пропорции разбавления (ФТ-17.1), порядок задан владельцем; у шт — []. Старые сохранённые данные без поля. */
+  dilutions?: Dilution[];
 };
 
 /** Аналог из имеющегося (ФТ-15.5): позиция в наличии с общим назначением. */
@@ -107,6 +114,9 @@ export type Movement = {
   batch_id: number;
   cost: number | null;
   created_at: number;
+  /** Расход раствором (ФТ-17.2.3): объём раствора и N пропорции; null — расход обычным количеством. */
+  solution_ml?: number | null;
+  solution_ratio?: number | null;
 };
 
 export type ProductDetail = {
@@ -132,6 +142,8 @@ export type ProductInput = {
   ph: number | null;
   incompatible: string;
   instruction: string;
+  /** Полная замена списка пропорций (ФТ-17.1); только для мл, до 10; id сохраняет существующую. */
+  dilutions?: { id?: number; name: string; ratio: number }[];
 };
 
 export type ProductFilter = 'all' | 'low' | 'out' | 'in';
@@ -186,11 +198,16 @@ export type ConsumeResult = {
   opened_unit_ids: number[];
   finished_unit_ids: number[];
   cost: number | null;
+  /** Раствор и посчитанный сервером концентрат (ФТ-17.2.3); null — расход количеством. */
+  solution?: (Solution & { concentrate: number }) | null;
 };
 
-export type RecipeItem = { product_id: number; qty: number; product: ProductSummary; available: number; short: boolean };
+/** Строка шаблона; solution — строка задана раствором, qty тогда — концентрат (ФТ-17.2.4). */
+export type RecipeItem = { product_id: number; qty: number; solution?: Solution | null; product: ProductSummary; available: number; short: boolean };
+/** Строка шаблона на запись и применение: либо количество, либо раствор. */
+export type RecipeLineInput = { product_id: number; qty: number } | { product_id: number; solution: Solution };
 export type Recipe = { id: number; name: string; sort: number; last_used_at: number | null; cost: number | null; items: RecipeItem[] };
-export type RecipeInput = { name: string; items: { product_id: number; qty: number }[] };
+export type RecipeInput = { name: string; items: RecipeLineInput[] };
 export type ApplyResult = {
   run_id: number;
   movements: Movement[];
@@ -305,7 +322,8 @@ export const inventory = {
     send<UnitChange>('POST', `/api/units/${id}/writeoff`, { qty, reason }),
 
   // Расход и журнал
-  consume: (b: { product_id: number; qty: number; unit_id?: number; client_op_id?: string; occurred_at?: number }) =>
+  /** Либо qty, либо solution (ФТ-17.2.3): концентрат тогда считает сервер. */
+  consume: (b: { product_id: number; qty?: number; solution?: Solution; unit_id?: number; client_op_id?: string; occurred_at?: number }) =>
     request<ConsumeResult>('/api/consume', { method: 'POST', body: b, offlineOk: true }),
   revert: async (ids: number[]) => (await send<{ products: ProductSummary[] }>('POST', '/api/movements/revert', { ids })).products,
   movements: async (q: { product_id?: number; before?: number } = {}, signal?: AbortSignal) =>
@@ -325,6 +343,6 @@ export const inventory = {
   deleteRecipe: (id: number) => send<undefined>('DELETE', `/api/recipes/${id}`),
   reorderRecipes: (ids: number[]) => send<undefined>('POST', '/api/recipes/reorder', { ids }),
   /** client_op_id и occurred_at — очередь без связи (ФТ-12.4.1): повтор с тем же номером не списывает второй раз. */
-  applyRecipe: (id: number, items: { product_id: number; qty: number }[], op?: { client_op_id: string; occurred_at: number }) =>
+  applyRecipe: (id: number, items: RecipeLineInput[], op?: { client_op_id: string; occurred_at: number }) =>
     request<ApplyResult>(`/api/recipes/${id}/apply`, { method: 'POST', body: { items, ...op }, offlineOk: true }),
 };

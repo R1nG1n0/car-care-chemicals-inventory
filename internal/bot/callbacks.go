@@ -52,7 +52,7 @@ func (b *Bot) handleCallback(ctx context.Context, cb *telegram.CallbackQuery) {
 		id, ok1 := num(0)
 		n, ok2 := num(1)
 		if ok1 && ok2 {
-			answer(b.consume(ctx, link, chatID, id, n))
+			answer(b.consume(ctx, link, chatID, id, n, nil))
 			return
 		}
 	case "w": // выбор позиции для расхода: ключ и позиция

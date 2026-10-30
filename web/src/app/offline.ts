@@ -1,11 +1,11 @@
 // Работа без связи (ФТ-12): сохранённые данные, очередь расхода, оценка остатков, отправка.
 // Связка React Query с lib/offline*.ts и lib/snapshot.ts.
 import { hashKey, type QueryClient } from '@tanstack/react-query';
-import { api, inventory, isApiError, isNetworkError, NetworkError, type ApplyResult, type ConsumeResult, type ProductSummary, type Recipe, type Session } from '../api';
+import { api, inventory, isApiError, isNetworkError, NetworkError, type ApplyResult, type ConsumeResult, type ProductSummary, type Recipe, type Session, type Solution } from '../api';
 import { isOnline } from '../api/connection';
 import { ESTIMATE_ROOTS, estimateByKey, pendingDeltas } from '../lib/offlineEstimate';
 import { makeApplyOp, makeConsumeOp, newOpId, dropQueue, queueFor, setSpaceFreer, subscribeAllQueues, type OfflineQueue, type QueueOp } from '../lib/offlineQueue';
-import { flushQueue, type FlushResult } from '../lib/offlineSync';
+import { applyLinesOf, consumeBodyOf, flushQueue, type FlushResult } from '../lib/offlineSync';
 import { replaceProducts } from '../lib/stock';
 import { isPersistableKey, SnapshotStore } from '../lib/snapshot';
 import { invalidateStock } from './queries';
@@ -122,11 +122,12 @@ function enqueue(qc: QueryClient, op: QueueOp): QueueOp {
 }
 
 /** Расход: на сервер, а без связи (или при потере ответа) — в очередь. */
-export async function consumeOrQueue(qc: QueryClient, v: { product: ProductSummary; qty: number; unitId?: number | undefined }): Promise<{ sent: ConsumeResult } | QueuedMark> {
-  const op = makeConsumeOp(v.product, v.qty, v.unitId);
+export async function consumeOrQueue(qc: QueryClient, v: { product: ProductSummary; qty: number; unitId?: number | undefined; solution?: Solution | undefined }): Promise<{ sent: ConsumeResult } | QueuedMark> {
+  const op = makeConsumeOp(v.product, v.qty, v.unitId, undefined, undefined, v.solution);
   if (!isOnline()) return { queued: enqueue(qc, op) };
   try {
-    const sent = await inventory.consume({ product_id: v.product.id, qty: v.qty, unit_id: v.unitId, client_op_id: op.op_id, occurred_at: op.occurred_at });
+    // Раствор уходит как раствор: концентрат считает сервер (ФТ-17.2.3)
+    const sent = await inventory.consume(consumeBodyOf(op));
     return { sent };
   } catch (err) {
     // Тот же номер операции: если запрос всё же дошёл, повтор его не задвоит
@@ -146,11 +147,11 @@ function enqueueAfterLoss(qc: QueryClient, op: QueueOp, err: NetworkError): Queu
 }
 
 /** Применение шаблона: так же, как расход. */
-export async function applyOrQueue(qc: QueryClient, recipe: Recipe, items: { product_id: number; qty: number }[]): Promise<{ sent: ApplyResult } | QueuedMark> {
+export async function applyOrQueue(qc: QueryClient, recipe: Recipe, items: { product_id: number; qty: number; solution?: Solution | null | undefined }[]): Promise<{ sent: ApplyResult } | QueuedMark> {
   const op = makeApplyOp(recipe, items);
   if (!isOnline()) return { queued: enqueue(qc, op) };
   try {
-    const sent = await inventory.applyRecipe(recipe.id, items, { client_op_id: op.op_id, occurred_at: op.occurred_at });
+    const sent = await inventory.applyRecipe(recipe.id, applyLinesOf(op.items), { client_op_id: op.op_id, occurred_at: op.occurred_at });
     return { sent };
   } catch (err) {
     if (isNetworkError(err)) return { queued: enqueueAfterLoss(qc, op, err) };

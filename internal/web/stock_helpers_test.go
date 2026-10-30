@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/catalog"
+	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/stock"
 )
 
 // Помощники тестов склада: данные создаются через API справочников.
@@ -74,6 +75,7 @@ type stkConsumeBody struct {
 	OpenedUnitIDs   []int64                `json:"opened_unit_ids"`
 	FinishedUnitIDs []int64                `json:"finished_unit_ids"`
 	Cost            *int64                 `json:"cost"`
+	Solution        *stock.SolutionInfo    `json:"solution"`
 }
 
 type stkShortageBody struct {

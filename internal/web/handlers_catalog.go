@@ -285,6 +285,8 @@ type catProductBody struct {
 	Instruction  *string         `json:"instruction"`
 	Rating       json.RawMessage `json:"rating"`
 	DoNotBuy     *bool           `json:"do_not_buy"`
+	// Пропорции разбавления (ФТ-17).
+	Dilutions *[]catalog.DilutionInput `json:"dilutions"`
 }
 
 // optNumber разбирает необязательное число: set — поле передано; nil — null.
@@ -392,6 +394,9 @@ func (h *catalogHandlers) createProduct(w http.ResponseWriter, r *http.Request) 
 	if b.DoNotBuy != nil {
 		in.DoNotBuy = *b.DoNotBuy
 	}
+	if b.Dilutions != nil {
+		in.Dilutions = *b.Dilutions
+	}
 	if b.PackageSize != nil {
 		in.PackageSize = *b.PackageSize
 	}
@@ -438,6 +443,7 @@ func (h *catalogHandlers) updateProduct(w http.ResponseWriter, r *http.Request) 
 		Barcode: b.Barcode, MinStockSet: set, MinStock: minStock, Note: b.Note, Archived: b.Archived,
 		PurposeIDs: b.PurposeIDs, PhSet: phSet, PhX10: phX10, Incompatible: b.Incompatible,
 		Instruction: b.Instruction, RatingSet: ratingSet, Rating: rating, DoNotBuy: b.DoNotBuy,
+		Dilutions: b.Dilutions,
 	})
 	h.respondCard(w, r, http.StatusOK, p.ID, err)
 }

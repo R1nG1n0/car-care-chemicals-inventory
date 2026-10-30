@@ -103,13 +103,15 @@ type ConsumeResult struct {
 	OpenedUnitIDs   []int64
 	FinishedUnitIDs []int64
 	Cost            *int64
+	Solution        *SolutionInfo // nil — расход обычным количеством
 }
 
 // consumeTx списывает qty позиции внутри транзакции по правилам ФТ-5.1.
 // partial — нехватка не ошибка (шаблоны, ФТ-8.6): списывается сколько есть.
-// batch — группа движений запроса (см. insertMovement).
+// batch — группа движений запроса (см. insertMovement). sol — раствор, из
+// которого посчитан qty: он записывается в каждое движение (ФТ-17.2.3).
 func consumeTx(ctx context.Context, tx *sql.Tx, userID int64, p productInfo, qty int64, startUnit *int64,
-	runID sql.NullInt64, batch *int64, now int64, partial bool) (ConsumeResult, error) {
+	runID sql.NullInt64, batch *int64, now int64, partial bool, sol *Solution) (ConsumeResult, error) {
 	res := ConsumeResult{ProductID: p.ID, Requested: qty, MovementIDs: []int64{},
 		OpenedUnitIDs: []int64{}, FinishedUnitIDs: []int64{}}
 	pl, err := planConsume(ctx, tx, userID, p, qty, startUnit)
@@ -118,6 +120,16 @@ func consumeTx(ctx context.Context, tx *sql.Tx, userID int64, p productInfo, qty
 	}
 	if pl.available < qty && !partial {
 		return res, &ShortageError{Available: pl.available, Unit: p.Unit}
+	}
+	// Шаблон при нехватке списывает сколько есть: такой расход уже не равен
+	// раствору, и записывать его раствором значит соврать в журнале
+	// («1 000 мл 1:10 → 50 мл»). Пишем обычным расходом.
+	if pl.available < qty {
+		sol = nil
+	}
+	solML, solRatio := sol.nulls()
+	if sol != nil {
+		res.Solution = sol.info(qty)
 	}
 	for _, t := range pl.takes {
 		u := t.unit
@@ -142,6 +154,7 @@ func consumeTx(ctx context.Context, tx *sql.Tx, userID int64, p productInfo, qty
 		}
 		id, err := insertMovement(ctx, tx, movementRow{
 			userID: userID, unitID: u.ID, typ: "consume", delta: -t.n, runID: runID, batch: batch, at: now,
+			solML: solML, solRatio: solRatio,
 		})
 		if err != nil {
 			return res, err
@@ -161,9 +174,12 @@ func consumeTx(ctx context.Context, tx *sql.Tx, userID int64, p productInfo, qty
 
 // ConsumeInput — тело POST /api/consume.
 type ConsumeInput struct {
-	ProductID int64  `json:"product_id"`
-	Qty       int64  `json:"qty"`
-	UnitID    *int64 `json:"unit_id"`
+	ProductID int64 `json:"product_id"`
+	// Qty — концентрат или шт; вместо него можно передать Solution (ФТ-17.2.3):
+	// сервер сам считает концентрат. Оба сразу — ошибка поля qty.
+	Qty      int64     `json:"qty"`
+	Solution *Solution `json:"solution"`
+	UnitID   *int64    `json:"unit_id"`
 	Op
 }
 
@@ -180,15 +196,29 @@ func (s *Service) Consume(ctx context.Context, userID int64, in ConsumeInput) (C
 // сохранённый body (replay = true, res пуст).
 func (s *Service) ConsumeOp(ctx context.Context, userID int64, in ConsumeInput,
 	render Render[ConsumeResult]) (res ConsumeResult, body []byte, replay bool, err error) {
-	if in.Qty < 1 || in.Qty > maxQty {
+	if in.Solution != nil && in.Qty != 0 {
+		return res, nil, false, &ValidationError{Field: "qty", Message: "Передайте либо qty, либо solution"}
+	}
+	if in.Solution == nil && (in.Qty < 1 || in.Qty > maxQty) {
 		return res, nil, false, &ValidationError{Field: "qty", Message: "Количество — от 1 до 100 000"}
+	}
+	if in.Solution != nil {
+		if err := in.Solution.validate(); err != nil {
+			return res, nil, false, err
+		}
 	}
 	return runOp(ctx, s, userID, in.Op, opKindConsume, func(tx *sql.Tx, at int64) (ConsumeResult, error) {
 		p, err := product(ctx, tx, userID, in.ProductID)
 		if err != nil {
 			return ConsumeResult{}, err
 		}
+		qty := in.Qty
+		if in.Solution != nil {
+			if qty, err = in.Solution.resolve(p); err != nil {
+				return ConsumeResult{}, err
+			}
+		}
 		var batch int64
-		return consumeTx(ctx, tx, userID, p, in.Qty, in.UnitID, sql.NullInt64{}, &batch, at, false)
+		return consumeTx(ctx, tx, userID, p, qty, in.UnitID, sql.NullInt64{}, &batch, at, false, in.Solution)
 	}, render)
 }

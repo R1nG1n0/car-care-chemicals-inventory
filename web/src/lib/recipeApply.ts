@@ -1,5 +1,6 @@
 // Шаблоны расхода (ФТ-8): строки применения, нехватка, «из последнего расхода».
-import type { ApplyResult, Movement, Recipe, RecipeInput, Unit } from '../api';
+import type { ApplyResult, Movement, Recipe, RecipeInput, RecipeLineInput, Solution, Unit } from '../api';
+import { concentrateOf, parseSolution, solutionError, type DilutionMode } from './dilution';
 import { formatMoney, formatQty } from './format';
 import { MAX_QTY, parseQty } from './qty';
 import { qtyText, unitLabel } from './stock';
@@ -23,17 +24,20 @@ export function shortageText(qty: number, available: number, unit: Unit): string
   return `Есть только ${formatQty(available)} ${unitLabel(unit)} — спишется ${formatQty(available)}`;
 }
 
-export type ApplyRow = { product_id: number; qty: number };
+/** Строка применения: qty — сколько концентрата (у раствора — посчитанный), solution — если строка раствором. */
+export type ApplyRow = { product_id: number; qty: number; solution?: Solution | null | undefined };
 
 /** Тело применения: строки с нулём пропускаются (их можно было и не слать — сервер пропустит). */
 export function applyItems(rows: ApplyRow[]): ApplyRow[] {
-  return rows.filter((r) => r.qty > 0).map((r) => ({ product_id: r.product_id, qty: r.qty }));
+  return rows.filter((r) => r.qty > 0).map((r) => (r.solution ? { product_id: r.product_id, qty: r.qty, solution: { volume_ml: r.solution.volume_ml, ratio: r.solution.ratio } } : { product_id: r.product_id, qty: r.qty }));
 }
+
+const sameSolution = (a?: Solution | null, b?: Solution | null): boolean => (a?.volume_ml ?? 0) === (b?.volume_ml ?? 0) && (a?.ratio ?? 0) === (b?.ratio ?? 0);
 
 /** Количества поменяли относительно шаблона — оценка себестоимости сервера уже неточна. */
 export function qtyChanged(rows: ApplyRow[], original: ApplyRow[]): boolean {
   if (rows.length !== original.length) return true;
-  return rows.some((r, i) => r.product_id !== original[i]!.product_id || r.qty !== original[i]!.qty);
+  return rows.some((r, i) => r.product_id !== original[i]!.product_id || r.qty !== original[i]!.qty || !sameSolution(r.solution, original[i]!.solution));
 }
 
 /**
@@ -71,7 +75,11 @@ export function recipeSub(r: Pick<Recipe, 'items' | 'cost'>): string {
   return [`${n} ${plural(n, POSITIONS)}`, r.cost !== null ? `≈ ${formatMoney(r.cost)}` : ''].filter(Boolean).join(' · ');
 }
 
-export type RecipeRowDraft = { key: number; product_id: number | null; qty: string };
+/**
+ * Строка формы шаблона. mode 'solution' — строка раствором: volume и ratio вместо qty
+ * (ФТ-17.2.4). Без mode — обычное количество.
+ */
+export type RecipeRowDraft = { key: number; product_id: number | null; qty: string; mode?: DilutionMode | undefined; volume?: string | undefined; ratio?: string | undefined };
 export type RecipeErrors = { name?: string; rows?: string; byRow: Record<number, { product?: string; qty?: string }> };
 
 /** Проверка формы шаблона: имя 1–60, 1–30 строк, позиции без повторов, количество 1–100 000. */
@@ -88,10 +96,28 @@ export function validateRecipe(name: string, rows: RecipeRowDraft[]): { ok: true
     if (r.product_id === null) re.product = 'Выберите позицию';
     else if (seen.has(r.product_id)) re.product = 'Позиция уже есть в шаблоне';
     if (r.product_id !== null) seen.add(r.product_id);
-    const q = parseRowQty(r.qty);
-    if (q === null || q < 1 || q > MAX_QTY) re.qty = 'От 1 до 100 000';
+    if (r.mode === 'solution') {
+      const se = solutionError(r.volume ?? '', r.ratio ?? '');
+      if (se) re.qty = [se.volume, se.ratio].filter(Boolean).join('. ');
+    } else {
+      const q = parseRowQty(r.qty);
+      if (q === null || q < 1 || q > MAX_QTY) re.qty = 'От 1 до 100 000';
+    }
     if (re.product || re.qty) e.byRow[r.key] = re;
   }
   if (e.name || e.rows || Object.keys(e.byRow).length > 0) return { ok: false, errors: e };
-  return { ok: true, value: { name: n, items: rows.map((r) => ({ product_id: r.product_id!, qty: parseRowQty(r.qty)! })) } };
+  return { ok: true, value: { name: n, items: rows.map((r) => recipeLine(r)) } };
+}
+
+/** Строка шаблона на запись: раствор (если задан верно) или количество. */
+function recipeLine(r: RecipeRowDraft): RecipeLineInput {
+  const solution = r.mode === 'solution' ? parseSolution(r.volume ?? '', r.ratio ?? '') : null;
+  return solution ? { product_id: r.product_id!, solution } : { product_id: r.product_id!, qty: parseRowQty(r.qty)! };
+}
+
+/** Строка шаблона с сервера → строка формы (раствор в мл — полями объёма и пропорции). */
+export function draftOfItem(key: number, i: { product_id: number; qty: number; solution?: Solution | null | undefined }): RecipeRowDraft {
+  return i.solution
+    ? { key, product_id: i.product_id, qty: String(concentrateOf(i.solution)), mode: 'solution', volume: String(i.solution.volume_ml), ratio: String(i.solution.ratio) }
+    : { key, product_id: i.product_id, qty: String(i.qty) };
 }

@@ -290,7 +290,12 @@ func validateProducts(f *File, st *sets) error {
 		if err != nil {
 			return err
 		}
+		dil := make([]catalog.DilutionInput, len(p.Dilutions))
+		for j, d := range p.Dilutions {
+			dil[j] = catalog.DilutionInput{Name: d.Name, Ratio: d.Ratio}
+		}
 		in, err := catalog.ValidateProduct(catalog.ProductInput{
+			Dilutions:  dil,
 			CategoryID: p.CategoryID, Name: p.Name, Brand: p.Brand, Unit: p.Unit, PackageSize: p.PackageSize,
 			Barcode: p.Barcode, MinStock: p.MinStock, Note: p.Note,
 			PhX10: phX10, Incompatible: p.Incompatible, Instruction: p.Instruction, Rating: p.Rating,
@@ -300,6 +305,9 @@ func validateProducts(f *File, st *sets) error {
 		}
 		p.Name, p.Brand, p.Barcode, p.Note = in.Name, in.Brand, in.Barcode, in.Note
 		p.Incompatible, p.Instruction = in.Incompatible, in.Instruction
+		for j := range p.Dilutions {
+			p.Dilutions[j].Name = in.Dilutions[j].Name
+		}
 		if err := checkTime(at("products", i, "created_at"), p.CreatedAt); err != nil {
 			return err
 		}
@@ -423,6 +431,21 @@ func validateUnits(f *File, st *sets) error {
 	return nil
 }
 
+// checkSolution проверяет раствор (версия 3): оба поля вместе или оба null,
+// объём 1…100 000 мл, пропорция 1…1000.
+func checkSolution(path string, ml, ratio *int64) error {
+	if (ml == nil) != (ratio == nil) {
+		return bad(path+".solution_ml", "Объём раствора и пропорция задаются вместе")
+	}
+	if ml == nil {
+		return nil
+	}
+	if err := inRange(path+".solution_ml", *ml, 1, maxQty, "Объём раствора"); err != nil {
+		return err
+	}
+	return inRange(path+".solution_ratio", *ratio, 1, 1000, "Пропорция")
+}
+
 func validateBalances(f *File, _ *sets) error { return checkBalances(f) }
 
 func validateRecipes(f *File, st *sets) error {
@@ -458,6 +481,9 @@ func validateRecipes(f *File, st *sets) error {
 			}
 			seen[it.ProductID] = true
 			if err := inRange(path+".qty", it.Qty, 1, maxQty, "Количество"); err != nil {
+				return err
+			}
+			if err := checkSolution(path, it.SolutionML, it.SolutionRatio); err != nil {
 				return err
 			}
 		}
@@ -509,6 +535,9 @@ func validateMovements(f *File, st *sets) error {
 			return err
 		}
 		if err := st.movements.hasOpt(p("batch_id"), m.BatchID, "Движения"); err != nil {
+			return err
+		}
+		if err := checkSolution(at("movements", i, ""), m.SolutionML, m.SolutionRatio); err != nil {
 			return err
 		}
 		reason, err := text(p("reason"), m.Reason, 0, maxReason, "Причина — не длиннее 80 символов")

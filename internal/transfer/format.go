@@ -11,9 +11,12 @@ import "github.com/R1nG1n0/car-care-chemicals-inventory/internal/photo"
 // Признаки формата файла. Версия 2 (v1.5, ФТ-15.6.1) добавила назначения
 // (purposes), поля позиции purpose_ids, ph, incompatible, instruction, rating,
 // do_not_buy; файлы версии 1 импортируются (новых полей в них нет).
+// Версия 3 (v1.6, ФТ-17.2.6) добавила пропорции разбавления позиций
+// (dilutions) и раствор в движениях и строках шаблонов (solution_ml,
+// solution_ratio); файлы версий 1 и 2 импортируются.
 const (
 	FormatName       = "garage-export"
-	FormatVersion    = 2
+	FormatVersion    = 3
 	MinFormatVersion = 1
 )
 
@@ -107,6 +110,15 @@ type Product struct {
 	Instruction  string   `json:"instruction"`
 	Rating       *int64   `json:"rating"`
 	DoNotBuy     bool     `json:"do_not_buy"`
+	// Версия 3 (ФТ-17): пропорции разбавления по порядку.
+	Dilutions []Dilution `json:"dilutions"`
+}
+
+// Dilution — пропорция разбавления позиции (версия 3): название и 1:Ratio.
+// Порядок в списке — порядок владельца, поле sort при импорте не нужно.
+type Dilution struct {
+	Name  string `json:"name"`
+	Ratio int64  `json:"ratio"`
 }
 
 // Photo — фото позиции в файле: тип и байты в base64. Тип при импорте
@@ -171,6 +183,9 @@ type Movement struct {
 	RecipeRunID    *int64 `json:"recipe_run_id"`
 	BatchID        *int64 `json:"batch_id"`
 	CreatedAt      int64  `json:"created_at"`
+	// Версия 3 (ФТ-17): раствор, из которого посчитан расход; null — нет.
+	SolutionML    *int64 `json:"solution_ml"`
+	SolutionRatio *int64 `json:"solution_ratio"`
 }
 
 // Recipe — шаблон расхода со строками.
@@ -187,6 +202,9 @@ type RecipeItem struct {
 	ProductID int64 `json:"product_id"`
 	Qty       int64 `json:"qty"`
 	Sort      int64 `json:"sort"`
+	// Версия 3 (ФТ-17): строка задана раствором, qty — рассчитанный концентрат.
+	SolutionML    *int64 `json:"solution_ml"`
+	SolutionRatio *int64 `json:"solution_ratio"`
 }
 
 // Shopping — пункт списка покупок, добавленный вручную.

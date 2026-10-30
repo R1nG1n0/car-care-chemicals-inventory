@@ -57,6 +57,10 @@ func TestAccIsolationAllStage2(t *testing.T) {
 	expect(t, a.do(http.MethodPatch, stkPath("/api/products/", prodA, ""), map[string]any{"purpose_ids": []int64{purA},
 		"ph": 7.5, "instruction": "Тайная инструкция", "rating": 5}), http.StatusOK, "назначение позиции владельца")
 	stkProduct(a, catA, "Секретный аналог", "ml", 100)
+	// v1.6 (ФТ-17): пропорции владельца и расход раствором.
+	dilA := decode[catalog.ProductCard](t, a.do(http.MethodPatch, stkPath("/api/products/", prodA, ""),
+		map[string]any{"dilutions": []any{map[string]any{"name": "Тайная пропорция", "ratio": 7}}})).Dilutions[0].ID
+	solution := map[string]any{"volume_ml": 100, "ratio": 10}
 	purB := stkCreate(b, "/api/purposes", map[string]any{"name": "Своё назначение"})
 
 	// Фото владельца (ФТ-10.4): чужой не может ни прочитать, ни заменить, ни удалить.
@@ -155,6 +159,17 @@ func TestAccIsolationAllStage2(t *testing.T) {
 			map[string]any{"product_id": prodB, "qty": 1, "unit_id": unitA}, 404},
 		{"отмена чужого движения", http.MethodPost, "/api/movements/revert", map[string]any{"ids": []int64{moveA}}, 404},
 		{"журнал чужой позиции", http.MethodGet, stkPath("/api/movements?product_id=", prodA, ""), nil, 404},
+		{"расход раствором чужой позиции", http.MethodPost, "/api/consume", map[string]any{"product_id": prodA, "solution": solution}, 404},
+		{"расход раствором из чужого экземпляра", http.MethodPost, "/api/consume",
+			map[string]any{"product_id": prodB, "solution": solution, "unit_id": unitA}, 404},
+		{"чужая пропорция в своей позиции", http.MethodPatch, stkPath("/api/products/", prodB, ""),
+			map[string]any{"dilutions": []any{map[string]any{"id": dilA, "name": "Взлом", "ratio": 2}}}, 404},
+		{"пропорции чужой позиции", http.MethodPatch, stkPath("/api/products/", prodA, ""),
+			map[string]any{"dilutions": []any{}}, 404},
+		{"шаблон с раствором чужой позиции", http.MethodPost, "/api/recipes", map[string]any{"name": "Взлом",
+			"items": []any{map[string]any{"product_id": prodA, "solution": solution}}}, 404},
+		{"применение своего шаблона с раствором чужой позиции", http.MethodPost, stkPath("/api/recipes/", recipeB, "/apply"),
+			map[string]any{"items": []any{map[string]any{"product_id": prodA, "solution": solution}}}, 404},
 		// Шаблоны.
 		{"чужой шаблон", http.MethodGet, stkPath("/api/recipes/", recipeA, ""), nil, 404},
 		{"замена чужого шаблона", http.MethodPut, stkPath("/api/recipes/", recipeA, ""), map[string]any{"name": "Взлом", "items": item(prodB)}, 404},

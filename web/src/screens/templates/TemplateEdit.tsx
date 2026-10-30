@@ -11,8 +11,8 @@ import { ProductPicker } from '../../components/ProductPicker';
 import { ShopNewProduct } from '../../components/ShopNewProduct';
 import { useProducts } from '../../components/refs';
 import { busyProps, Empty, Field, HeadRow, Ico, LoadError, SkelList } from '../../components/ui';
-import { validateRecipe, type ApplyRow, type RecipeErrors, type RecipeRowDraft } from '../../lib/recipeApply';
-import { RecipeQty } from './RecipeQty';
+import { draftOfItem, validateRecipe, type ApplyRow, type RecipeErrors, type RecipeRowDraft } from '../../lib/recipeApply';
+import { RecipeLine } from './RecipeLine';
 import { BackLink } from '../../components/BackLink';
 
 function Editor({ recipe, preset }: { recipe: Recipe | null; preset: ApplyRow[] | null }) {
@@ -23,10 +23,10 @@ function Editor({ recipe, preset }: { recipe: Recipe | null; preset: ApplyRow[] 
   const byId = new Map((products.data ?? []).map((p) => [p.id, p]));
   const seq = useRef(100);
   const form = useRef<HTMLFormElement>(null);
-  const start = recipe ? recipe.items.map((i) => ({ product_id: i.product_id, qty: i.qty })) : (preset ?? []);
+  const start: ApplyRow[] = recipe ? recipe.items : (preset ?? []);
   const [name, setName] = useState(recipe?.name ?? '');
   const [rows, setRows] = useState<RecipeRowDraft[]>(() =>
-    start.length ? start.map((r, i) => ({ key: i, product_id: r.product_id, qty: String(r.qty) })) : [{ key: 0, product_id: null, qty: '' }],
+    start.length ? start.map((r, i) => draftOfItem(i, r)) : [{ key: 0, product_id: null, qty: '' }],
   );
   const [errors, setErrors] = useState<RecipeErrors>({ byRow: {} });
   const [formError, setFormError] = useState('');
@@ -94,6 +94,8 @@ function Editor({ recipe, preset }: { recipe: Recipe | null; preset: ApplyRow[] 
             const p = r.product_id !== null ? byId.get(r.product_id) : undefined;
             const e = errors.byRow[r.key];
             const errId = `te-err-${r.key}`;
+            // У строки раствором ошибки объёма и пропорции показаны под самими полями
+            const errText = e ? [e.product, e.qty && r.mode !== 'solution' && `Количество: ${e.qty}`].filter(Boolean).join('. ') : '';
             return (
               <div className="g-row shop-tpl-row" key={r.key}>
                 <div className="shop-tpl-edit">
@@ -103,22 +105,14 @@ function Editor({ recipe, preset }: { recipe: Recipe | null; preset: ApplyRow[] 
                       label={`Строка ${i + 1}`}
                       value={r.product_id}
                       excludeIds={used.filter((id) => id !== r.product_id)}
-                      onChange={(pr) => setRow(r.key, { product_id: pr.id, qty: r.qty || String(pr.last_consume_qty ?? '') })}
+                      onChange={(pr) => setRow(r.key, { product_id: pr.id, qty: r.qty || String(pr.last_consume_qty ?? ''), ...(pr.id !== r.product_id ? { mode: undefined, volume: undefined, ratio: undefined } : {}) })}
                       onCreate={(n) => setCreating({ key: r.key, name: n })}
                       limit={8}
                     />
                   </div>
                   <div className="shop-tpl-qty">
                     {p ? (
-                      <RecipeQty
-                        id={`te-q-${r.key}`}
-                        name={p.name}
-                        unit={p.unit}
-                        value={r.qty}
-                        invalid={Boolean(e?.qty)}
-                        describedBy={e ? errId : undefined}
-                        onChange={(qty) => setRow(r.key, { qty })}
-                      />
+                      <RecipeLine id={`te-q-${r.key}`} product={p} value={r} invalid={Boolean(e?.qty)} describedBy={errText ? errId : undefined} onChange={(patch) => setRow(r.key, patch)} />
                     ) : (
                       <span className="g-row__sub shop-tpl-later">Количество — после выбора позиции</span>
                     )}
@@ -128,9 +122,9 @@ function Editor({ recipe, preset }: { recipe: Recipe | null; preset: ApplyRow[] 
                       </button>
                     )}
                   </div>
-                  {e && (
+                  {errText && (
                     <span className="g-field__error" id={errId}>
-                      {[e.product, e.qty && `Количество: ${e.qty}`].filter(Boolean).join('. ')}
+                      {errText}
                     </span>
                   )}
                 </div>

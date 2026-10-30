@@ -123,7 +123,7 @@ func TestTransferRoundTrip(t *testing.T) {
 		t.Fatalf("Content-Type: %q", ct)
 	}
 	fileA := decode[transfer.File](t, rec)
-	if fileA.Format != "garage-export" || fileA.Version != 2 || fileA.User.Login != "owner" || fileA.ExportedAt == "" {
+	if fileA.Format != "garage-export" || fileA.Version != 3 || fileA.User.Login != "owner" || fileA.ExportedAt == "" {
 		t.Fatalf("шапка файла: %+v", fileA)
 	}
 	if len(fileA.Products) != 2 || len(fileA.Purchases) != 2 || len(fileA.Movements) < 8 || len(fileA.Recipes) != 1 ||
@@ -306,7 +306,7 @@ func TestImportRejectsBadFiles(t *testing.T) {
 		{"JSON с хвостом", append(append([]byte{}, raw...), []byte(" {}")...), 400, ""},
 		{"неверный тип поля", mutate(func(m map[string]any) { item(m, "products", 0)["name"] = 5 }), 400, "products.name"},
 		{"чужой формат", mutate(func(m map[string]any) { m["format"] = "other" }), 400, "format"},
-		{"версия 3", mutate(func(m map[string]any) { m["version"] = 3 }), 400, "version"},
+		{"версия 4", mutate(func(m map[string]any) { m["version"] = 4 }), 400, "version"},
 		{"без версии", mutate(func(m map[string]any) { delete(m, "version") }), 400, "version"},
 		{"пустое название позиции", mutate(func(m map[string]any) { item(m, "products", 1)["name"] = "  " }), 400, "products[1].name"},
 		{"слишком длинное название", mutate(func(m map[string]any) { item(m, "products", 0)["name"] = strings.Repeat("я", 81) }), 400, "products[0].name"},
@@ -505,7 +505,7 @@ func TestImportVersion1File(t *testing.T) {
 	b := stkSignIn(e, "friend")
 	expect(t, trRaw(b, "/api/import", old), http.StatusOK, "импорт файла версии 1")
 	got := trExport(t, b)
-	if len(got.Purposes) != 7 || got.Version != 2 {
+	if len(got.Purposes) != 7 || got.Version != 3 {
 		t.Fatalf("назначения после импорта v1: %+v", got.Purposes)
 	}
 	for _, p := range got.Products {

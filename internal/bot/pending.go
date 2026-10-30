@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"sync"
 	"time"
+
+	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/stock"
 )
 
 // pendingTTL — сколько живут ожидающие действия (отмена расхода, покупка).
@@ -33,6 +35,7 @@ type pendingEntry struct {
 	userID     int64 // чей: чужой ключ не срабатывает
 	moves      []moveRef
 	qty        int64
+	solution   *stock.Solution // расход раствором (ФТ-17), qty тогда не используется
 	productID  int64
 	packages   int64
 	price      *int64 // цена за упаковку, копейки; nil — ещё не известна

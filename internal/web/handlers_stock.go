@@ -340,7 +340,8 @@ func (s *Server) handleConsume(w http.ResponseWriter, r *http.Request) {
 			OpenedUnitIDs   []int64                `json:"opened_unit_ids"`
 			FinishedUnitIDs []int64                `json:"finished_unit_ids"`
 			Cost            *int64                 `json:"cost"`
-		}{ms, p, res.OpenedUnitIDs, res.FinishedUnitIDs, stkSumCost(ms)})
+			Solution        *stock.SolutionInfo    `json:"solution"`
+		}{ms, p, res.OpenedUnitIDs, res.FinishedUnitIDs, stkSumCost(ms), res.Solution})
 	}
 	_, body, replay, err := s.stockSvc().ConsumeOp(r.Context(), uid, in, render)
 	if err != nil {
