@@ -1,5 +1,5 @@
 // Каркас приложения: нижнее меню на телефоне (.g-tabbar), боковое на ширине
-// от 1024 px (.g-side), смена раздела с анимацией .g-view (motion.css):
+// от 1024 px (.g-side, app/SideNav.tsx — со счётчиками и профилем внизу), смена раздела с анимацией .g-view (motion.css):
 // новый экран въезжает по порядку разделов, старый гаснет поверх.
 //
 // Раздел рисует свой компонент с вложенным <Routes>. Уходящему экрану
@@ -17,13 +17,14 @@ import {
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate, type Location } from 'react-router';
 import { Sheet } from '../components/Sheet';
-import { Ico, Logo } from '../components/ui';
+import { Ico } from '../components/ui';
 import { MoreSection } from '../screens/more/MoreSection';
 import { ShoppingSection } from '../screens/shopping/ShoppingSection';
 import { StockSection } from '../screens/stock/StockSection';
 import { TemplatesSection } from '../screens/templates/TemplatesSection';
 import { ErrorBoundary } from './ErrorBoundary';
 import { OfflineSync } from './OfflineSync';
+import { SideNav } from './SideNav';
 import { useNeedsOnline } from './useOffline';
 import { ToastProvider } from './toast';
 
@@ -138,30 +139,7 @@ export function Shell() {
     <ToastProvider>
       <OfflineSync />
       <div className="app">
-        <nav className="g-side app-side" aria-label="Разделы">
-          <div className="app-side__logo">
-            <Logo />
-          </div>
-          <Link to="/" aria-current={current('stock')}>
-            <Ico icon={IconPackage} />
-            Остатки
-          </Link>
-          <NavLink to="/shopping" aria-current={current('shopping')}>
-            <Ico icon={IconShoppingCart} />
-            Купить
-          </NavLink>
-          <NavLink to="/templates" aria-current={current('templates')}>
-            <Ico icon={IconStack2} />
-            Шаблоны
-          </NavLink>
-          <NavLink to="/more" aria-current={current('more')}>
-            <Ico icon={IconDots} />
-            Ещё
-          </NavLink>
-          <button type="button" className="g-btn g-press app-side__plus" onClick={() => setPlus(true)}>
-            <Ico icon={IconPlus} /> Добавить
-          </button>
-        </nav>
+        <SideNav section={section} onAdd={() => setPlus(true)} />
 
         <main className="app-main">
           <div className="app-views">

@@ -90,10 +90,34 @@ a.g-btn { text-decoration: none; }
   .app-side { display: grid; position: sticky; top: 0; height: 100dvh; }
   .app-side__logo { margin: 0 0 var(--sp-3) var(--sp-2); }
   .app-side__plus { margin-top: var(--sp-4); }
+  /* Меню на всю высоту: разделы сверху, профиль и связь прижаты к низу */
+  .app-side { display: flex; flex-direction: column; overflow-y: auto; }
+  .app-side__count {
+    margin-left: auto; min-width: 24px; padding: 2px var(--sp-2); border-radius: var(--r-chip);
+    background: var(--surface-raised); color: var(--text); font-size: var(--fs-12); font-weight: var(--fw-bold);
+    text-align: center; line-height: 1.4;
+  }
+  .app-side__count--danger { background: var(--danger); color: var(--on-danger); }
+  .g-side a[aria-current="page"] .app-side__count:not(.app-side__count--danger) { background: var(--on-accent); color: var(--accent); }
+  .app-side__pending { color: var(--danger-text); }
+  .app-side__foot {
+    display: grid; gap: var(--sp-2); margin-top: auto; padding-top: var(--sp-3);
+    border-top: var(--bw) dashed var(--line);
+  }
+  .app-side__net { display: flex; align-items: center; gap: var(--sp-2); padding-inline: var(--sp-2); font-size: var(--fs-13); font-weight: var(--fw-semibold); color: var(--text-muted); }
+  .app-side__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+  .app-side__net.is-off { color: var(--danger-text); }
+  .app-side__net.is-off .app-side__dot { background: var(--danger); }
+  .app-side__login { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .app-side__ver { padding-inline: var(--sp-2); font-size: var(--fs-12); color: var(--text-muted); }
   .app-tabbar { display: none; }
   .app-main { width: 100%; padding: var(--sp-6) var(--sp-6) var(--sp-10); }
   .app-views { min-height: calc(100dvh - var(--sp-6) - var(--sp-10)); }
   .app-toast-slot { bottom: var(--toast-bottom, var(--sp-6)); left: 220px; }
+  /* Полоса «нет связи» — над основной колонкой, а не над всей страницей:
+     иначе она сдвигает боковое меню и обрезает его низ (профиль, связь) */
+  .app-banner { position: fixed; top: var(--sp-2); left: calc(220px + var(--sp-6)); right: var(--sp-6); margin: 0 auto; }
+  :root:has(.app-banner) .app-main { padding-top: calc(var(--sp-6) + 72px); }
 }
 
 /* ---------- Шторка поверх приложения (components/Sheet) ---------- */
