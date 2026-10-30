@@ -103,6 +103,22 @@ ssh relay "systemctl restart garage && sleep 3 && journalctl -u garage -n 5 --no
 
 В журнале должно появиться «telegram: бот подключён». Пустой токен отключает бота, сайт работает как обычно. Если Telegram недоступен, бот повторяет попытки с паузой до минуты.
 
+## Погода
+
+Прогноз и поиск города запрашивает служба garage у Open-Meteo (`api.open-meteo.com`, `geocoding-api.open-meteo.com`). С relay они доступны напрямую, туннель не нужен; ключ не требуется. Прогноз хранится в памяти службы и обновляется не чаще раза в час на каждое место.
+
+Настройки — блок `weather` в `/etc/garage/config.json`:
+
+```json
+"weather": {"default": {"name": "Донецк", "lat": 48.023, "lon": 37.802}, "base_url": "", "geocoding_url": "", "timezone": "Europe/Moscow"}
+```
+
+- `default` — город по умолчанию для тех, кто не выбрал свой в профиле. Без него и без своего города погода пользователю не показывается.
+- `timezone` — часовой пояс часов и дней прогноза. `auto` не подходит: для Донецка Open-Meteo выбирает Europe/Kyiv.
+- `base_url` и `geocoding_url` пусты — стандартные адреса (задаются только для тестов).
+
+Если Open-Meteo недоступен, сайт показывает последний полученный прогноз с пометкой времени; остальное работает как обычно.
+
 ## Учётные записи
 
 Команды выполняются на сервере от пользователя `garage`. Пароль вводится в терминале дважды и не отображается. Вводите его в английской раскладке.
@@ -169,6 +185,8 @@ ssh relay "runuser -u garage -- /usr/local/sbin/garage-snapshot && ls -l /var/li
 | «Слишком много попыток» | После 5 неверных паролей вход по логину и адресу закрыт на 15 минут. Счётчик хранится в памяти службы, `systemctl restart garage` сбрасывает его сразу |
 | Ошибки службы | `journalctl -u garage -n 50 --no-pager` |
 | Бот молчит | `journalctl -u garage -g telegram -n 20 --no-pager`; туннель: `ip -br addr show awg1` |
+| Нет погоды | `journalctl -u garage -g погода -n 20 --no-pager`; доступ: `runuser -u garage -- curl -sS -o /dev/null -w '%{http_code}' https://api.open-meteo.com/v1/forecast?latitude=48&longitude=37.8&hourly=temperature_2m` |
+| `make deploy` падает на `npm ci` с ENOTEMPTY | `trash web/node_modules` и повторить |
 | Запросы к сайту | `/var/log/nginx/access.log` |
 
 Перед обновлением с новыми миграциями полезно снять снимок вручную (см. «Резервное копирование») и скопировать его под другим именем — ротация удаляет только `garage-*.db`.
