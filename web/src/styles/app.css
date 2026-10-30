@@ -89,7 +89,7 @@ a.g-btn { text-decoration: none; }
   .app { display: grid; grid-template-columns: 220px minmax(0, 1fr); }
   .app-side { display: grid; position: sticky; top: 0; height: 100dvh; }
   .app-side__logo { margin: 0 0 var(--sp-3) var(--sp-2); }
-  .app-side__plus { margin-top: var(--sp-4); }
+  .app-side__plus { margin-top: var(--sp-3); }
   /* Меню на всю высоту: разделы сверху, профиль и связь прижаты к низу */
   .app-side { display: flex; flex-direction: column; overflow-y: auto; }
   .app-side__count {
@@ -100,8 +100,30 @@ a.g-btn { text-decoration: none; }
   .app-side__count--danger { background: var(--danger); color: var(--on-danger); }
   .g-side a[aria-current="page"] .app-side__count:not(.app-side__count--danger) { background: var(--on-accent); color: var(--accent); }
   .app-side__pending { color: var(--danger-text); }
+  /* Разделы «Ещё» группами: подписи групп и лёгкие подпункты (без заливки акцентом) */
+  .app-side__group { display: grid; gap: 0; margin-top: var(--sp-3); }
+  .app-side__label {
+    padding-inline: var(--sp-2); margin-bottom: var(--sp-1);
+    font-size: var(--fs-12); font-weight: var(--fw-bold); color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .g-side a.app-side__sub { font-weight: var(--fw-semibold); font-size: var(--fs-14, 14px); color: var(--text); }
+  /* С мышью подпунктам хватает 36 px — меню помещается в экран ноутбука; на сенсоре — 44 */
+  @media (pointer: fine) {
+    .g-side a.app-side__sub, .g-side a.app-side__me { min-height: 36px; padding-block: var(--sp-1); }
+    .app-side__label { margin-bottom: 0; }
+  }
+  .g-side a.app-side__sub .ti { font-size: 18px; color: var(--text-muted); }
+  .g-side a.app-side__sub[aria-current="page"] {
+    background: var(--surface-raised); color: var(--text); border-color: transparent; box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .g-side a.app-side__sub[aria-current="page"] .ti { color: var(--accent); }
+  .g-side a.app-side__me[aria-current="page"] { background: var(--surface-raised); color: var(--text); border-color: transparent; box-shadow: none; }
+  @media (hover: hover) and (pointer: fine) {
+    .g-side a.app-side__sub:hover, .g-side a.app-side__me:hover { background: var(--surface-raised); }
+  }
   .app-side__foot {
-    display: grid; gap: var(--sp-2); margin-top: auto; padding-top: var(--sp-3);
+    display: grid; gap: var(--sp-1); margin-top: auto; padding-top: var(--sp-3);
     border-top: var(--bw) dashed var(--line);
   }
   .app-side__net { display: flex; align-items: center; gap: var(--sp-2); padding-inline: var(--sp-2); font-size: var(--fs-13); font-weight: var(--fw-semibold); color: var(--text-muted); }

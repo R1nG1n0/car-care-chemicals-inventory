@@ -1,11 +1,28 @@
 // Боковое меню на компьютере (от 1024 px): разделы со счётчиками («мало»,
-// к покупке, неотправленное), «Добавить», внизу — профиль, состояние связи и
-// версия. Данные для счётчиков запрашиваются только на широком экране: на
+// к покупке, неотправленное), «Добавить», затем разделы «Ещё» группами (на
+// компьютере пункта «Ещё» нет), внизу — профиль, состояние связи и версия. Данные для счётчиков запрашиваются только на широком экране: на
 // телефоне меню скрыто, лишних запросов нет.
-import { IconCloudUpload, IconDots, IconPackage, IconPlus, IconShoppingCart, IconStack2, IconUserCircle } from '@tabler/icons-react';
+import {
+  IconBox,
+  IconBuildingStore,
+  IconChartBar,
+  IconClipboardCheck,
+  IconCloud,
+  IconCloudUpload,
+  IconDatabase,
+  IconPackage,
+  IconPlus,
+  IconReceipt,
+  IconShoppingCart,
+  IconStack2,
+  IconTags,
+  IconTargetArrow,
+  IconUserCircle,
+  type TablerIcon,
+} from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
-import { Link, NavLink } from 'react-router';
+import { Link, NavLink, useLocation } from 'react-router';
 import { api, inventory } from '../api';
 import { Ico, Logo } from '../components/ui';
 import { countText, lowCount, toBuyCount, versionText } from '../lib/sideNav';
@@ -15,6 +32,37 @@ import { usePendingOps } from './useOffline';
 import type { SectionKey } from './Shell';
 
 const WIDE = '(min-width: 1024px)';
+
+type Item = { to: string; icon: TablerIcon; title: string };
+
+/** Разделы «Ещё» группами — на компьютере они видны сразу, без лишнего перехода. */
+const GROUPS: { title: string; items: Item[] }[] = [
+  {
+    title: 'Учёт',
+    items: [
+      { to: '/more/inventory', icon: IconClipboardCheck, title: 'Инвентаризация' },
+      { to: '/more/reports', icon: IconChartBar, title: 'Отчёты' },
+      { to: '/purchases', icon: IconReceipt, title: 'История покупок' },
+      { to: '/weather', icon: IconCloud, title: 'Погода' },
+    ],
+  },
+  {
+    title: 'Справочники',
+    items: [
+      { to: '/more/places', icon: IconBox, title: 'Места' },
+      { to: '/more/categories', icon: IconTags, title: 'Категории' },
+      { to: '/more/purposes', icon: IconTargetArrow, title: 'Назначения' },
+      { to: '/more/stores', icon: IconBuildingStore, title: 'Магазины' },
+    ],
+  },
+  { title: 'Данные', items: [{ to: '/more/data', icon: IconDatabase, title: 'Экспорт и импорт' }] },
+];
+
+/** Подпункт открыт: сам адрес или вложенный экран (/more/inventory/3). /purchases/new — это «Купить». */
+function isOpen(pathname: string, to: string): boolean {
+  if (to === '/purchases') return pathname === '/purchases' || /^\/purchases\/\d+/.test(pathname);
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
 
 /** Широкий экран: меню видно. Без matchMedia (тесты, старые браузеры) — нет. */
 function useWide(): boolean {
@@ -43,6 +91,7 @@ function Count({ n, label, danger = false }: { n: number; label: string; danger?
 
 export function SideNav({ section, onAdd }: { section: SectionKey; onAdd: () => void }) {
   const wide = useWide();
+  const { pathname } = useLocation();
   const online = useOnline();
   const me = useSession().data;
   const pending = usePendingOps().length;
@@ -65,7 +114,7 @@ export function SideNav({ section, onAdd }: { section: SectionKey; onAdd: () => 
         Остатки
         <Count n={low} label="ниже минимума" danger />
       </Link>
-      <NavLink to="/shopping" aria-current={current('shopping')}>
+      <NavLink to="/shopping" aria-current={isOpen(pathname, '/purchases') ? undefined : current('shopping')}>
         <Ico icon={IconShoppingCart} />
         Купить
         <Count n={toBuy} label="к покупке" />
@@ -73,10 +122,6 @@ export function SideNav({ section, onAdd }: { section: SectionKey; onAdd: () => 
       <NavLink to="/templates" aria-current={current('templates')}>
         <Ico icon={IconStack2} />
         Шаблоны
-      </NavLink>
-      <NavLink to="/more" aria-current={current('more')}>
-        <Ico icon={IconDots} />
-        Ещё
       </NavLink>
       {pending > 0 && (
         <NavLink to="/more/pending" className="app-side__pending">
@@ -89,13 +134,27 @@ export function SideNav({ section, onAdd }: { section: SectionKey; onAdd: () => 
         <Ico icon={IconPlus} /> Добавить
       </button>
 
+      {GROUPS.map((g) => (
+        <div key={g.title} className="app-side__group" role="group" aria-label={g.title}>
+          <span className="app-side__label" aria-hidden="true">
+            {g.title}
+          </span>
+          {g.items.map((it) => (
+            <Link key={it.to} to={it.to} className="app-side__sub" aria-current={isOpen(pathname, it.to) ? 'page' : undefined}>
+              <Ico icon={it.icon} />
+              {it.title}
+            </Link>
+          ))}
+        </div>
+      ))}
+
       <div className="app-side__foot">
         <span className={`app-side__net${online ? '' : ' is-off'}`} role="status">
           <span className="app-side__dot" aria-hidden="true" />
           {online ? 'В сети' : 'Нет связи'}
         </span>
         {me && (
-          <Link to="/profile" className="app-side__me">
+          <Link to="/profile" className="app-side__me" aria-current={pathname === '/profile' ? 'page' : undefined}>
             <Ico icon={IconUserCircle} />
             <span className="app-side__login">{me.user.login}</span>
           </Link>
