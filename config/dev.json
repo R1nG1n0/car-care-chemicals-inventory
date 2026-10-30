@@ -3,5 +3,6 @@
   "data_dir": "../.dev",
   "log_level": "debug",
   "insecure_cookies": true,
-  "telegram": {"token": "", "interface": ""}
+  "telegram": {"token": "", "interface": ""},
+  "weather": {"default": {"name": "Донецк", "lat": 48.023, "lon": 37.802}, "base_url": "", "geocoding_url": "", "timezone": "Europe/Moscow"}
 }

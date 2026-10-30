@@ -1,0 +1,89 @@
+/* Погода (ФТ-16): плашка на главной, экран «Погода», лента часов. Только токены «Сумерек».
+   Уровни оценки различаются формой значка (галочка / треугольник / крест) и текстом, цвет — подкрепление. */
+
+.wx-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.wx-ico { display: inline-flex; color: var(--text); }
+
+/* ---------- Плашка на главной ---------- */
+.wx-banner {
+  display: flex; align-items: stretch;
+  border: var(--bw) solid var(--line); border-radius: var(--r-card);
+  background: var(--surface); box-shadow: var(--sh-sm);
+}
+.wx-banner__main {
+  flex: 1; min-width: 0; min-height: var(--tap);
+  display: grid; gap: var(--sp-1); align-content: center;
+  padding: var(--sp-2) var(--sp-3);
+  color: inherit; text-decoration: none;
+}
+.wx-banner__line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); font-size: var(--fs-13); }
+.wx-banner__lead { font-weight: var(--fw-bold); color: var(--text-muted); }
+.wx-banner__temp { margin-left: auto; font-weight: var(--fw-bold); }
+.wx-banner__more { display: grid; gap: 2px; font-size: var(--fs-13); line-height: var(--lh-body); }
+.wx-banner__reason { color: var(--text); }
+.wx-banner__better { font-weight: var(--fw-bold); }
+.wx-banner__note { font-size: var(--fs-12); color: var(--text-muted); }
+.wx-banner__toggle { align-self: center; flex: none; margin: 0 var(--sp-1); box-shadow: none; }
+
+.wx-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  min-height: 28px; padding: 2px 8px;
+  border: var(--bw-thin) solid var(--line); border-radius: var(--r-chip);
+  font-size: var(--fs-13); font-weight: var(--fw-bold); line-height: 1;
+}
+.wx-chip--good { background: var(--accent); color: var(--on-accent); }
+.wx-chip--meh { background: var(--surface-raised); color: var(--text); border-style: dashed; }
+.wx-chip--bad { background: var(--danger); color: var(--on-danger); }
+
+/* ---------- Экран ---------- */
+.wx-screen { min-width: 0; }
+.wx-meta { display: grid; gap: 2px; }
+.wx-meta__place { display: inline-flex; align-items: center; gap: 6px; font-weight: var(--fw-bold); }
+.wx-meta__upd { font-size: var(--fs-12); color: var(--text-muted); }
+.wx-credit { font-size: var(--fs-12); color: var(--text-muted); }
+.wx-credit a { color: inherit; display: inline-block; padding-block: 12px; }
+
+.wx-days { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-3); }
+@media (min-width: 1024px) { .wx-days { grid-template-columns: 1fr 1fr; } }
+.wx-day {
+  display: grid; gap: var(--sp-2); min-width: 0;
+  padding: var(--sp-3);
+  border: var(--bw) solid var(--line); border-radius: var(--r-card);
+  background: var(--surface); box-shadow: var(--sh-sm);
+}
+.wx-day__head { display: flex; align-items: center; gap: var(--sp-3); }
+.wx-day__name { flex: 1; min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-2); font-size: var(--fs-16); }
+.wx-day__name b { text-transform: capitalize; }
+.wx-day__date { font-size: var(--fs-13); color: var(--text-muted); }
+.wx-day__temp { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--fs-16); }
+.wx-day__temp span { font-size: var(--fs-13); color: var(--text-muted); }
+.wx-day__precip { font-size: var(--fs-13); color: var(--text-muted); }
+
+.wx-verdicts { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
+.wx-verdict { display: flex; gap: var(--sp-2); align-items: flex-start; padding: var(--sp-2); border-radius: var(--r-control); background: var(--surface-raised); }
+.wx-verdict .ti { flex: none; margin-top: 1px; }
+.wx-verdict--good .ti { color: var(--accent); }
+.wx-verdict--bad .ti { color: var(--danger-text); }
+.wx-verdict__main { display: grid; gap: 2px; min-width: 0; }
+.wx-verdict__title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); font-weight: var(--fw-bold); font-size: var(--fs-14); }
+.wx-verdict__why { font-size: var(--fs-13); color: var(--text-muted); overflow-wrap: anywhere; }
+
+/* ---------- Лента часов: прокрутка только внутри блока ---------- */
+.wx-hours {
+  list-style: none; margin: 0; padding: 0 0 var(--sp-1);
+  display: flex; gap: var(--sp-2);
+  overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+.wx-hours::-webkit-scrollbar { display: none; }
+.wx-hour {
+  flex: none; scroll-snap-align: start;
+  width: 72px; min-height: var(--tap);
+  display: grid; justify-items: center; gap: 4px;
+  padding: var(--sp-2) var(--sp-1);
+  border: var(--bw-thin) solid var(--line); border-radius: var(--r-control);
+  background: var(--surface);
+}
+.wx-hour__time { font-size: var(--fs-12); color: var(--text-muted); font-weight: var(--fw-semibold); }
+.wx-hour__temp { font-size: var(--fs-16); }
+.wx-hour__row { display: inline-flex; align-items: center; gap: 2px; font-size: var(--fs-12); white-space: nowrap; color: var(--text-muted); }

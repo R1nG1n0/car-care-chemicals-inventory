@@ -24,7 +24,7 @@ func accSnapshot(t *testing.T, c *client, targets []string) map[string]string {
 // в адресе и в теле — везде 404 (reorder — 400), данные владельца не меняются,
 // в списках второго — только своё.
 func TestAccIsolationAllStage2(t *testing.T) {
-	e := newEnv(t, false)
+	e, _, _ := newWeatherEnv(t, nil)
 	a := stkSignIn(e, "owner")
 	b := stkSignIn(e, "friend")
 
@@ -63,7 +63,12 @@ func TestAccIsolationAllStage2(t *testing.T) {
 	photoA := phJPEG(t, 33, 22)
 	phPut(t, a, prodA, photoA)
 
+	// Погода (ФТ-16): своё место владельца второму не видно и не меняется.
+	expect(t, a.do(http.MethodPut, "/api/weather/location", map[string]any{"name": "Тайный город", "lat": 55.75, "lon": 37.62}),
+		http.StatusOK, "место погоды владельца")
+
 	ownerGets := []string{
+		"/api/weather",
 		stkPath("/api/products/", prodA, "/photo"),
 		"/api/categories?archived=1", "/api/purposes?archived=1", stkPath("/api/products/", prodA, "/analogs"),
 		stkPath("/api/products?purpose_id=", purA, ""), "/api/products?q=Тайное",
@@ -226,6 +231,12 @@ func TestAccIsolationAllStage2(t *testing.T) {
 	expect(t, b.do(http.MethodPost, "/api/categories/reorder", map[string]any{"ids": ids}), http.StatusBadRequest,
 		"порядок: все свои категории и чужая")
 
+	// Погода второго: сброс и своё место не задевают место владельца.
+	expect(t, b.do(http.MethodDelete, "/api/weather/location", nil), http.StatusNoContent, "сброс места погоды вторым")
+	expect(t, b.do(http.MethodPut, "/api/weather/location", map[string]any{"name": "Свой город", "lat": 1, "lon": 2}),
+		http.StatusOK, "своё место погоды второго")
+	expect(t, b.do(http.MethodDelete, "/api/weather/location", nil), http.StatusNoContent, "сброс места погоды вторым")
+
 	// Данные владельца не изменились.
 	after := accSnapshot(t, a, ownerGets)
 	for _, target := range ownerGets {
@@ -235,7 +246,7 @@ func TestAccIsolationAllStage2(t *testing.T) {
 	}
 
 	// Списки второго — только своё.
-	leaks := []string{"Тайная категория", "Тайник", "Тайный магазин", "Секретный", "Тайнобренд", "Тайная заметка", "Тайный рецепт"}
+	leaks := []string{"Тайная категория", "Тайник", "Тайный магазин", "Секретный", "Тайнобренд", "Тайная заметка", "Тайный рецепт", "Тайный город"}
 	lists := []string{
 		"/api/categories?archived=1", "/api/locations?archived=1", "/api/stores?archived=1",
 		"/api/products", "/api/products?archived=1", "/api/products?q=секрет", "/api/products?filter=low",
@@ -243,7 +254,7 @@ func TestAccIsolationAllStage2(t *testing.T) {
 		"/api/brands", "/api/shopping", "/api/purchases", "/api/movements", "/api/recipes",
 		"/api/reports/spending?from=2026-01-01&to=2026-12-31", "/api/reports/consumption?from=2026-01-01&to=2026-12-31",
 		"/api/export.json", "/api/export/products.csv", "/api/export/purchases.csv", "/api/export/movements.csv",
-		"/api/telegram",
+		"/api/telegram", "/api/weather",
 	}
 	for _, target := range lists {
 		rec := b.do(http.MethodGet, target, nil)

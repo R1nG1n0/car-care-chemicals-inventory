@@ -3,10 +3,12 @@
 // Свайп влево — расход, нажатие — карточка позиции. На ширине от 1024 px нажатие
 // выбирает карточку, справа панель позиции с расходом. /?consume=1 — расход с выбором
 // позиции (меню «+»), /?location=ID и /?filter=low|out — начальный фильтр.
-// Кнопка сканера в строке поиска — ScanFlow (ФТ-9.2).
+// Кнопка сканера в строке поиска — ScanFlow (ФТ-9.2). Под заголовком — плашка погоды (ФТ-16.3.1).
 import { IconPackage, IconPlus, IconScan, IconSearch, IconSearchOff, IconX } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
+import { keys } from '../../app/queries';
 import { DESKTOP, useMedia } from '../../components/hooks';
 import { catClass, useProducts, useStockRefs } from '../../components/refs';
 import { Empty, Ico, LoadError } from '../../components/ui';
@@ -15,12 +17,19 @@ import { ConsumeSheet } from './ConsumeSheet';
 import { ScanFlow } from './ScanFlow';
 import { StockList } from './StockList';
 import { StockPanel } from './StockPanel';
+import { WeatherBanner } from '../weather/WeatherBanner';
+import { useWeather } from '../weather/useWeather';
 
 export function StockHome() {
   const [params, setParams] = useSearchParams();
   const desktop = useMedia(DESKTOP);
   const products = useProducts();
   const refs = useStockRefs();
+  // Плашка погоды — только если прогноз уже был в кэше при открытии главной (снимок или прошлый заход):
+  // иначе она вставилась бы над списком и сдвинула его. Запрос идёт в любом случае, в следующий раз плашка будет сразу.
+  const client = useQueryClient();
+  const [weatherReady] = useState(() => client.getQueryData(keys.weather) !== undefined);
+  useWeather();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<StockFilter>(() =>
     params.get('location') ? parseFilter(`loc:${params.get('location')}`) : parseFilter(params.get('filter')),
@@ -160,6 +169,7 @@ export function StockHome() {
           <h1 className="g-title">Остатки</h1>
           {counts.low > 0 && <span className="g-badge g-badge--danger">{counts.low}&nbsp;мало</span>}
         </div>
+        {weatherReady && <WeatherBanner />}
         {body}
       </div>
       {current && <StockPanel product={current} />}

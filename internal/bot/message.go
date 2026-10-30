@@ -63,6 +63,8 @@ func (b *Bot) handleMessage(ctx context.Context, m *telegram.Message) {
 		b.send(ctx, m.Chat.ID, helpText, nil)
 	case cmd == "/list" || strings.EqualFold(text, "купить"):
 		b.cmdList(ctx, link, m.Chat.ID)
+	case cmd == "/weather" || strings.EqualFold(text, "погода"):
+		b.cmdWeather(ctx, link, m.Chat.ID)
 	case cmd != "":
 		b.send(ctx, m.Chat.ID, "Такой команды нет. Вот что я умею:\n\n"+helpText, nil)
 	case len(m.Photo) > 0 || (m.Document != nil && strings.HasPrefix(m.Document.MimeType, "image/")):

@@ -13,7 +13,7 @@ export const MAX_PRODUCT_CARDS = 80;
 
 export type SnapEntry = { key: readonly unknown[]; at: number; data: unknown };
 
-/** Какие запросы сохраняются: общий список позиций (без поиска), карточки, шаблоны, справочники. */
+/** Какие запросы сохраняются: общий список позиций (без поиска), карточки, шаблоны, справочники, прогноз погоды. */
 export function isPersistableKey(key: readonly unknown[]): boolean {
   switch (key[0]) {
     case 'products':
@@ -24,6 +24,7 @@ export function isPersistableKey(key: readonly unknown[]): boolean {
     case 'categories':
     case 'purposes':
     case 'locations':
+    case 'weather':
       return true;
     default:
       return false;

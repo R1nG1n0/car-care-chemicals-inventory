@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/auth"
+	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/weather"
 )
 
 // Options — зависимости сервера.
@@ -30,6 +31,8 @@ type Options struct {
 	Now func() time.Time
 	// Telegram — состояние бота для привязки аккаунта (ФТ-11.2); nil — бот выключен.
 	Telegram TelegramBot
+	// Weather — погода (ФТ-16); nil — адреса /api/weather не подключаются.
+	Weather *weather.Service
 }
 
 // Server обслуживает /api/ и одностраничный интерфейс.
@@ -43,6 +46,9 @@ type Server struct {
 	db              *sql.DB
 	now             func() time.Time
 	telegram        TelegramBot
+	weather         *weather.Service
+	placeLimiter    *auth.Limiter
+	locationLimiter *auth.Limiter
 	mux             *http.ServeMux
 }
 
@@ -58,6 +64,7 @@ func New(opt Options) *Server {
 		db:              opt.DB,
 		now:             opt.Now,
 		telegram:        opt.Telegram,
+		weather:         opt.Weather,
 		mux:             http.NewServeMux(),
 	}
 	if s.now == nil {
@@ -69,6 +76,8 @@ func New(opt Options) *Server {
 	if s.limiter == nil {
 		s.limiter = auth.NewLimiter(auth.LimitAttempts, auth.LimitWindow, nil)
 	}
+	s.placeLimiter = auth.NewLimiter(placeSearchLimit, time.Minute, s.now)
+	s.locationLimiter = auth.NewLimiter(locationSetLimit, time.Minute, s.now)
 	s.routes()
 	return s
 }
@@ -99,6 +108,9 @@ func (s *Server) routes() {
 		s.reportRoutes()
 		s.transferRoutes()
 		s.telegramRoutes()
+		if s.weather != nil {
+			s.weatherRoutes()
+		}
 	}
 
 	s.mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

@@ -37,12 +37,12 @@ const ORDER: SectionKey[] = ['stock', 'shopping', 'templates', 'more'];
  * - stock — «/», «/items/…» (позиции), «/?consume=1» (расход из меню «+»);
  * - shopping — «/shopping», «/purchases/…» (новая покупка, история);
  * - templates — «/templates/…»;
- * - more — «/more/…» (справочники), «/profile».
+ * - more — «/more/…» (справочники), «/profile», «/weather».
  */
 export function sectionOf(pathname: string): SectionKey {
   if (pathname.startsWith('/shopping') || pathname.startsWith('/purchases')) return 'shopping';
   if (pathname.startsWith('/templates')) return 'templates';
-  if (pathname.startsWith('/more') || pathname.startsWith('/profile')) return 'more';
+  if (pathname.startsWith('/more') || pathname.startsWith('/profile') || pathname.startsWith('/weather')) return 'more';
   return 'stock';
 }
 

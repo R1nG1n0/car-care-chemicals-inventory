@@ -19,6 +19,7 @@ import (
 
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/auth"
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/store"
+	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/weather"
 )
 
 type testClock struct {
@@ -51,6 +52,11 @@ func newEnv(t *testing.T, insecure bool) *env { return newEnvWith(t, insecure, n
 
 // newEnvWith — newEnv с ботом Telegram (nil — бот выключен).
 func newEnvWith(t *testing.T, insecure bool, tg TelegramBot) *env {
+	return newEnvFull(t, insecure, tg, nil)
+}
+
+// newEnvFull — newEnvWith с погодой: mkWeather получает базу (nil — без погоды).
+func newEnvFull(t *testing.T, insecure bool, tg TelegramBot, mkWeather func(*sql.DB) *weather.Service) *env {
 	t.Helper()
 	db, err := store.Open(filepath.Join(t.TempDir(), "garage.db"))
 	if err != nil {
@@ -62,7 +68,12 @@ func newEnvWith(t *testing.T, insecure bool, tg TelegramBot) *env {
 	}
 	c := &testClock{t: time.Unix(1_792_000_000, 0)}
 	svc := auth.New(db.DB, auth.Options{Now: c.Now, Params: auth.Params{Time: 1, Memory: 64, Threads: 1}})
+	var ws *weather.Service
+	if mkWeather != nil {
+		ws = mkWeather(db.DB)
+	}
 	srv := New(Options{
+		Weather:         ws,
 		Log:             slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Version:         "test",
 		Auth:            svc,

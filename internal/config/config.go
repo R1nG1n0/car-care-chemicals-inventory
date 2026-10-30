@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
+	"unicode/utf8"
 )
 
 // Config — параметры запуска.
@@ -31,6 +34,32 @@ type Config struct {
 
 	// Telegram — бот (ФТ-11). Пустой токен отключает бота.
 	Telegram TelegramConfig `json:"telegram"`
+
+	// Weather — погода для мойки и покрытий (ФТ-16).
+	Weather WeatherConfig `json:"weather"`
+}
+
+// WeatherConfig — настройки погоды. Нет места по умолчанию — погода
+// показывается только тем, кто выбрал своё место.
+type WeatherConfig struct {
+	// Default — место по умолчанию (на relay — Донецк).
+	Default *WeatherPlace `json:"default"`
+
+	// BaseURL и GeocodingURL — адреса Open-Meteo; пусто — стандартные.
+	// Задаются только для тестов и стендов.
+	BaseURL      string `json:"base_url"`
+	GeocodingURL string `json:"geocoding_url"`
+
+	// Timezone — часовой пояс прогноза для всех мест (IANA, например
+	// "Europe/Moscow", или "auto" — по координатам). Пусто — Europe/Moscow.
+	Timezone string `json:"timezone"`
+}
+
+// WeatherPlace — место с координатами.
+type WeatherPlace struct {
+	Name string  `json:"name"`
+	Lat  float64 `json:"lat"`
+	Lon  float64 `json:"lon"`
 }
 
 // TelegramConfig — настройки Telegram-бота.
@@ -114,6 +143,31 @@ func (c Config) Validate() error {
 	}
 	if u := c.Telegram.SiteURL; u != "" && !strings.HasPrefix(u, "https://") {
 		return fmt.Errorf("telegram.site_url %q: нужен адрес https://…", u)
+	}
+	return c.Weather.validate()
+}
+
+func (w WeatherConfig) validate() error {
+	if d := w.Default; d != nil {
+		if n := utf8.RuneCountInString(strings.TrimSpace(d.Name)); n < 1 || n > 80 {
+			return errors.New("weather.default.name: от 1 до 80 символов")
+		}
+		if math.IsNaN(d.Lat) || d.Lat < -90 || d.Lat > 90 {
+			return fmt.Errorf("weather.default.lat %v: широта от -90 до 90", d.Lat)
+		}
+		if math.IsNaN(d.Lon) || d.Lon < -180 || d.Lon > 180 {
+			return fmt.Errorf("weather.default.lon %v: долгота от -180 до 180", d.Lon)
+		}
+	}
+	if tz := w.Timezone; tz != "" && tz != "auto" {
+		if _, err := time.LoadLocation(tz); err != nil {
+			return fmt.Errorf("weather.timezone %q: неизвестный часовой пояс (нужен вида Europe/Moscow или auto)", tz)
+		}
+	}
+	for name, u := range map[string]string{"base_url": w.BaseURL, "geocoding_url": w.GeocodingURL} {
+		if u != "" && !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
+			return fmt.Errorf("weather.%s %q: нужен адрес http(s)://…", name, u)
+		}
 	}
 	return nil
 }

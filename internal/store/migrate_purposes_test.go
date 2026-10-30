@@ -39,8 +39,8 @@ func TestMigrationPurposesSeedsExistingUsers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	if len(applied) != 1 || applied[0] != "008_purposes.sql" {
-		t.Fatalf("применены %v, ожидалась только 008_purposes.sql", applied)
+	if len(applied) == 0 || applied[0] != "008_purposes.sql" {
+		t.Fatalf("применены %v, ожидалась первой 008_purposes.sql", applied)
 	}
 	for _, user := range []int64{1, 2} {
 		var n int

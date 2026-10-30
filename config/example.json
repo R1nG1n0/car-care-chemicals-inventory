@@ -3,5 +3,6 @@
   "data_dir": "/var/lib/garage",
   "log_level": "info",
   "insecure_cookies": false,
-  "telegram": {"token": "", "interface": "", "site_url": ""}
+  "telegram": {"token": "", "interface": "", "site_url": ""},
+  "weather": {"default": {"name": "Донецк", "lat": 48.023, "lon": 37.802}, "base_url": "", "geocoding_url": "", "timezone": "Europe/Moscow"}
 }

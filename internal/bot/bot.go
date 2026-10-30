@@ -15,6 +15,7 @@ import (
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/catalog"
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/stock"
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/telegram"
+	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/weather"
 )
 
 const (
@@ -49,6 +50,9 @@ type Options struct {
 	// SiteURL — адрес сайта для ссылки «создайте позицию» (ФТ-11.4.3); пусто —
 	// без ссылки.
 	SiteURL string
+	// Weather — погода для команды /weather (ФТ-16.3.3); nil — команда отвечает,
+	// что погода не настроена.
+	Weather *weather.Service
 }
 
 // Bot — Telegram-бот одного экземпляра garage.
@@ -58,6 +62,7 @@ type Bot struct {
 	log     *slog.Logger
 	now     func() time.Time
 	siteURL string
+	weather *weather.Service
 	links   *Links
 	cat     *catalog.Service
 	stk     *stock.Service
@@ -89,7 +94,7 @@ func New(opt Options) *Bot {
 		msk = time.FixedZone("MSK", 3*60*60)
 	}
 	return &Bot{
-		db: opt.DB, api: opt.API, log: log, now: now, siteURL: strings.TrimRight(opt.SiteURL, "/"),
+		db: opt.DB, api: opt.API, log: log, now: now, siteURL: strings.TrimRight(opt.SiteURL, "/"), weather: opt.Weather,
 		links: NewLinks(opt.DB, now), cat: catalog.New(opt.DB), stk: stock.New(opt.DB, now),
 		pend: newPending(now), msk: msk, minBackoff: 2 * time.Second,
 	}

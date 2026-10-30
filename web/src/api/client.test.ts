@@ -119,6 +119,13 @@ describe('нет связи', () => {
     await expect(api.me()).rejects.toBeInstanceOf(NetworkError);
   });
 
+  it('502 с JSON-ошибкой garage — ApiError, связь не «пропала»', async () => {
+    reportConnection(true);
+    stubFetch(() => new Response(JSON.stringify({ error: 'Прогноз сейчас недоступен' }), { status: 502, headers: { 'Content-Type': 'application/json' } }));
+    await expect(api.me()).rejects.toMatchObject({ name: 'ApiError', status: 502 });
+    expect(isOnline()).toBe(true);
+  });
+
   it('вид: 502/503 и упавший fetch — не дошло, 504 — ответ не пришёл', async () => {
     const kind = async (respond: () => Response | Promise<Response>) => {
       stubFetch(respond);

@@ -111,10 +111,10 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     throw new NetworkError(timeout.aborted ? 'timeout' : 'offline');
   }
 
-  // 502–504 от nginx — без JSON; 503 с {error} — ответ самого garage («Бот не настроен»).
+  // 502–504 от nginx — без JSON; 502/503 с {error} — ответ самого garage («Бот не настроен», «Прогноз сейчас недоступен»).
   const gateway = GATEWAY_STATUSES.has(res.status);
   const data = gateway ? await readJson(res.clone()) : await readJson(res);
-  if (gateway && !(res.status === 503 && hasErrorText(data))) {
+  if (gateway && !((res.status === 503 || res.status === 502) && hasErrorText(data))) {
     reportConnection(false);
     throw new NetworkError(res.status === 504 ? 'timeout' : 'offline');
   }

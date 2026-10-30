@@ -48,7 +48,7 @@ func TestRunPollsAndStoresOffset(t *testing.T) {
 	if e.bot.BotUsername() != "garage_test_bot" {
 		t.Fatalf("имя бота: %q", e.bot.BotUsername())
 	}
-	if strings.Join(e.fake.cmds, ",") != "start,list,help" {
+	if strings.Join(e.fake.cmds, ",") != "start,list,weather,help" {
 		t.Fatalf("команды меню: %v", e.fake.cmds)
 	}
 

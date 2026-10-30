@@ -6,6 +6,7 @@ import "github.com/R1nG1n0/car-care-chemicals-inventory/internal/telegram"
 var botCommands = []telegram.Command{
 	{Command: "start", Description: "Начало и подключение"},
 	{Command: "list", Description: "Что купить"},
+	{Command: "weather", Description: "Погода для мойки и покрытий"},
 	{Command: "help", Description: "Что умеет бот"},
 }
 
@@ -26,6 +27,7 @@ const (
 		"• «шампунь 50» — спишу 50 мл (или шт) этой позиции.\n" +
 		"• Пришлите цифры штрихкода (8–14) или фото штрихкода — найду позицию.\n" +
 		"• /list — что нужно купить; отметить купленное можно кнопкой.\n" +
+		"• /weather или «погода» — можно ли мыть машину и наносить покрытие сегодня и завтра.\n" +
 		"• Когда остаток упадёт ниже минимума, я напишу сам.\n\n" +
 		"Любое списание можно отменить кнопкой под ответом."
 )

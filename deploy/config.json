@@ -2,5 +2,6 @@
   "listen": "127.0.0.1:8090",
   "data_dir": "/var/lib/garage",
   "log_level": "info",
-  "telegram": {"token": "", "interface": "awg1", "site_url": "https://garage.north-flow.online"}
+  "telegram": {"token": "", "interface": "awg1", "site_url": "https://garage.north-flow.online"},
+  "weather": {"default": {"name": "Донецк", "lat": 48.023, "lon": 37.802}, "base_url": "", "geocoding_url": "", "timezone": "Europe/Moscow"}
 }

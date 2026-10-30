@@ -114,3 +114,33 @@ func TestLoadTelegramBadInterface(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadWeather(t *testing.T) {
+	cfg, err := Load(writeConfig(t, `{"weather": {"default": {"name": "Донецк", "lat": 48.023, "lon": 37.802}, "base_url": "http://127.0.0.1:1"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := cfg.Weather.Default
+	if d == nil || d.Name != "Донецк" || d.Lat != 48.023 || d.Lon != 37.802 || cfg.Weather.BaseURL == "" {
+		t.Fatalf("weather = %+v", cfg.Weather)
+	}
+	// Без блока погода выключена.
+	cfg, err = Load(writeConfig(t, `{}`))
+	if err != nil || cfg.Weather.Default != nil {
+		t.Fatalf("weather по умолчанию = %+v, %v", cfg.Weather, err)
+	}
+}
+
+func TestLoadWeatherInvalid(t *testing.T) {
+	for _, body := range []string{
+		`{"weather": {"default": {"name": "", "lat": 48, "lon": 37}}}`,
+		`{"weather": {"default": {"name": "Х", "lat": 91, "lon": 37}}}`,
+		`{"weather": {"default": {"name": "Х", "lat": 48, "lon": -181}}}`,
+		`{"weather": {"base_url": "ftp://x"}}`,
+		`{"weather": {"geocoding_url": "api.example"}}`,
+	} {
+		if _, err := Load(writeConfig(t, body)); err == nil {
+			t.Fatalf("ожидалась ошибка для %s", body)
+		}
+	}
+}

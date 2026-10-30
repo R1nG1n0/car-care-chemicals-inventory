@@ -1,6 +1,6 @@
 // Ещё — меню, профиль, места, категории, магазины, инвентаризация, отчёты, данные, история покупок.
 // Адреса раздела разбирает вложенный <Routes>.
-import { IconBox, IconBuildingStore, IconChartBar, IconChevronRight, IconClipboardCheck, IconCloudUpload, IconDatabase, IconReceipt, IconTags, IconTargetArrow, IconUser, type TablerIcon } from '@tabler/icons-react';
+import { IconBox, IconBuildingStore, IconChartBar, IconChevronRight, IconClipboardCheck, IconCloud, IconCloudUpload, IconDatabase, IconReceipt, IconTags, IconTargetArrow, IconUser, type TablerIcon } from '@tabler/icons-react';
 import { Link, Route, Routes, type Location } from 'react-router';
 import { usePendingOps } from '../../app/useOffline';
 import { Ico } from '../../components/ui';
@@ -9,6 +9,7 @@ import { ProfileScreen } from '../profile/ProfileScreen';
 import { RefsScreen } from './RefsScreen';
 import { StoresScreen } from './StoresScreen';
 import { InventoryPlace } from './InventoryPlace';
+import { WeatherScreen } from '../weather/WeatherScreen';
 import { DataScreen } from './DataScreen';
 import { InventoryScreen } from './InventoryScreen';
 import { ReportsScreen } from '../reports/ReportsScreen';
@@ -20,6 +21,7 @@ const MENU: { to: string; icon: TablerIcon; title: string; sub: string }[] = [
   { to: '/more/categories', icon: IconTags, title: 'Категории', sub: 'Названия и цвета' },
   { to: '/more/purposes', icon: IconTargetArrow, title: 'Назначения', sub: 'ЛКП, стекло, кожа: для чего средство' },
   { to: '/more/stores', icon: IconBuildingStore, title: 'Магазины', sub: 'Где покупаете' },
+  { to: '/weather', icon: IconCloud, title: 'Погода', sub: 'Когда мыть машину и наносить покрытия' },
   { to: '/more/inventory', icon: IconClipboardCheck, title: 'Инвентаризация', sub: 'Сверить места с тем, что в учёте' },
   { to: '/more/reports', icon: IconChartBar, title: 'Отчёты', sub: 'Сколько потратили и сколько ушло' },
   { to: '/more/data', icon: IconDatabase, title: 'Данные', sub: 'Скачать копию, таблицы для Excel, загрузить из файла' },
@@ -71,6 +73,7 @@ export function MoreSection({ location }: { location: Location }) {
       <Route path="/more/inventory/:id" element={<InventoryPlace />} />
       <Route path="/more/reports" element={<ReportsScreen />} />
       <Route path="/more/pending" element={<PendingScreen />} />
+      <Route path="/weather" element={<WeatherScreen />} />
       <Route path="/more/data" element={<DataScreen />} />
       <Route path="*" element={<MoreMenu />} />
     </Routes>

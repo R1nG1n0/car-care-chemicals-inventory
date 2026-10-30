@@ -21,6 +21,8 @@ export const keys = {
   report: (kind: 'spending' | 'consumption', from: string, to: string) => ['report', kind, from, to] as const,
   recipes: ['recipes'] as const,
   recipe: (id: number) => ['recipe', id] as const,
+  weather: ['weather'] as const,
+  weatherPlaces: (q: string) => ['weatherPlaces', q] as const,
 };
 
 /** После любого изменения остатков. */
@@ -40,3 +42,6 @@ export function invalidateRefs(qc: QueryClient): Promise<void> {
       ['categories', 'purposes', 'analogs', 'locations', 'locationUnits', 'stores', 'products', 'product', 'shopping', 'purchases', 'purchase'].includes(q.queryKey[0] as string),
   });
 }
+
+/** Прогноз меняется редко: 15 минут свежий, сервер и сам обновляет его раз в час. */
+export const WEATHER_STALE_MS = 15 * 60_000;

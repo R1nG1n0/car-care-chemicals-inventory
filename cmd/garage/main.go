@@ -19,6 +19,7 @@ import (
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/config"
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/store"
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/telegram"
+	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/weather"
 	"github.com/R1nG1n0/car-care-chemicals-inventory/internal/web"
 	webui "github.com/R1nG1n0/car-care-chemicals-inventory/web"
 )
@@ -76,6 +77,18 @@ func run() error {
 	return serve(log, cfg, *cfgPath, svc, db)
 }
 
+// newWeather собирает погоду (ФТ-16): место по умолчанию — из конфигурации.
+func newWeather(cfg config.WeatherConfig, db *store.DB) *weather.Service {
+	opt := weather.ServiceOptions{
+		DB:     db.DB,
+		Client: weather.NewClient(weather.Options{BaseURL: cfg.BaseURL, GeocodingURL: cfg.GeocodingURL, Timezone: cfg.Timezone}),
+	}
+	if d := cfg.Default; d != nil {
+		opt.Default = &weather.Place{Name: d.Name, Lat: d.Lat, Lon: d.Lon}
+	}
+	return weather.NewService(opt)
+}
+
 func usage() {
 	out := flag.CommandLine.Output()
 	fmt.Fprintln(out, `Использование:
@@ -115,6 +128,7 @@ func serve(log *slog.Logger, cfg config.Config, cfgPath string, svc *auth.Servic
 
 	// Бот (ФТ-11) живёт рядом с сервером: пустой токен — бота нет. Недоступный
 	// Telegram сайт не затрагивает: бот сам повторяет попытки.
+	wsvc := newWeather(cfg.Weather, db)
 	var tgBot *bot.Bot
 	if cfg.Telegram.Enabled() {
 		tgBot = bot.New(bot.Options{
@@ -122,6 +136,7 @@ func serve(log *slog.Logger, cfg config.Config, cfgPath string, svc *auth.Servic
 			API:     telegram.New(cfg.Telegram.Token, telegram.Options{Interface: cfg.Telegram.Interface}),
 			Log:     log,
 			SiteURL: cfg.Telegram.SiteURL,
+			Weather: wsvc,
 		})
 		log.Info("Telegram-бот включён", "interface", cfg.Telegram.Interface)
 	}
@@ -132,6 +147,7 @@ func serve(log *slog.Logger, cfg config.Config, cfgPath string, svc *auth.Servic
 		Auth:            svc,
 		InsecureCookies: cfg.InsecureCookies,
 		DB:              db.DB,
+		Weather:         wsvc,
 	}
 	if tgBot != nil {
 		opts.Telegram = tgBot // не присваивать nil-указатель: интерфейс стал бы непустым

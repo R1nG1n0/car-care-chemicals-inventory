@@ -15,6 +15,7 @@ import { Invites } from './Invites';
 import { PasswordForm } from './PasswordForm';
 import { StepsForm } from './StepsForm';
 import { Telegram } from './Telegram';
+import { WeatherPlaceSection } from './WeatherPlace';
 
 function InstallSection() {
   const mode = useInstallMode();
@@ -150,6 +151,7 @@ export function ProfileScreen() {
       </div>
       <StepsForm settings={session.settings} />
       <InstallSection />
+      <WeatherPlaceSection />
       <Telegram />
       {session.user.is_owner && <Invites />}
       <LogoutButtons />
