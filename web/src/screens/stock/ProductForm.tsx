@@ -19,6 +19,7 @@ import { parseManual } from '../../lib/barcode';
 import { dilutionsOf, draftsOf, validateDilutions } from '../../lib/dilution';
 import { MAX_INCOMPATIBLE, MAX_INSTRUCTION, PRODUCT_FIELDS, phInput, validateProduct, type ProductErrors, type ProductFields } from '../../lib/product';
 import { aboutOf } from '../../lib/purposes';
+import { wearInput } from '../../lib/rags';
 import { unitLabel } from '../../lib/stock';
 
 /** ?barcode= из ссылки «Создать позицию»: как при ручном вводе, мусор отбрасывается. */
@@ -75,6 +76,7 @@ function FormBody({ detail }: { detail: ProductDetail | undefined }) {
     incompatible: detail ? aboutOf(detail).incompatible : '',
     instruction: detail ? aboutOf(detail).instruction : '',
     dilutions: product ? draftsOf(dilutionsOf(product)) : [],
+    wear_limit: product ? wearInput(product.wear_limit) : '',
   }));
   const [errors, setErrors] = useState<ProductErrors>({});
   const [scanning, setScanning] = useState(false);
@@ -149,6 +151,20 @@ function FormBody({ detail }: { detail: ProductDetail | undefined }) {
               onChange={(v) => set('dilutions', v)}
               errors={dilRows && !dilRows.ok ? dilRows.rows : {}}
               formError={dilRows && !dilRows.ok ? dilRows.form : errors.dilutions}
+            />
+          )}
+          {f.unit === 'pcs' && (
+            <Field
+              id="np-wear_limit"
+              label="Ресурс стирок · необязательно"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={4}
+              placeholder="например, 100"
+              hint="Учёт износа каждой тряпки"
+              value={f.wear_limit ?? ''}
+              onChange={(e) => set('wear_limit', e.target.value)}
+              error={errors.wear_limit}
             />
           )}
           <div className="app-two">

@@ -27,6 +27,8 @@ type Counts struct {
 	Movements     int `json:"movements"`
 	Recipes       int `json:"recipes"`
 	Shopping      int `json:"shopping"`
+	Notes         int `json:"notes"`
+	Rags          int `json:"rags"`
 }
 
 // Count считает записи файла.
@@ -35,6 +37,7 @@ func Count(f *File) Counts {
 		Categories: len(f.Categories), Locations: len(f.Locations), Stores: len(f.Stores),
 		Purposes: len(f.Purposes), Products: len(f.Products), Units: len(f.Units), Purchases: len(f.Purchases),
 		Movements: len(f.Movements), Recipes: len(f.Recipes), Shopping: len(f.Shopping),
+		Notes: len(f.Notes), Rags: len(f.Rags),
 	}
 	for _, p := range f.Purchases {
 		c.PurchaseLines += len(p.Lines)
@@ -101,7 +104,7 @@ func (s *Service) Import(ctx context.Context, userID int64, f *File) (Counts, er
 	defer im.closeStmts()
 	for _, step := range []func(*File) error{
 		im.settings, im.refs, im.productsStep, im.purchases, im.unitsStep, im.recipesStep, im.movementsStep,
-		im.shopping,
+		im.shopping, im.notesStep, im.ragsStep,
 	} {
 		if err := step(f); err != nil {
 			return Counts{}, err
@@ -288,8 +291,8 @@ func mapped(m map[int64]int64, id *int64) any {
 func (im *importer) productsStep(f *File) error {
 	ins, err := im.prepare("позиция", `INSERT INTO products
 		(user_id, category_id, name, brand, unit, package_size, barcode, min_stock, note, archived, created_at,
-		 ph_x10, incompatible, instruction, rating, do_not_buy)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		 ph_x10, incompatible, instruction, rating, do_not_buy, wear_limit)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -316,7 +319,7 @@ func (im *importer) productsStep(f *File) error {
 		}
 		id, err := im.run(ins, "позиция", im.uid, im.categories[p.CategoryID], p.Name, p.Brand, p.Unit, p.PackageSize,
 			p.Barcode, p.MinStock, p.Note, p.Archived, p.CreatedAt, phX10, p.Incompatible, p.Instruction, p.Rating,
-			p.DoNotBuy)
+			p.DoNotBuy, p.WearLimit)
 		if err != nil {
 			return err
 		}

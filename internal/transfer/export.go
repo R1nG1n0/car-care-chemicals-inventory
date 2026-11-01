@@ -71,14 +71,14 @@ func (s *Service) Export(ctx context.Context, userID int64) (*File, error) {
 		ExportedAt: s.now().UTC().Format(time.RFC3339),
 		Categories: []Category{}, Locations: []Location{}, Stores: []Store{}, Purposes: []Purpose{}, Products: []Product{},
 		Units: []Unit{}, Purchases: []Purchase{}, RecipeRuns: []RecipeRun{}, Movements: []Movement{},
-		Recipes: []Recipe{}, Shopping: []Shopping{},
+		Recipes: []Recipe{}, Shopping: []Shopping{}, Notes: []Note{}, Rags: []Rag{},
 	}
 	if err := tx.QueryRowContext(ctx, `SELECT login FROM users WHERE id = ?`, userID).Scan(&f.User.Login); err != nil {
 		return nil, fmt.Errorf("экспорт, пользователь: %w", err)
 	}
 	steps := []func(context.Context, querier, int64, *File) error{
 		exportSettings, exportRefs, exportProducts, exportPurchases, exportUnits,
-		exportMovements, exportRecipes, exportShopping,
+		exportMovements, exportRecipes, exportShopping, exportNotes, exportRags,
 	}
 	for _, step := range steps {
 		if err := step(ctx, tx, userID, f); err != nil {
@@ -155,17 +155,17 @@ func exportRefs(ctx context.Context, q querier, uid int64, f *File) error {
 
 func exportProducts(ctx context.Context, q querier, uid int64, f *File) error {
 	err := each(ctx, q, "позиции", `SELECT id, category_id, name, brand, unit, package_size, barcode, min_stock,
-		note, archived, created_at, ph_x10, incompatible, instruction, rating, do_not_buy
+		note, archived, created_at, ph_x10, incompatible, instruction, rating, do_not_buy, wear_limit
 		FROM products WHERE user_id = ? ORDER BY id`, []any{uid},
 		func(r *sql.Rows) error {
 			var p Product
-			var minStock, phX10, rating sql.NullInt64
+			var minStock, phX10, rating, wearLimit sql.NullInt64
 			if err := r.Scan(&p.ID, &p.CategoryID, &p.Name, &p.Brand, &p.Unit, &p.PackageSize, &p.Barcode,
 				&minStock, &p.Note, &p.Archived, &p.CreatedAt, &phX10, &p.Incompatible, &p.Instruction,
-				&rating, &p.DoNotBuy); err != nil {
+				&rating, &p.DoNotBuy, &wearLimit); err != nil {
 				return err
 			}
-			p.MinStock, p.Rating = ptr(minStock), ptr(rating)
+			p.MinStock, p.Rating, p.WearLimit = ptr(minStock), ptr(rating), ptr(wearLimit)
 			if phX10.Valid {
 				v := float64(phX10.Int64) / 10
 				p.PH = &v

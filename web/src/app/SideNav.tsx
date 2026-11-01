@@ -11,6 +11,7 @@ import {
   IconCloud,
   IconCloudUpload,
   IconDatabase,
+  IconNote,
   IconPackage,
   IconPlus,
   IconReceipt,
@@ -43,6 +44,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     items: [
       { to: '/more/inventory', icon: IconClipboardCheck, title: 'Инвентаризация' },
       { to: '/more/calculator', icon: IconCalculator, title: 'Калькулятор' },
+      { to: '/more/notes', icon: IconNote, title: 'Заметки' },
       { to: '/more/reports', icon: IconChartBar, title: 'Отчёты' },
       { to: '/purchases', icon: IconReceipt, title: 'История покупок' },
       { to: '/weather', icon: IconCloud, title: 'Погода' },

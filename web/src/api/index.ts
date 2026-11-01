@@ -32,3 +32,5 @@ export * from './inventory';
 export * from './transfer';
 export * from './telegram';
 export * from './weather';
+export * from './notes';
+export * from './rags';

@@ -2,7 +2,7 @@
 // Любое изменение склада (покупка, расход, отмена, корректировка…) меняет
 // сводки позиций, список покупок и шаблоны — поэтому инвалидация одна на всех.
 import type { QueryClient } from '@tanstack/react-query';
-import type { ProductQuery } from '../api';
+import type { NoteQuery, ProductQuery } from '../api';
 
 export const keys = {
   categories: (archived = false) => ['categories', archived] as const,
@@ -21,6 +21,11 @@ export const keys = {
   report: (kind: 'spending' | 'consumption', from: string, to: string) => ['report', kind, from, to] as const,
   recipes: ['recipes'] as const,
   recipe: (id: number) => ['recipe', id] as const,
+  /** Заметки: без фильтров — полный список (сохраняется на телефоне), с q — поиск на сервере. */
+  notes: (q: NoteQuery = {}) => ['notes', q] as const,
+  note: (id: number) => ['note', id] as const,
+  /** Тряпки позиции: активные или все (с списанными). */
+  rags: (productId: number, all = false) => ['rags', productId, all] as const,
   weather: ['weather'] as const,
   weatherPlaces: (q: string) => ['weatherPlaces', q] as const,
   // Просмотр другого города: отдельный корень — в снимки без связи не сохраняется.
@@ -31,7 +36,7 @@ export const keys = {
 export function invalidateStock(qc: QueryClient): Promise<void> {
   return qc.invalidateQueries({
     predicate: (q) =>
-      ['products', 'product', 'analogs', 'brands', 'shopping', 'purchases', 'purchase', 'movements', 'recipes', 'recipe', 'locations', 'locationUnits', 'report'].includes(
+      ['products', 'product', 'analogs', 'brands', 'shopping', 'purchases', 'purchase', 'movements', 'recipes', 'recipe', 'locations', 'locationUnits', 'report', 'rags'].includes(
         q.queryKey[0] as string,
       ),
   });
@@ -47,3 +52,8 @@ export function invalidateRefs(qc: QueryClient): Promise<void> {
 
 /** Прогноз меняется редко: 15 минут свежий, сервер и сам обновляет его раз в час. */
 export const WEATHER_STALE_MS = 15 * 60_000;
+
+/** После правки заметки: список, карточка и блоки в позициях и шаблонах. */
+export function invalidateNotes(qc: QueryClient): Promise<void> {
+  return qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'notes' || q.queryKey[0] === 'note' });
+}

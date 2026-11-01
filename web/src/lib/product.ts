@@ -3,6 +3,7 @@
 import type { ProductInput, Unit } from '../api';
 import { validateDilutions, type DilutionDraft } from './dilution';
 import { MAX_QTY, parseQty } from './qty';
+import { parseWearLimit } from './rags';
 import { charCount, type FieldErrors } from './validate';
 
 export type ProductFields = {
@@ -21,6 +22,8 @@ export type ProductFields = {
   instruction: string;
   /** Пропорции разбавления (ФТ-17.1), только для мл. Нет поля — форма их не правит. */
   dilutions?: DilutionDraft[];
+  /** Ресурс стирок (ФТ-19.1), ввод как есть; только для шт. Нет поля — форма его не правит. */
+  wear_limit?: string;
 };
 
 export type ProductErrors = FieldErrors<keyof ProductInput | 'form'>;
@@ -28,7 +31,7 @@ export type ProductErrors = FieldErrors<keyof ProductInput | 'form'>;
 type Result = { ok: true; value: ProductInput } | { ok: false; errors: ProductErrors };
 
 /** Поля формы позиции, которые сервер может назвать в field ошибки. */
-export const PRODUCT_FIELDS = ['name', 'brand', 'category_id', 'unit', 'package_size', 'min_stock', 'barcode', 'note', 'purpose_ids', 'ph', 'incompatible', 'instruction', 'dilutions'] as const;
+export const PRODUCT_FIELDS = ['name', 'brand', 'category_id', 'unit', 'package_size', 'min_stock', 'barcode', 'note', 'purpose_ids', 'ph', 'incompatible', 'instruction', 'dilutions', 'wear_limit'] as const;
 
 export const MAX_INCOMPATIBLE = 300;
 export const MAX_INSTRUCTION = 2000;
@@ -73,6 +76,9 @@ export function validateProduct(f: ProductFields): Result {
   // Пропорции — только у позиции в мл; строки с ошибками подсвечивает сама форма
   const dil = f.unit === 'ml' && f.dilutions ? validateDilutions(f.dilutions) : null;
   if (dil && !dil.ok) e.dilutions = dil.form ?? 'Проверьте пропорции';
+  // Ресурс стирок — только у позиции в шт; пусто — учёт выключен (null снимает ресурс)
+  const wear = f.unit === 'pcs' && f.wear_limit !== undefined ? parseWearLimit(f.wear_limit) : null;
+  if (wear && !wear.ok) e.wear_limit = wear.error;
   if (Object.keys(e).length > 0) return { ok: false, errors: e };
   return {
     ok: true,
@@ -90,6 +96,7 @@ export function validateProduct(f: ProductFields): Result {
       incompatible,
       instruction,
       ...(dil?.ok ? { dilutions: dil.value } : {}),
+      ...(wear?.ok ? { wear_limit: wear.value } : {}),
     },
   };
 }

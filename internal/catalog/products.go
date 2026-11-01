@@ -29,6 +29,8 @@ type ProductInput struct {
 	DoNotBuy     bool
 	// Dilutions — пропорции разбавления (ФТ-17.1), только для позиций в мл.
 	Dilutions []DilutionInput
+	// WearLimit — ресурс тряпки в стирках, 1…1000, только для шт (ФТ-19.1).
+	WearLimit *int64
 }
 
 // ProductPatch — изменение позиции; nil — поле не меняется. MinStockSet
@@ -56,6 +58,9 @@ type ProductPatch struct {
 	DoNotBuy     *bool
 	// Dilutions nil — не менять, пустой список — удалить все (ФТ-17.1).
 	Dilutions *[]DilutionInput
+	// WearLimitSet отличает «не передан» от «null» (снять ресурс).
+	WearLimitSet bool
+	WearLimit    *int64
 }
 
 // ProductFilter — параметры списка позиций (GET /api/products).
@@ -133,6 +138,9 @@ func (in *ProductInput) validate() error {
 	if in.Rating != nil && (*in.Rating < 1 || *in.Rating > 5) {
 		return invalid("rating", "Оценка — от 1 до 5 или пусто")
 	}
+	if err = validateWearLimit(in.Unit, in.WearLimit); err != nil {
+		return err
+	}
 	in.Dilutions, err = validateDilutions(in.Unit, in.Dilutions)
 	return err
 }
@@ -181,10 +189,10 @@ func (s *Service) CreateProduct(ctx context.Context, userID int64, in ProductInp
 		}
 		res, err := t.q.ExecContext(ctx, `INSERT INTO products
 			(user_id, category_id, name, brand, unit, package_size, barcode, min_stock, note, created_at,
-			 ph_x10, incompatible, instruction, rating, do_not_buy)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 ph_x10, incompatible, instruction, rating, do_not_buy, wear_limit)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			userID, in.CategoryID, in.Name, in.Brand, in.Unit, in.PackageSize, in.Barcode, in.MinStock, in.Note, at,
-			in.PhX10, in.Incompatible, in.Instruction, in.Rating, in.DoNotBuy)
+			in.PhX10, in.Incompatible, in.Instruction, in.Rating, in.DoNotBuy, in.WearLimit)
 		if err != nil {
 			return fmt.Errorf("создание позиции: %w", err)
 		}
@@ -224,7 +232,8 @@ func (s *Service) updateProduct(ctx context.Context, userID, id int64, p Product
 	}
 	in := ProductInput{CategoryID: cur.CategoryID, Name: cur.Name, Brand: cur.Brand, Unit: cur.Unit,
 		PackageSize: cur.PackageSize, Barcode: cur.Barcode, MinStock: cur.MinStock, Note: cur.Note,
-		Incompatible: card.Incompatible, Instruction: card.Instruction, Rating: cur.Rating, DoNotBuy: cur.DoNotBuy}
+		Incompatible: card.Incompatible, Instruction: card.Instruction, Rating: cur.Rating, DoNotBuy: cur.DoNotBuy,
+		WearLimit: cur.WearLimit}
 	if cur.PH != nil {
 		v := int64(math.Round(*cur.PH * 10))
 		in.PhX10 = &v
@@ -249,6 +258,12 @@ func (s *Service) updateProduct(ctx context.Context, userID, id int64, p Product
 	}
 	if p.DoNotBuy != nil {
 		in.DoNotBuy = *p.DoNotBuy
+	}
+	// Ресурс тряпки: при смене единицы на мл снимается, если не передан явно.
+	if p.WearLimitSet {
+		in.WearLimit = p.WearLimit
+	} else if in.Unit != "pcs" {
+		in.WearLimit = nil
 	}
 	// Пропорции: переданный список проверяется целиком; не переданный
 	// остаётся, но при смене единицы на шт снимается.
@@ -292,10 +307,10 @@ func (s *Service) updateProduct(ctx context.Context, userID, id int64, p Product
 	}
 	if _, err := s.q.ExecContext(ctx, `UPDATE products SET category_id = ?, name = ?, brand = ?, unit = ?,
 		package_size = ?, barcode = ?, min_stock = ?, note = ?, archived = ?,
-		ph_x10 = ?, incompatible = ?, instruction = ?, rating = ?, do_not_buy = ?
+		ph_x10 = ?, incompatible = ?, instruction = ?, rating = ?, do_not_buy = ?, wear_limit = ?
 		WHERE user_id = ? AND id = ?`,
 		in.CategoryID, in.Name, in.Brand, in.Unit, in.PackageSize, in.Barcode, in.MinStock, in.Note, archived,
-		in.PhX10, in.Incompatible, in.Instruction, in.Rating, in.DoNotBuy,
+		in.PhX10, in.Incompatible, in.Instruction, in.Rating, in.DoNotBuy, in.WearLimit,
 		userID, id); err != nil {
 		return ProductSummary{}, fmt.Errorf("изменение позиции: %w", err)
 	}

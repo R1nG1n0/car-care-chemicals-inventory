@@ -11,6 +11,7 @@ const (
 	maxPurchases     = 20000
 	maxPurchaseLines = 60000
 	maxProducts      = 10000
+	maxRags          = 50000
 	maxOtherRecords  = 10000 // категории, места, магазины, шаблоны, применения шаблонов, список покупок
 
 	// maxSort — предел порядка сортировки справочников, как в обычном API.
@@ -40,6 +41,8 @@ func checkLimits(f *File) error {
 		{"recipes", len(f.Recipes), maxOtherRecords},
 		{"recipe_runs", len(f.RecipeRuns), maxOtherRecords},
 		{"shopping", len(f.Shopping), maxOtherRecords},
+		{"notes", len(f.Notes), maxOtherRecords},
+		{"rags", len(f.Rags), maxRags},
 	} {
 		if l.n > l.max {
 			return bad(l.name, fmt.Sprintf("Слишком много записей: %d, допустимо не больше %d", l.n, l.max))

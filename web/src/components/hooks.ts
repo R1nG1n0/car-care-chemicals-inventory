@@ -1,5 +1,5 @@
 // Общие хуки: присутствие с анимацией ухода, медиазапрос, пороги жестов.
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore, type RefObject } from 'react';
 
 /**
  * Держит элемент смонтированным ещё `leaveMs` после show=false, чтобы успела
@@ -46,3 +46,23 @@ export const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
 /** Порог свайпа и «рывка» — как в прототипе (docs/design/prototype.js). */
 export const SWIPE_AT = 112;
 export const FLICK = 0.11;
+
+/** Значение с задержкой: поиск на сервере уходит после паузы в наборе, а не на каждую букву. */
+export function useDebounced<T>(value: T, ms = 300): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
+}
+
+/** Поле растёт по тексту: высота подстраивается под содержимое без внутренней прокрутки. */
+export function useAutoHeight(ref: RefObject<HTMLTextAreaElement | null>, value: string): void {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [ref, value]);
+}

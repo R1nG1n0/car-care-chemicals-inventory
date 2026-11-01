@@ -51,8 +51,10 @@ func TestDeletePurchaseUsedUnits(t *testing.T) {
 	loc2 := e.stkLocation(uid, "Полка")
 
 	cases := map[string]func(unit int64){
-		"расход": func(int64) {
-			if _, err := e.svc.Consume(e.ctx, uid, ConsumeInput{ProductID: p, Qty: 10}); err != nil {
+		// Расход именно из экземпляра этой покупки: порядок обхода map случаен, и
+		// без UnitID «сначала старые» мог взять бутылку предыдущего случая.
+		"расход": func(u int64) {
+			if _, err := e.svc.Consume(e.ctx, uid, ConsumeInput{ProductID: p, Qty: 10, UnitID: &u}); err != nil {
 				t.Fatal(err)
 			}
 		},

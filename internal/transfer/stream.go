@@ -60,6 +60,8 @@ func (s *Service) WriteJSON(ctx context.Context, userID int64, w io.Writer, f *F
 	field("recipe_runs", f.RecipeRuns)
 	field("movements", f.Movements)
 	field("recipes", f.Recipes)
+	field("notes", f.Notes)
+	field("rags", f.Rags)
 	if werr == nil { // последнее поле — без запятой
 		if _, werr = bw.WriteString(`"shopping":`); werr == nil {
 			werr = enc.Encode(f.Shopping)

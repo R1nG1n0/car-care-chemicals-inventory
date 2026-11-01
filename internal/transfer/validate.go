@@ -145,7 +145,7 @@ func Validate(f *File) error {
 	}
 	for _, step := range []func(*File, *sets) error{
 		validateRefs, validateProducts, validatePurchases, validateUnits, validateRecipes, validateMovements,
-		validateBalances, validateShopping,
+		validateBalances, validateShopping, validateNotes, validateRags,
 	} {
 		if err := step(f, st); err != nil {
 			return err
@@ -299,6 +299,7 @@ func validateProducts(f *File, st *sets) error {
 			CategoryID: p.CategoryID, Name: p.Name, Brand: p.Brand, Unit: p.Unit, PackageSize: p.PackageSize,
 			Barcode: p.Barcode, MinStock: p.MinStock, Note: p.Note,
 			PhX10: phX10, Incompatible: p.Incompatible, Instruction: p.Instruction, Rating: p.Rating,
+			WearLimit: p.WearLimit,
 		})
 		if err != nil {
 			return fromField(at("products", i, ""), err)

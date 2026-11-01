@@ -44,6 +44,7 @@ func (s *Server) stockRoutes() {
 		http.MethodDelete: s.handleDeleteRecipe,
 	})
 	s.api("/api/recipes/{id}/apply", signedIn, methods{http.MethodPost: s.handleApplyRecipe})
+	s.ragRoutes()
 }
 
 func (s *Server) stockSvc() *stock.Service       { return stock.New(s.db, s.now) }

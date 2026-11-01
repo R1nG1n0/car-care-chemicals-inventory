@@ -52,6 +52,10 @@ type ProductSummary struct {
 	// DoNotBuy — «Не брать больше»: позиция не попадает в автосписок покупок,
 	// в уведомления бота и в аналоги. Low при этом честный (ФТ-15.4.2).
 	DoNotBuy bool `json:"do_not_buy"`
+	// WearLimit — ресурс тряпки в стирках (ФТ-19.1); null — учёта нет, у позиций в мл всегда null.
+	WearLimit *int64 `json:"wear_limit"`
+	// Rags — тряпки в работе (ФТ-19.5); null, если WearLimit не задан.
+	Rags *RagCounts `json:"rags"`
 }
 
 // Unit — экземпляр (бутылка или пачка).
@@ -104,14 +108,15 @@ type PurchaseRow struct {
 
 const productColumns = `id, category_id, name, brand, unit, package_size, barcode, min_stock, note, archived,
 	(SELECT ph.updated_at FROM product_photos ph WHERE ph.user_id = products.user_id AND ph.product_id = products.id),
-	ph_x10, rating, do_not_buy`
+	ph_x10, rating, do_not_buy, wear_limit`
 
 func scanProduct(sc interface{ Scan(...any) error }) (ProductSummary, error) {
 	var p ProductSummary
-	var minStock, photoAt, phX10, rating sql.NullInt64
+	var minStock, photoAt, phX10, rating, wearLimit sql.NullInt64
 	err := sc.Scan(&p.ID, &p.CategoryID, &p.Name, &p.Brand, &p.Unit, &p.PackageSize,
-		&p.Barcode, &minStock, &p.Note, &p.Archived, &photoAt, &phX10, &rating, &p.DoNotBuy)
+		&p.Barcode, &minStock, &p.Note, &p.Archived, &photoAt, &phX10, &rating, &p.DoNotBuy, &wearLimit)
 	p.MinStock, p.PhotoUpdatedAt, p.Rating = nullInt(minStock), nullInt(photoAt), nullInt(rating)
+	p.WearLimit = nullInt(wearLimit)
 	if phX10.Valid {
 		v := float64(phX10.Int64) / 10
 		p.PH = &v
@@ -160,6 +165,9 @@ func (s *Service) Summaries(ctx context.Context, userID int64, ids []int64) ([]P
 		return nil, err
 	}
 	if err := s.fillDilutions(ctx, userID, in, args, byID); err != nil {
+		return nil, err
+	}
+	if err := s.fillRags(ctx, userID, in, args, byID); err != nil {
 		return nil, err
 	}
 

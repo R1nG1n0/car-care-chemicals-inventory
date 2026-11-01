@@ -22,6 +22,8 @@ import { ConsumeSheet } from './ConsumeSheet';
 import { ProductAbout, ProductAnalogs } from './ProductAbout';
 import { ProductHistory } from './ProductHistory';
 import { ProductPhoto } from './ProductPhoto';
+import { NotesBlock } from '../notes/NotesBlock';
+import { ProductRags } from './ProductRags';
 import { ProductRating } from './ProductRating';
 import { UnitRows } from './UnitRows';
 import { UnitSheet } from './UnitSheet';
@@ -143,6 +145,7 @@ function ProductView({ detail, back }: { detail: ProductDetail; back: ReactNode 
         </div>
       )}
 
+      <ProductRags product={p} />
       <ProductRating product={p} />
       <ProductAnalogs detail={detail} />
       <ProductAbout detail={detail} />
@@ -159,6 +162,8 @@ function ProductView({ detail, back }: { detail: ProductDetail; back: ReactNode 
         <Ico icon={IconPlus} /> Ввести имеющийся остаток
       </button>
       {online.hint && <p className="g-field__hint">{online.hint}: покупки и правки доступны только онлайн.</p>}
+
+      <NotesBlock productId={p.id} />
 
       <ProductHistory detail={detail} />
 

@@ -14,9 +14,11 @@ import "github.com/R1nG1n0/car-care-chemicals-inventory/internal/photo"
 // Версия 3 (v1.6, ФТ-17.2.6) добавила пропорции разбавления позиций
 // (dilutions) и раствор в движениях и строках шаблонов (solution_ml,
 // solution_ratio); файлы версий 1 и 2 импортируются.
+// Версия 4 (v1.7, ФТ-18.5, ФТ-19.6) добавила заметки (notes) со связями,
+// ресурс позиции (wear_limit) и тряпки (rags); файлы версий 1–3 импортируются.
 const (
 	FormatName       = "garage-export"
-	FormatVersion    = 3
+	FormatVersion    = 4
 	MinFormatVersion = 1
 )
 
@@ -41,6 +43,8 @@ type File struct {
 	Movements  []Movement  `json:"movements"`
 	Recipes    []Recipe    `json:"recipes"`
 	Shopping   []Shopping  `json:"shopping"`
+	Notes      []Note      `json:"notes"`
+	Rags       []Rag       `json:"rags"`
 }
 
 // FileUser — чей это файл. Пароль и сессии в файл не попадают.
@@ -112,6 +116,8 @@ type Product struct {
 	DoNotBuy     bool     `json:"do_not_buy"`
 	// Версия 3 (ФТ-17): пропорции разбавления по порядку.
 	Dilutions []Dilution `json:"dilutions"`
+	// Версия 4 (ФТ-19.1): ресурс тряпки в стирках; null — учёта нет.
+	WearLimit *int64 `json:"wear_limit"`
 }
 
 // Dilution — пропорция разбавления позиции (версия 3): название и 1:Ratio.

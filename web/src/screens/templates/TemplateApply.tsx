@@ -18,6 +18,7 @@ import { formatMoney } from '../../lib/format';
 import { applyItems, draftOfItem, parseRowQty, qtyChanged, shortageReport, shortageText, type ApplyRow, type RecipeRowDraft } from '../../lib/recipeApply';
 import { qtyText } from '../../lib/stock';
 import { formatDay } from '../../lib/text';
+import { NotesBlock } from '../notes/NotesBlock';
 import { RecipeLine } from './RecipeLine';
 
 // Строка: key = product_id; у строки раствором — объём и пропорция (ФТ-17.2.4)
@@ -150,6 +151,7 @@ function Apply({ recipe, report, setReport }: { recipe: Recipe; report: string; 
       {(changed || recipe.cost === null) && (
         <p className="shop-hint">{recipe.cost === null ? 'Цен у экземпляров нет — себестоимость не считается.' : 'Оценка — по количествам шаблона; точная сумма будет в уведомлении после списания.'}</p>
       )}
+      <NotesBlock recipeId={recipe.id} />
       {/* Отчёт и ошибка — в закреплённой панели над кнопкой: уведомление встаёт над
           панелью (data-toast-anchor) и их не закрывает */}
       <div className="shop-sticky shop-foot" data-toast-anchor>

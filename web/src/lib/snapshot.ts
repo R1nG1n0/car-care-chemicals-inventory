@@ -10,14 +10,20 @@ const PREFIX = 'garage:snap:';
 const SYNC = '__sync';
 /** Карточек позиций на телефоне не больше: localStorage мал (около 5 МБ). */
 export const MAX_PRODUCT_CARDS = 80;
+/** Карточек заметок на телефоне не больше. */
+export const MAX_NOTE_CARDS = 50;
 
 export type SnapEntry = { key: readonly unknown[]; at: number; data: unknown };
 
-/** Какие запросы сохраняются: общий список позиций (без поиска), карточки, шаблоны, справочники, прогноз погоды. */
+/** Какие запросы сохраняются: общий список позиций (без поиска), карточки, шаблоны, заметки (список без поиска и карточки), справочники, прогноз погоды. */
 export function isPersistableKey(key: readonly unknown[]): boolean {
   switch (key[0]) {
     case 'products':
       return JSON.stringify(key[1] ?? {}) === '{}';
+    case 'notes':
+      // Полный список без поиска; поиск без связи делает телефон по нему
+      return JSON.stringify(key[1] ?? {}) === '{}';
+    case 'note':
     case 'product':
     case 'recipes':
     case 'recipe':
@@ -109,11 +115,12 @@ export class SnapshotStore {
     }
     this.set(this.prefix(uid) + SYNC, String(at));
     if (key[0] === 'product') this.prune(uid, MAX_PRODUCT_CARDS);
+    if (key[0] === 'note') this.prune(uid, MAX_NOTE_CARDS, 'note');
   }
 
-  /** Оставляет `keep` самых свежих карточек позиций. */
-  prune(uid: number, keep: number): void {
-    const cards = this.keysWith(`${this.prefix(uid)}["product",`)
+  /** Оставляет `keep` самых свежих карточек позиций (или заметок). */
+  prune(uid: number, keep: number, name: 'product' | 'note' = 'product'): void {
+    const cards = this.keysWith(`${this.prefix(uid)}["${name}",`)
       .map((k) => ({ k, at: this.entryAt(k) }))
       .sort((a, b) => b.at - a.at);
     for (const c of cards.slice(keep)) this.remove(c.k);

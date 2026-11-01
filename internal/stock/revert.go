@@ -27,35 +27,63 @@ func (s *Service) Revert(ctx context.Context, userID int64, ids []int64) ([]int6
 	}
 	now := s.now().Unix()
 	var products []int64
-	err := s.inTx(ctx, func(tx *sql.Tx) error {
-		deltas, err := revertDeltas(ctx, tx, userID, ids)
-		if err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM movements WHERE user_id = ? AND id IN (`+placeholders(len(ids))+`)`,
-			append([]any{userID}, int64Args(ids)...)...); err != nil {
-			return fmt.Errorf("удаление движений: %w", err)
-		}
-		unitIDs := make([]int64, 0, len(deltas))
-		for id := range deltas {
-			unitIDs = append(unitIDs, id)
-		}
-		sort.Slice(unitIDs, func(i, j int) bool { return unitIDs[i] < unitIDs[j] })
-		seen := map[int64]bool{}
-		for _, unitID := range unitIDs {
-			pid, err := revertUnit(ctx, tx, userID, unitID, deltas[unitID], now)
-			if err != nil {
-				return err
-			}
-			if !seen[pid] {
-				seen[pid] = true
-				products = append(products, pid)
-			}
-		}
-		return nil
+	err := s.inTx(ctx, func(tx *sql.Tx) (err error) {
+		products, err = revertTx(ctx, tx, userID, ids, now)
+		return err
 	})
 	return products, err
+}
+
+// revertTx — Revert внутри открытой транзакции; ids уже без повторов.
+func revertTx(ctx context.Context, tx *sql.Tx, userID int64, ids []int64, now int64) ([]int64, error) {
+	var products []int64
+	deltas, err := revertDeltas(ctx, tx, userID, ids)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM movements WHERE user_id = ? AND id IN (`+placeholders(len(ids))+`)`,
+		append([]any{userID}, int64Args(ids)...)...); err != nil {
+		return nil, fmt.Errorf("удаление движений: %w", err)
+	}
+	if err := detachRags(ctx, tx, userID, ids); err != nil {
+		return nil, err
+	}
+	unitIDs := make([]int64, 0, len(deltas))
+	for id := range deltas {
+		unitIDs = append(unitIDs, id)
+	}
+	sort.Slice(unitIDs, func(i, j int) bool { return unitIDs[i] < unitIDs[j] })
+	seen := map[int64]bool{}
+	for _, unitID := range unitIDs {
+		pid, err := revertUnit(ctx, tx, userID, unitID, deltas[unitID], now)
+		if err != nil {
+			return nil, err
+		}
+		if !seen[pid] {
+			seen[pid] = true
+			products = append(products, pid)
+		}
+	}
+	return products, nil
+}
+
+// detachRags снимает связь тряпок с удалёнными движениями (id движений в
+// SQLite переиспользуются): действующая тряпка без стирок исчезает — её шт
+// вернулась на склад, в работе её больше нет; тряпке со стирками или
+// списанной consume_movement_id обнуляется.
+func detachRags(ctx context.Context, tx *sql.Tx, userID int64, movementIDs []int64) error {
+	in := placeholders(len(movementIDs))
+	args := append([]any{userID}, int64Args(movementIDs)...)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM rags WHERE user_id = ? AND status = 'active' AND washes = 0
+		AND consume_movement_id IN (`+in+`)`, args...); err != nil {
+		return fmt.Errorf("удаление тряпок отменённого расхода: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE rags SET consume_movement_id = NULL WHERE user_id = ?
+		AND consume_movement_id IN (`+in+`)`, args...); err != nil {
+		return fmt.Errorf("отвязка тряпок от расхода: %w", err)
+	}
+	return nil
 }
 
 // revertDeltas проверяет движения и возвращает сумму qty_delta по экземплярам.

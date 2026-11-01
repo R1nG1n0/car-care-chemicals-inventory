@@ -1,0 +1,67 @@
+/* Заметки (ФТ-18) и тряпки в работе (ФТ-19) */
+
+/* ---------- Заметки ---------- */
+.note-row { align-items: flex-start; }
+.note-row__text {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+  margin-top: 2px; white-space: pre-line; overflow-wrap: anywhere; color: var(--text-muted); font-size: var(--fs-13);
+}
+.note-title { overflow-wrap: anywhere; }
+/* Переносы строк сохраняются; ссылки остаются обычным текстом */
+.note-body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: var(--lh-body); }
+.note-area { resize: none; overflow: hidden; min-height: 144px; }
+.note-find { display: flex; align-items: center; gap: var(--sp-2); }
+.note-find .g-input { flex: 1; min-width: 0; }
+.note-chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.note-chip { min-height: var(--tap); padding: 0 var(--sp-3); font-size: var(--fs-13); text-decoration: none; white-space: normal; text-align: left; }
+.note-chip--x { cursor: pointer; font-family: inherit; }
+.note-links { display: grid; gap: var(--sp-2); }
+
+/* ---------- Тряпки в работе ---------- */
+.rags { display: grid; gap: var(--sp-2); }
+.rags p { margin: 0; }
+.rags__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.rags__list { display: grid; gap: var(--sp-2); }
+.rags__actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+.rags__old { display: grid; justify-items: start; gap: var(--sp-1); }
+.rags__old-list { display: grid; gap: var(--sp-1); margin: 0; padding: 0 0 0 var(--sp-2); list-style: none; font-size: var(--fs-13); }
+.rags__old .ti { transition: transform var(--dur-fast) var(--ease-out); }
+.rags__old [aria-expanded="true"] .ti { transform: rotate(180deg); }
+
+.rag-row {
+  display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: var(--tap);
+  padding: var(--sp-2) var(--sp-3); text-align: left; font: inherit; color: var(--text); cursor: pointer;
+  background: var(--surface); border: var(--bw) solid var(--line); border-radius: var(--r-control);
+}
+.rag-row.is-selected { border-color: var(--line-key); box-shadow: inset 0 0 0 var(--bw) var(--line-key); }
+.rag-row__check {
+  flex: none; display: grid; place-items: center; width: 24px; height: 24px;
+  border: var(--bw) solid var(--line-key); border-radius: 6px; background: var(--bg);
+}
+.rag-row.is-selected .rag-row__check { background: var(--cta); color: var(--on-cta); }
+.rag-row__body { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.rag-row__top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
+.rag-row__name { font-weight: var(--fw-heavy); overflow-wrap: anywhere; }
+.rag-row__count { font-size: var(--fs-13); color: var(--text-muted); font-weight: var(--fw-semibold); }
+/* Подпись уровня есть всегда рядом со шкалой: цвет — не единственный признак */
+.rag-row__level { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-12); font-weight: var(--fw-heavy); }
+.rag-row__level--due { color: var(--danger-text); }
+
+/* Шкала износа: доля --lv (0…1), меняется только transform */
+.g-wear { display: block; height: 10px; overflow: hidden; background: var(--surface-raised); border: var(--bw-thin) solid var(--line); border-radius: 6px; }
+.g-wear__fill {
+  display: block; width: 100%; height: 100%; transform-origin: left; transform: scaleX(var(--lv, 0));
+  transition: transform 250ms var(--ease-out);
+  background: color-mix(in srgb, var(--accent), #fff var(--meter-lift));
+}
+.g-wear--soon .g-wear__fill { background: color-mix(in srgb, var(--cat-ochre), #fff var(--meter-lift)); }
+.g-wear--due .g-wear__fill { background: color-mix(in srgb, var(--danger), #fff var(--meter-lift)); }
+
+/* Строка позиции на главной: «в работе 5 · пора менять 1» */
+.stock-card__rags { font-size: var(--fs-12); font-weight: var(--fw-bold); color: var(--text-muted); }
+.stock-card__rags--urgent { color: var(--danger-text); font-weight: var(--fw-heavy); }
+
+@media (prefers-reduced-motion: reduce) {
+  .g-wear__fill { transition: none; }
+  .rags__old .ti { transition: none; }
+}

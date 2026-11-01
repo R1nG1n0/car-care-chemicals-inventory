@@ -63,6 +63,17 @@ func TestAccIsolationAllStage2(t *testing.T) {
 	solution := map[string]any{"volume_ml": 100, "ratio": 10}
 	purB := stkCreate(b, "/api/purposes", map[string]any{"name": "Своё назначение"})
 
+	// v1.7 (ФТ-18, ФТ-19): заметка и тряпка владельца; у второго — свои.
+	noteA := stkCreate(a, "/api/notes", map[string]any{"title": "Тайная заметка", "body": "Тайный текст",
+		"product_ids": []int64{prodA}, "recipe_ids": []int64{recipeA}})
+	ragProdA := ragProduct(a, catA, 20)
+	stkBuy(a, ragProdA, 1, 100, nil)
+	ragA := ragStart(t, a, ragProdA, map[string]any{"label": "Тайная"}).Rag.ID
+	noteB := stkCreate(b, "/api/notes", map[string]any{"title": "Своя заметка", "product_ids": []int64{prodB}})
+	ragProdB := ragProduct(b, catB, 20)
+	stkBuy(b, ragProdB, 1, 100, nil)
+	ragB := ragStart(t, b, ragProdB, map[string]any{}).Rag.ID
+
 	// Фото владельца (ФТ-10.4): чужой не может ни прочитать, ни заменить, ни удалить.
 	photoA := phJPEG(t, 33, 22)
 	phPut(t, a, prodA, photoA)
@@ -83,7 +94,7 @@ func TestAccIsolationAllStage2(t *testing.T) {
 		"/api/recipes", stkPath("/api/recipes/", recipeA, ""),
 		"/api/reports/spending?from=2026-01-01&to=2026-12-31", "/api/reports/consumption?from=2026-01-01&to=2026-12-31",
 		"/api/export.json", "/api/export/products.csv", "/api/export/purchases.csv", "/api/export/movements.csv",
-		"/api/telegram",
+		"/api/telegram", "/api/notes", stkPath("/api/notes/", noteA, ""), stkPath("/api/products/", ragProdA, "/rags?all=1"),
 	}
 	before := accSnapshot(t, a, ownerGets)
 
@@ -180,6 +191,26 @@ func TestAccIsolationAllStage2(t *testing.T) {
 		{"применение своего к чужой позиции", http.MethodPost, stkPath("/api/recipes/", recipeB, "/apply"), map[string]any{"items": item(prodA)}, 404},
 		{"порядок: чужой шаблон", http.MethodPost, "/api/recipes/reorder", map[string]any{"ids": []int64{recipeA}}, 400},
 		{"порядок: свой и чужой шаблон", http.MethodPost, "/api/recipes/reorder", map[string]any{"ids": []int64{recipeB, recipeA}}, 400},
+		// Заметки и тряпки (v1.7).
+		{"чужая заметка", http.MethodGet, stkPath("/api/notes/", noteA, ""), nil, 404},
+		{"правка чужой заметки", http.MethodPatch, stkPath("/api/notes/", noteA, ""), map[string]any{"title": "Взлом"}, 404},
+		{"удаление чужой заметки", http.MethodDelete, stkPath("/api/notes/", noteA, ""), nil, 404},
+		{"заметка с чужой позицией", http.MethodPost, "/api/notes", map[string]any{"title": "Х", "product_ids": []int64{prodA}}, 404},
+		{"заметка с чужим шаблоном", http.MethodPost, "/api/notes", map[string]any{"title": "Х", "recipe_ids": []int64{recipeA}}, 404},
+		{"своя заметка с чужой позицией", http.MethodPatch, stkPath("/api/notes/", noteB, ""),
+			map[string]any{"product_ids": []int64{prodB, prodA}}, 404},
+		{"своя заметка с чужим шаблоном", http.MethodPatch, stkPath("/api/notes/", noteB, ""),
+			map[string]any{"recipe_ids": []int64{recipeA}}, 404},
+		{"тряпки чужой позиции", http.MethodGet, stkPath("/api/products/", ragProdA, "/rags"), nil, 404},
+		{"в работу чужой позиции", http.MethodPost, stkPath("/api/products/", ragProdA, "/rags"), map[string]any{}, 404},
+		{"в работу из чужого экземпляра", http.MethodPost, stkPath("/api/products/", ragProdB, "/rags"),
+			map[string]any{"unit_id": unitA}, 404},
+		{"метка чужой тряпки", http.MethodPatch, stkPath("/api/rags/", ragA, ""), map[string]any{"label": "Взлом"}, 404},
+		{"списание чужой тряпки", http.MethodPost, stkPath("/api/rags/", ragA, "/retire"), map[string]any{"reason": "lost"}, 404},
+		{"отмена «В работу» чужой тряпки", http.MethodPost, stkPath("/api/rags/", ragA, "/unstart"), map[string]any{}, 404},
+		{"стирка чужой тряпки", http.MethodPost, "/api/rags/wash", map[string]any{"ids": []int64{ragA}}, 404},
+		{"стирка своей и чужой тряпки", http.MethodPost, "/api/rags/wash", map[string]any{"ids": []int64{ragB, ragA}}, 404},
+		{"отмена стирки чужой тряпки", http.MethodPost, "/api/rags/unwash", map[string]any{"ids": []int64{ragA}}, 404},
 		// Импорт: ссылки в файле только на id внутри файла, чужие id из базы не годятся.
 		{"импорт в непустой склад", http.MethodPost, "/api/import", map[string]any{"format": "garage-export", "version": 1}, 409},
 	}
@@ -197,6 +228,15 @@ func TestAccIsolationAllStage2(t *testing.T) {
 		if list := decode[catProducts](t, b.do(http.MethodGet, target, nil)).Products; len(list) != 0 {
 			t.Fatalf("%s: чужие позиции %+v", target, list)
 		}
+	}
+	if list := decode[noteList](t, b.do(http.MethodGet, "/api/notes?q=Тайн", nil)).Notes; len(list) != 0 {
+		t.Fatalf("в заметках второго чужое: %+v", list)
+	}
+	if list := decode[noteList](t, b.do(http.MethodGet, "/api/notes", nil)).Notes; len(list) != 1 || list[0].ID != noteB {
+		t.Fatalf("заметки второго: %+v", list)
+	}
+	if got := decode[ragList](t, b.do(http.MethodGet, stkPath("/api/products/", ragProdB, "/rags?all=1"), nil)).Rags; len(got) != 1 || got[0].Washes != 0 {
+		t.Fatalf("тряпки второго: %+v", got)
 	}
 	for _, p := range decode[purposeList](t, b.do(http.MethodGet, "/api/purposes?archived=1", nil)).Purposes {
 		if p.ID == purA || strings.Contains(p.Name, "Тайн") {
@@ -285,7 +325,7 @@ func TestAccIsolationAllStage2(t *testing.T) {
 			t.Fatalf("/api/products%s у второго не пуст: %+v", q, got)
 		}
 	}
-	if got := accListed(t, b, ""); len(got) != 1 || got[0].ID != prodB {
+	if got := accListed(t, b, ""); len(got) != 2 || got[0].ID != ragProdB || got[1].ID != prodB {
 		t.Fatalf("позиции второго: %+v", got)
 	}
 	if got := decode[catalog.ShoppingList](t, b.do(http.MethodGet, "/api/shopping", nil)); len(got.Low) != 0 || len(got.Manual) != 0 {
@@ -301,13 +341,13 @@ func TestAccIsolationAllStage2(t *testing.T) {
 			ID int64 `json:"id"`
 		} `json:"purchases"`
 	}](t, b.do(http.MethodGet, "/api/purchases", nil)).Purchases
-	if len(purchases) != 1 || purchases[0].ID == purchaseA.ID {
+	if len(purchases) != 2 || purchases[0].ID == purchaseA.ID || purchases[1].ID == purchaseA.ID {
 		t.Fatalf("покупки второго: %+v", purchases)
 	}
 	for _, m := range decode[struct {
 		Movements []catalog.Movement `json:"movements"`
 	}](t, b.do(http.MethodGet, "/api/movements", nil)).Movements {
-		if m.ProductID != prodB {
+		if m.ProductID != prodB && m.ProductID != ragProdB {
 			t.Fatalf("в журнале второго чужое движение: %+v", m)
 		}
 	}

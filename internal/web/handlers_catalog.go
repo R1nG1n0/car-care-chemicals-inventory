@@ -56,6 +56,7 @@ func (s *Server) catalogRoutes() {
 	s.api("/api/products/{id}/rating", signedIn, methods{http.MethodPatch: h.rateProduct})
 	s.api("/api/products/{id}/analogs", signedIn, methods{http.MethodGet: h.productAnalogs})
 	h.photoRoutes()
+	h.notesRoutes()
 	s.api("/api/brands", signedIn, methods{http.MethodGet: h.listBrands})
 
 	s.api("/api/shopping", signedIn, methods{
@@ -287,6 +288,8 @@ type catProductBody struct {
 	DoNotBuy     *bool           `json:"do_not_buy"`
 	// Пропорции разбавления (ФТ-17).
 	Dilutions *[]catalog.DilutionInput `json:"dilutions"`
+	// Ресурс тряпки в стирках (ФТ-19), null — снять.
+	WearLimit json.RawMessage `json:"wear_limit"`
 }
 
 // optNumber разбирает необязательное число: set — поле передано; nil — null.
@@ -342,6 +345,10 @@ func (b catProductBody) minStock() (set bool, v *int64, ok bool) {
 	return true, &n, true
 }
 
+func catBadWearLimit(w http.ResponseWriter) {
+	writeFieldError(w, http.StatusBadRequest, "wear_limit", "Ресурс — от 1 до 1000 стирок или пусто")
+}
+
 func catBadMinStock(w http.ResponseWriter) {
 	writeFieldError(w, http.StatusBadRequest, "min_stock", "Минимальный остаток — пусто или целое число от 0 до 1000000")
 }
@@ -385,7 +392,12 @@ func (h *catalogHandlers) createProduct(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	in := catalog.ProductInput{CategoryID: *b.CategoryID, Name: catStr(b.Name), Brand: catStr(b.Brand), Unit: catStr(b.Unit),
+	_, wearLimit, ok := optNumber[int64](b.WearLimit)
+	if !ok {
+		catBadWearLimit(w)
+		return
+	}
+	in := catalog.ProductInput{WearLimit: wearLimit, CategoryID: *b.CategoryID, Name: catStr(b.Name), Brand: catStr(b.Brand), Unit: catStr(b.Unit),
 		Barcode: catStr(b.Barcode), MinStock: minStock, Note: catStr(b.Note),
 		PhX10: phX10, Incompatible: catStr(b.Incompatible), Instruction: catStr(b.Instruction), Rating: rating}
 	if b.PurposeIDs != nil {
@@ -438,7 +450,13 @@ func (h *catalogHandlers) updateProduct(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
+	wearSet, wearLimit, ok := optNumber[int64](b.WearLimit)
+	if !ok {
+		catBadWearLimit(w)
+		return
+	}
 	p, err := h.cat.UpdateProduct(r.Context(), h.uid(r), id, catalog.ProductPatch{
+		WearLimitSet: wearSet, WearLimit: wearLimit,
 		CategoryID: b.CategoryID, Name: b.Name, Brand: b.Brand, Unit: b.Unit, PackageSize: b.PackageSize,
 		Barcode: b.Barcode, MinStockSet: set, MinStock: minStock, Note: b.Note, Archived: b.Archived,
 		PurposeIDs: b.PurposeIDs, PhSet: phSet, PhX10: phX10, Incompatible: b.Incompatible,

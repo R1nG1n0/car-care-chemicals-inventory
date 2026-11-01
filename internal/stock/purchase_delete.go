@@ -58,6 +58,11 @@ func (s *Service) DeletePurchase(ctx context.Context, userID, purchaseID int64) 
 			userID, createdAt, userID, purchaseID); err != nil {
 			return fmt.Errorf("возврат отметок списка покупок: %w", err)
 		}
+		if _, err := tx.ExecContext(ctx, `UPDATE rags SET consume_movement_id = NULL WHERE user_id = ?
+			AND consume_movement_id IN (SELECT id FROM movements WHERE user_id = ? AND unit_id IN `+unitsOfPurchase+`)`,
+			userID, userID, userID, purchaseID); err != nil {
+			return fmt.Errorf("отвязка тряпок от движений покупки: %w", err)
+		}
 		steps := []struct{ what, q string }{
 			{"движений", `DELETE FROM movements WHERE user_id = ? AND unit_id IN ` + unitsOfPurchase},
 			{"экземпляров", `DELETE FROM units WHERE user_id = ? AND id IN ` + unitsOfPurchase},

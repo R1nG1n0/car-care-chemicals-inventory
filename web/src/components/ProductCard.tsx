@@ -11,6 +11,7 @@ import { Link } from 'react-router';
 import type { ProductSummary } from '../api';
 import { formatQty } from '../lib/format';
 import { locationChip, meterLevel, meterValues, openLine, qtyText, stickerText, unitLabel } from '../lib/stock';
+import { ragsLine } from '../lib/rags';
 import { usePendingProductIds } from '../app/useOffline';
 import { usePresence } from './hooks';
 import { DO_NOT_BUY_TEXT, ratingLabel } from '../lib/purposes';
@@ -37,9 +38,10 @@ export function ProductCard({ product: p, to, current, onClick, ref, className }
   const open = openLine(p.stock, p.unit, p.package_size);
   const sticker = stickerText(p);
   const unsent = usePendingProductIds().has(p.id);
+  const rags = ragsLine(p.rags);
   // Метка ссылки заменяет содержимое для диктора — поэтому в ней всё главное:
   // остаток, подпись вскрытой и текст наклейки («мало!», «нет»)
-  const label = [p.name, cat?.name, place, qtyText(p.stock.total, p.unit), open, sticker, p.rating ? ratingLabel(p.rating) : '', p.do_not_buy ? 'не брать больше' : '', unsent ? 'не отправлено' : ''].filter(Boolean).join(', ');
+  const label = [p.name, cat?.name, place, qtyText(p.stock.total, p.unit), open, sticker, p.rating ? ratingLabel(p.rating) : '', p.do_not_buy ? 'не брать больше' : '', rags?.text ?? '', unsent ? 'не отправлено' : ''].filter(Boolean).join(', ');
 
   return (
     <Link
@@ -66,6 +68,7 @@ export function ProductCard({ product: p, to, current, onClick, ref, className }
         </div>
         <Meter level={meterLevel(p.stock)} low={p.low} now={meter.now} max={meter.max} />
         <div className="g-card__open">{open}</div>
+        {rags && <div className={`stock-card__rags${rags.urgent ? ' stock-card__rags--urgent' : ''}`}>{rags.text}</div>}
         {(p.rating || p.do_not_buy || unsent) && (
           <div className="stock-card__tags">
             <RatingMini value={p.rating} />

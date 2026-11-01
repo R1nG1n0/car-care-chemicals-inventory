@@ -61,7 +61,14 @@ export type ProductSummary = {
   do_not_buy: boolean;
   /** Пропорции разбавления (ФТ-17.1), порядок задан владельцем; у шт — []. Старые сохранённые данные без поля. */
   dilutions?: Dilution[];
+  /** Ресурс стирок одной тряпки (ФТ-19.1), только шт; null — учёт не включён. Старые сохранённые данные без поля. */
+  wear_limit?: number | null;
+  /** Тряпки в работе (ФТ-19.5); null — у позиции нет ресурса. */
+  rags?: RagsSummary | null;
 };
+
+/** Сколько тряпок в работе, из них «скоро менять» и «пора менять». */
+export type RagsSummary = { active: number; soon: number; due: number };
 
 /** Аналог из имеющегося (ФТ-15.5): позиция в наличии с общим назначением. */
 export type AnalogBrief = { id: number; name: string; brand: string; unit: Unit; total: number };
@@ -144,6 +151,8 @@ export type ProductInput = {
   instruction: string;
   /** Полная замена списка пропорций (ФТ-17.1); только для мл, до 10; id сохраняет существующую. */
   dilutions?: { id?: number; name: string; ratio: number }[];
+  /** Ресурс стирок (ФТ-19.1): 1–1000, только шт; null снимает учёт. */
+  wear_limit?: number | null;
 };
 
 export type ProductFilter = 'all' | 'low' | 'out' | 'in';

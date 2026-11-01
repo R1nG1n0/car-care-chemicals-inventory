@@ -260,7 +260,7 @@ func TestTransferV3AndOldVersions(t *testing.T) {
 		map[string]any{"product_id": p, "solution": map[string]any{"volume_ml": 500, "ratio": 4}}}})
 
 	file := trExport(t, a)
-	if file.Version != 3 || len(file.Products[0].Dilutions) != 2 || file.Products[0].Dilutions[1].Name != "Кузов" ||
+	if file.Version != 4 || len(file.Products[0].Dilutions) != 2 || file.Products[0].Dilutions[1].Name != "Кузов" ||
 		file.Movements[len(file.Movements)-1].SolutionML == nil || file.Recipes[0].Items[0].SolutionRatio == nil {
 		t.Fatalf("экспорт v3: %+v", file)
 	}
@@ -308,7 +308,7 @@ func TestTransferV3AndOldVersions(t *testing.T) {
 		u := stkSignIn(e, "old"+string(rune('0'+ver)))
 		expect(t, trRaw(u, "/api/import", old), http.StatusOK, "импорт старой версии")
 		got := trExport(t, u)
-		if got.Version != 3 || len(got.Products[0].Dilutions) != 0 || got.Movements[len(got.Movements)-1].SolutionML != nil {
+		if got.Version != 4 || len(got.Products[0].Dilutions) != 0 || got.Movements[len(got.Movements)-1].SolutionML != nil {
 			t.Fatalf("версия %d после импорта: %+v", ver, got.Products[0])
 		}
 	}
