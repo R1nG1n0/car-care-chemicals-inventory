@@ -69,20 +69,24 @@ describe('тексты', () => {
   });
 });
 
+// «Сейчас» для тестов плашки — 30.10.2026 12:00 МСК: иначе дни фикстуры со временем
+// становятся прошедшими и отбрасываются (тест зависел бы от сегодняшней даты).
+const NOW = Date.UTC(2026, 9, 30, 9, 0);
+
 describe('плашка', () => {
   it('выключено или нет дней — плашки нет', () => {
     expect(bannerLine(undefined)).toBeNull();
-    expect(bannerLine({ ...forecast([day('2026-10-30', 'good', 'good')]), enabled: false })).toBeNull();
+    expect(bannerLine({ ...forecast([day('2026-10-30', 'good', 'good')]), enabled: false }, NOW)).toBeNull();
     expect(hasForecast(forecast([]))).toBe(false);
   });
   it('сегодня всё хорошо — без причины и «Лучше»', () => {
     const w = forecast([day('2026-10-30', 'good', 'good'), day('2026-10-31', 'good', 'good')], { wash: '2026-10-30', coat: '2026-10-30' });
-    expect(bannerLine(w)).toMatchObject({ reason: '', better: '' });
+    expect(bannerLine(w, NOW)).toMatchObject({ reason: '', better: '' });
     expect(allGood(w.days[0]!)).toBe(true);
   });
   it('мойка плохо, покрытие хорошо: причина мойки, «Лучше» только мойка', () => {
     const w = forecast([day('2026-10-30', 'bad', 'good'), day('2026-11-01', 'good', 'good')], { wash: '2026-11-01', coat: '2026-10-30' });
-    const b = bannerLine(w)!;
+    const b = bannerLine(w, NOW)!;
     expect(b.reason).toBe('дождь в 15:00');
     expect(b.better).toBe('Лучше: мойка — вс');
   });
@@ -92,7 +96,7 @@ describe('плашка', () => {
     expect(betterText(w)).toBe('мойка — вс, покрытие — вт');
   });
   it('хорошего дня нет — «Лучше» пусто', () => {
-    expect(bannerLine(forecast([day('2026-10-30', 'bad', 'bad')]))!.better).toBe('');
+    expect(bannerLine(forecast([day('2026-10-30', 'bad', 'bad')]), NOW)!.better).toBe('');
   });
   it('первая причина: мойка раньше покрытия, пропуская «хорошо»', () => {
     expect(firstReason(day('2026-10-30', 'good', 'bad'))).toBe('завтра дождь');
