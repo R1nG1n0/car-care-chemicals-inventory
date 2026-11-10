@@ -108,6 +108,17 @@ describe('ошибки API', () => {
 });
 
 describe('нет связи', () => {
+  it('обрыв тела после успешных заголовков — неопределённый результат, а не успех', async () => {
+    stubFetch(() => new Response(new ReadableStream({ start(c) { c.error(new TypeError('Обрыв ответа')); } }), { status: 201 }));
+    await expect(request('/api/consume', { method: 'POST', body: {} })).rejects.toMatchObject({ name: 'NetworkError', maybeSaved: true });
+    expect(isOnline()).toBe(false);
+  });
+
+  it.each(['', '{"product":'])('неполное успешное JSON-тело %j требует безопасного повтора', async (body) => {
+    stubFetch(() => new Response(body, { status: 200 }));
+    await expect(request('/api/consume', { method: 'POST', body: {} })).rejects.toMatchObject({ name: 'NetworkError', maybeSaved: true });
+  });
+
   it('fetch упал — NetworkError и флаг связи', async () => {
     stubFetch(() => Promise.reject(new TypeError('Failed to fetch')));
     await expect(api.me()).rejects.toBeInstanceOf(NetworkError);

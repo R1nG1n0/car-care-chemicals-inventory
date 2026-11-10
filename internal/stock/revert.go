@@ -41,6 +41,23 @@ func revertTx(ctx context.Context, tx *sql.Tx, userID int64, ids []int64, now in
 	if err != nil {
 		return nil, err
 	}
+	// Переназначаем только исходные группы удаляемых якорей. Снимок
+	// соответствий фиксирован до UPDATE; MIN исключает все удаляемые строки.
+	args := []any{userID, userID}
+	args = append(args, int64Args(ids)...)
+	args = append(args, int64Args(ids)...)
+	args = append(args, userID)
+	if _, err := tx.ExecContext(ctx, `WITH groups AS MATERIALIZED (
+		SELECT batch_id, MIN(id) AS first_id FROM movements
+		WHERE user_id = ? AND batch_id IN (
+			SELECT id FROM movements WHERE user_id = ? AND id = batch_id
+			AND id IN (`+placeholders(len(ids))+`)
+		) AND id NOT IN (`+placeholders(len(ids))+`)
+		GROUP BY batch_id
+	) UPDATE movements SET batch_id = (SELECT first_id FROM groups WHERE groups.batch_id = movements.batch_id)
+	WHERE user_id = ? AND batch_id IN (SELECT batch_id FROM groups)`, args...); err != nil {
+		return nil, fmt.Errorf("переназначение групп движений: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM movements WHERE user_id = ? AND id IN (`+placeholders(len(ids))+`)`,
 		append([]any{userID}, int64Args(ids)...)...); err != nil {

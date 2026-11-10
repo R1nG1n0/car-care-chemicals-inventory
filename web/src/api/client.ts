@@ -113,7 +113,16 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
 
   // 502–504 от nginx — без JSON; 502/503 с {error} — ответ самого garage («Бот не настроен», «Прогноз сейчас недоступен»).
   const gateway = GATEWAY_STATUSES.has(res.status);
-  const data = gateway ? await readJson(res.clone()) : await readJson(res);
+  let data: unknown;
+  try {
+    data = gateway ? await readJson(res.clone()) : await readJson(res);
+  } catch (err) {
+    if (opts.signal?.aborted) throw err;
+    // Заголовки уже пришли: изменение могло выполниться. Потеря тела и
+    // оборванный JSON требуют повтора с прежним номером операции.
+    reportConnection(false);
+    throw new NetworkError('timeout');
+  }
   if (gateway && !((res.status === 503 || res.status === 502) && hasErrorText(data))) {
     reportConnection(false);
     throw new NetworkError(res.status === 504 ? 'timeout' : 'offline');
@@ -134,11 +143,12 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
 
 async function readJson(res: Response): Promise<unknown> {
   if (res.status === 204) return undefined;
-  const text = await res.text().catch(() => '');
-  if (text === '') return undefined;
+  const text = await res.text();
+  if (text === '' && !res.ok) return undefined;
   try {
     return JSON.parse(text) as unknown;
-  } catch {
+  } catch (err) {
+    if (res.ok) throw err;
     return undefined;
   }
 }

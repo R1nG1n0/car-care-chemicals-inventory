@@ -115,10 +115,10 @@ describe('очередь', () => {
     expect(new OfflineQueue(1, st).size).toBe(0);
   });
 
-  it('без хранилища очередь живёт в памяти', () => {
+  it('без хранилища не подтверждает сохранение записи', () => {
     const q = new OfflineQueue(1, null);
-    q.add(makeConsumeOp(milk, 40));
-    expect(q.size).toBe(1);
+    expect(() => q.add(makeConsumeOp(milk, 40))).toThrow(QueueSaveError);
+    expect(q.size).toBe(0);
   });
 
   it('нет места: освобождаем и повторяем; не вышло — QueueSaveError и записи нет', () => {

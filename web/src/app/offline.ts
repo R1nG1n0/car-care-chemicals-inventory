@@ -5,7 +5,7 @@ import { api, inventory, isApiError, isNetworkError, NetworkError, type ApplyRes
 import { isOnline } from '../api/connection';
 import { ESTIMATE_ROOTS, estimateByKey, pendingDeltas } from '../lib/offlineEstimate';
 import { makeApplyOp, makeConsumeOp, newOpId, dropQueue, queueFor, setSpaceFreer, subscribeAllQueues, type OfflineQueue, type QueueOp } from '../lib/offlineQueue';
-import { applyLinesOf, consumeBodyOf, flushQueue, type FlushResult } from '../lib/offlineSync';
+import { applyLinesOf, consumeBodyOf, flushQueue, holdQueueOp, isQueueOpHeld, type FlushResult } from '../lib/offlineSync';
 import { replaceProducts } from '../lib/stock';
 import { isPersistableKey, SnapshotStore } from '../lib/snapshot';
 import { invalidateStock } from './queries';
@@ -35,7 +35,9 @@ const estimable = (key: readonly unknown[]) => ESTIMATE_ROOTS.includes(key[0] as
 
 /** Пересчитывает оценку остатков во всех загруженных запросах от данных сервера. */
 export function applyEstimates(qc: QueryClient): void {
-  const d = pendingDeltas(queueOf(qc)?.list() ?? []);
+  const q = queueOf(qc);
+  // Прямой онлайн-запрос меняет шкалу только после ответа и закрытия шторки.
+  const d = pendingDeltas(q?.list().filter((op) => !isQueueOpHeld(q, op.op_id)) ?? []);
   applying = true;
   try {
     for (const { key, data } of raw.values()) {
@@ -112,56 +114,68 @@ export type QueuedMark = { queued: QueueOp };
 
 const QUEUED_TEXT = 'Записано без связи — отправится, когда появится VPN';
 
-function enqueue(qc: QueryClient, op: QueueOp): QueueOp {
+/** Сначала сохраняем номер и тело запроса, затем отправляем. После перезапуска
+ * та же запись повторится с тем же номером, даже если сервер уже её принял. */
+async function sendPersisted<R extends ConsumeResult | ApplyResult>(qc: QueryClient, op: QueueOp, send: () => Promise<R>): Promise<{ sent: R } | QueuedMark> {
   const q = queueOf(qc);
   if (!q) throw new NetworkError('offline');
-  q.add(op); // нет места на телефоне — QueueSaveError, «Записано» не показывается
-  // Связь могла вернуться, а флаг ещё нет: проверка запустит отправку при смене состояния
-  void api.health().catch(() => undefined);
-  return op;
+  const online = isOnline();
+  const saved = online ? { ...op, attempted: true } : op;
+  const release = holdQueueOp(q, op.op_id);
+  try {
+    q.add(saved); // без долговременного сохранения запрос не отправляется
+    if (!online) {
+      void api.health().catch(() => undefined);
+      return { queued: saved };
+    }
+    try {
+      const sent = await send();
+      // Экран применит ответ после закрытия шторки (useConsume). До этого
+      // сохранённый запрос не участвует в оценке остатка.
+      q.remove(op.op_id);
+      return { sent };
+    } catch (err) {
+      if (!isNetworkError(err)) {
+        q.remove(op.op_id); // сервер явно отказал, повторять нечего
+        throw err;
+      }
+      // Ответ потерян: сохранённая запись остаётся с исходным номером.
+      void api.health().catch(() => undefined);
+      return { queued: saved };
+    }
+  } finally {
+    release();
+  }
 }
 
 /** Расход: на сервер, а без связи (или при потере ответа) — в очередь. */
 export async function consumeOrQueue(qc: QueryClient, v: { product: ProductSummary; qty: number; unitId?: number | undefined; solution?: Solution | undefined }): Promise<{ sent: ConsumeResult } | QueuedMark> {
   const op = makeConsumeOp(v.product, v.qty, v.unitId, undefined, undefined, v.solution);
-  if (!isOnline()) return { queued: enqueue(qc, op) };
-  try {
-    // Раствор уходит как раствор: концентрат считает сервер (ФТ-17.2.3)
-    const sent = await inventory.consume(consumeBodyOf(op));
-    return { sent };
-  } catch (err) {
-    // Тот же номер операции: если запрос всё же дошёл, повтор его не задвоит
-    if (isNetworkError(err)) return { queued: enqueueAfterLoss(qc, op, err) };
-    throw err;
-  }
-}
-
-/** Запись после потери ответа; не вышло сохранить — данные перечитываются (запрос мог дойти). */
-function enqueueAfterLoss(qc: QueryClient, op: QueueOp, err: NetworkError): QueueOp {
-  try {
-    return enqueue(qc, op);
-  } catch (e) {
-    if (err.maybeSaved) void invalidateStock(qc);
-    throw e;
-  }
+  return sendPersisted(qc, op, () => inventory.consume(consumeBodyOf(op)));
 }
 
 /** Применение шаблона: так же, как расход. */
 export async function applyOrQueue(qc: QueryClient, recipe: Recipe, items: { product_id: number; qty: number; solution?: Solution | null | undefined }[]): Promise<{ sent: ApplyResult } | QueuedMark> {
   const op = makeApplyOp(recipe, items);
-  if (!isOnline()) return { queued: enqueue(qc, op) };
-  try {
-    const sent = await inventory.applyRecipe(recipe.id, applyLinesOf(op.items), { client_op_id: op.op_id, occurred_at: op.occurred_at });
-    return { sent };
-  } catch (err) {
-    if (isNetworkError(err)) return { queued: enqueueAfterLoss(qc, op, err) };
-    throw err;
-  }
+  return sendPersisted(qc, op, () => inventory.applyRecipe(recipe.id, applyLinesOf(op.items), { client_op_id: op.op_id, occurred_at: op.occurred_at }));
 }
 
 /** Уведомление «Записано без связи» с «Отменить» (запись удаляется, оценка возвращается). */
 export function toastQueued(qc: QueryClient, toast: ToastApi, op: QueueOp, text = QUEUED_TEXT): void {
-  toast.show({ text, action: { label: 'Отменить', onClick: () => queueOf(qc)?.remove(op.op_id) } });
+  if (op.attempted) {
+    toast.show({ text: 'Проверяем, сохранился ли расход — повторного списания не будет', action: { label: 'Проверить', onClick: () => void flushOffline(qc, toast) } });
+    return;
+  }
+  toast.show({ text, action: { label: 'Отменить', onClick: () => {
+    const q = queueOf(qc);
+    const current = q?.get(op.op_id);
+    if (!current) {
+      toast.show({ text: 'Расход уже отправлен — отменить его можно в журнале' });
+      return;
+    }
+    if (current.attempted) return toastQueued(qc, toast, current);
+    q?.remove(op.op_id);
+  } } });
 }
 
 // ---------- Отправка ----------

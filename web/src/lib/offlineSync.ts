@@ -72,6 +72,17 @@ async function sendOne(op: QueueOp, api: SendApi): Promise<ConsumeResult | Apply
 }
 
 const running = new WeakMap<OfflineQueue, Promise<FlushResult>>();
+const held = new WeakMap<OfflineQueue, Set<string>>();
+
+/** Прямой запрос владеет записью до получения ответа; фоновая отправка ждёт. */
+export function holdQueueOp(queue: OfflineQueue, id: string): () => void {
+  let ids = held.get(queue);
+  if (!ids) held.set(queue, ids = new Set());
+  ids.add(id);
+  return () => { ids.delete(id); queue.refresh(); };
+}
+
+export const isQueueOpHeld = (queue: OfflineQueue, id: string): boolean => held.get(queue)?.has(id) ?? false;
 
 /** Две отправки одной очереди одновременно не идут: второй вызов получает итог первой. */
 export function flushQueue(queue: OfflineQueue, api: SendApi, opts: FlushOptions = {}): Promise<FlushResult> {
@@ -95,10 +106,12 @@ async function doFlush(queue: OfflineQueue, api: SendApi, opts: FlushOptions): P
   if (opts.retryErrors) queue.retryErrors();
   const order = queue.pending().map((o) => o.op_id);
   for (const id of order) {
+    if (isQueueOpHeld(queue, id)) break;
     // Запись могли удалить или поправить, пока шла отправка предыдущих
     const op = queue.get(id);
     if (!op || op.status !== 'pending') continue;
     try {
+      if (!queue.markAttempted(id)) continue;
       const result = await sendOne(op, api);
       opts.onSent?.(op, result);
       queue.remove(id);

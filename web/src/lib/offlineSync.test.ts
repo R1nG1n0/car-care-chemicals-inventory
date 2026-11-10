@@ -34,6 +34,18 @@ describe('отправка очереди', () => {
     expect(t.q.size).toBe(0);
   });
 
+  it('не отправляет, если не удалось сохранить признак попытки', async () => {
+    const st = memoryStorage();
+    const q = new OfflineQueue(1, st);
+    q.add(makeConsumeOp(milk, 40, undefined, 'op-00000001'));
+    st.setItem = () => { throw new Error('quota'); };
+    t.consume.mockResolvedValue(ok);
+    await expect(flushQueue(q, t.api)).resolves.toMatchObject({ sent: 0, stopped: 'network' });
+    expect(t.consume).not.toHaveBeenCalled();
+    expect(new OfflineQueue(1, st).list()[0]?.attempted).toBeUndefined();
+    expect(q.size).toBe(1);
+  });
+
   it('нехватка: запись остаётся с пометкой, остальные уходят дальше', async () => {
     t.consume.mockRejectedValueOnce(new ApiError(409, 'Не хватает: есть 5 мл', undefined, undefined, 5)).mockResolvedValue(ok);
     const r = await flushQueue(t.q, t.api);

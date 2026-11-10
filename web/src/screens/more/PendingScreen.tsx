@@ -56,7 +56,7 @@ function OpRow({ op }: { op: QueueOp }) {
         <div className="g-row__sub">
           {when} · {opQtyText(op)}
         </div>
-        <div className={failed ? 'shop-short' : 'g-row__sub'}>{failed ? (op.error ?? 'Не принято сервером') : 'Ждёт отправки'}</div>
+        <div className={failed ? 'shop-short' : 'g-row__sub'}>{failed ? (op.error ?? 'Не принято сервером') : op.attempted ? 'Проверяем, сохранился ли расход' : 'Ждёт отправки'}</div>
       </div>
       {edit !== null && op.kind === 'consume' && (
         <QtyEdit
@@ -108,7 +108,7 @@ function OpRow({ op }: { op: QueueOp }) {
       {ask && (
         <div className="g-invite" role="group" aria-label="Удалить запись">
           <b>Удалить запись?</b>
-          <span className="g-invite__meta">Остаток на сервере не изменится — эта запись так и не будет списана.</span>
+          <span className="g-invite__meta">{op.attempted ? 'Запрос уже отправлялся и мог выполниться. Удаление записи не отменит расход на сервере. Лучше дождаться проверки.' : 'Остаток на сервере не изменится — эта запись так и не будет списана.'}</span>
           <div className="g-invite__actions">
             <button type="button" className="g-btn g-btn--sm g-btn--danger g-press" autoFocus onClick={() => queue?.remove(op.op_id)}>
               Удалить

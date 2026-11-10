@@ -34,6 +34,8 @@ type OpBase = {
   error?: string;
   /** Подряд неудачных попыток из-за сбоя сервера (5xx); после трёх запись помечается ошибкой. */
   fails?: number;
+  /** Запрос уже отправлялся: без ответа неизвестно, выполнен ли он. */
+  attempted?: boolean;
   /** Сколько было на складе при отказе «не хватает» — для «Списать сколько есть». */
   available?: number;
 };
@@ -145,6 +147,7 @@ function validOp(o: unknown): o is QueueOp {
   const r = o as Record<string, unknown>;
   if (typeof r.op_id !== 'string' || r.op_id === '' || !isNum(r.occurred_at)) return false;
   if (r.status !== 'pending' && r.status !== 'error') return false;
+  if (r.attempted !== undefined && typeof r.attempted !== 'boolean') return false;
   if (r.kind === 'consume') return isNum(r.product_id) && isNum(r.qty) && typeof r.name === 'string' && isUnit(r.unit) && okSolution(r.solution);
   if (r.kind === 'apply') {
     return (
@@ -243,21 +246,35 @@ export class OfflineQueue {
    * не вышло — QueueSaveError, запись не добавляется (запрос не теряется молча).
    */
   add(op: QueueOp): void {
-    const next = [...this.list(), op];
-    if (this.storage && !this.volatile) {
-      const raw = JSON.stringify({ v: 1, ops: next });
+    this.saveDurable([...this.list(), op]);
+  }
+
+  /** Флаг попытки тоже переживает закрытие приложения; без записи не отправляем. */
+  markAttempted(id: string): boolean {
+    const cur = this.list();
+    if (!cur.some((o) => o.op_id === id)) return false;
+    this.saveDurable(cur.map((o) => o.op_id === id ? { ...o, attempted: true } : o));
+    return true;
+  }
+
+  private saveDurable(next: QueueOp[]): void {
+    if (!this.storage) throw new QueueSaveError();
+    const raw = JSON.stringify({ v: 1, ops: next });
+    try {
+      this.storage.setItem(this.storageKey, raw);
+    } catch {
       try {
+        spaceFreer?.();
         this.storage.setItem(this.storageKey, raw);
       } catch {
-        try {
-          spaceFreer?.();
-          this.storage.setItem(this.storageKey, raw);
-        } catch {
-          throw new QueueSaveError();
-        }
+        throw new QueueSaveError();
       }
     }
-    this.write(next);
+    this.ops = next;
+    this.loaded = true;
+    this.raw = raw;
+    this.volatile = false;
+    this.notify();
   }
 
   remove(id: string): boolean {
@@ -277,7 +294,7 @@ export class OfflineQueue {
 
   markError(id: string, error: string, available?: number): void {
     this.update(id, (o) => {
-      const next: QueueOp = { ...o, status: 'error', error };
+      const next: QueueOp = { ...o, status: 'error', error, attempted: false };
       if (available !== undefined) next.available = available;
       else delete next.available;
       return next;
